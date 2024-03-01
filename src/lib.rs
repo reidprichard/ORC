@@ -57,7 +57,6 @@ pub mod mesh {
 
     pub struct Cell {
         pub face_indices: Vec<Uint>,
-        pub node_indices: Vec<Uint>,
         pub centroid: Vector,
         pub velocity: Vector,
         pub pressure: Float,
