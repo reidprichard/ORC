@@ -51,6 +51,8 @@ pub mod solver_io {
         let mut nodes: HashMap<Uint, Node> = HashMap::new();
         let mut faces: HashMap<Uint, Face> = HashMap::new();
         let mut cells: HashMap<Uint, Cell> = HashMap::new();
+        let mut face_zones: HashMap<Uint, Uint> = HashMap::new();
+        let mut cell_zones: HashMap<Uint, Uint> = HashMap::new();
 
         let mut node_indices: Vec<Uint> = Vec::new();
         let mut face_indices: Vec<Uint> = Vec::new();
@@ -145,7 +147,15 @@ pub mod solver_io {
                         // skip_zone_zero!(section_header_blocks);
                         println!("Beginning reading shadow faces."); // periodic shadow faces
                     }
-                    "(12" => (), // cells
+                    "(12" => {
+                        let items = read_section_header_common(&section_header_line);
+                        let (_, zone_id, start_index, end_index, zone_type, element_type) = items
+                            .iter()
+                            .map(|n| *n)
+                            .collect_tuple()
+                            .expect("cell section has 6 entries");
+                        cell_zones.entry(zone_id).or_insert(zone_type);
+                    },
                     "(13" => 'read_faces: {
                         skip_zone_zero!('read_faces, section_header_blocks);
                         let items = read_section_header_common(&section_header_line);
@@ -153,7 +163,8 @@ pub mod solver_io {
                             .iter()
                             .map(|n| *n)
                             .collect_tuple()
-                            .expect("correct number of items");
+                            .expect("face section has 6 entries");
+                        face_zones.entry(zone_id).or_insert(boundary_type);
                         // TODO: Add error checking to not allow unsupported BC types
                         // 2: interior
                         // 3: wall
@@ -277,6 +288,8 @@ pub mod solver_io {
             nodes,
             faces,
             cells,
+            face_zones,
+            cell_zones,
         }
     }
 
@@ -325,5 +338,5 @@ fn main() {
     //     faces: Vec<mesh::Face>,
     //     cells: Vec<mesh::Cell>,
     // };
-    solver_io::read_mesh("/home/admin/3x3_cube.msh");
+    let mesh = solver_io::read_mesh("/home/admin/3x3_cube.msh");
 }

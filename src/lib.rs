@@ -197,6 +197,8 @@ pub mod mesh {
         pub nodes: HashMap<Uint, Node>,
         pub faces: HashMap<Uint, Face>,
         pub cells: HashMap<Uint, Cell>,
+        pub face_zones: HashMap<Uint, Uint>,
+        pub cell_zones: HashMap<Uint, Uint>,
     }
     impl Mesh {}
 }
