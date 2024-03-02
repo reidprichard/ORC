@@ -18,9 +18,14 @@ pub mod solver_io {
     use orc::mesh::Mesh;
     use orc::mesh::Node;
     use regex::Regex;
+    use std::collections::HashMap;
     use std::fs;
     use std::fs::File;
     use std::io::{self, BufRead};
+
+    // cells: (12 (zone-id first-index last-index type      element-type))
+    // faces: (13 (zone-id first-index last-index bc-type   face-type))
+    // nodes: (10 (zone-id first-index last-index type      ND))
 
     pub fn read_mesh(mesh_path: &str) -> mesh::Mesh {
         fn read_mesh_lines(filename: &str) -> io::Result<io::Lines<io::BufReader<File>>> {
@@ -30,9 +35,6 @@ pub mod solver_io {
             Ok(io::BufReader::new(file).lines())
         }
 
-        // cells: (12 (zone-id first-index last-index type      element-type))
-        // faces: (13 (zone-id first-index last-index bc-type   face-type))
-        // nodes: (10 (zone-id first-index last-index type      ND))
         fn read_section_header_common(header_line: &str) -> Vec<Uint> {
             // is returning a tuple best?
             let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
@@ -46,19 +48,13 @@ pub mod solver_io {
             items
         }
 
-        let mut nodes: Vec<Node> = Vec::new();
-        let mut faces: Vec<Face> = Vec::new();
-        let mut cells: Vec<Cell> = Vec::new();
+        let mut nodes: HashMap<Uint, Node> = HashMap::new();
+        let mut faces: HashMap<Uint, Face> = HashMap::new();
+        let mut cells: HashMap<Uint, Cell> = HashMap::new();
 
         let mut node_indices: Vec<Uint> = Vec::new();
         let mut face_indices: Vec<Uint> = Vec::new();
         let mut cell_indices: Vec<Uint> = Vec::new();
-
-        // let mesh = Mesh {
-        //     nodes,
-        //     faces,
-        //     cells,
-        // };
 
         struct CellType {
             id: i8,
@@ -88,7 +84,7 @@ pub mod solver_io {
                     "(2" => (), // dimensions
                     "(10" => 'read_nodes: {
                         skip_zone_zero!('read_nodes, section_header_blocks);
-                        println!("{section_header_line}");
+                        println!("section: {section_header_line}");
                         let items = read_section_header_common(&section_header_line);
                         let (_, zone_id, start_index, end_index, node_type, dims) = items
                             .iter()
@@ -98,36 +94,49 @@ pub mod solver_io {
                         println!("Beginning reading nodes from {start_index} to {end_index}.");
 
                         let mut current_line = lines.next().expect("node section has contents");
+                        let mut node_index = start_index;
                         'node_loop: loop {
+                            if current_line == "(" {
+                                current_line = lines.next().unwrap();
+                                continue 'node_loop;
+                            } 
+                            if current_line.starts_with(")") {
+                                break 'node_loop;
+                            }
+                            println!("Node {node_index}: {current_line}");
                             let line_blocks: Vec<&str> =
                                 current_line.split_ascii_whitespace().collect();
-                            if line_blocks.len() != 3 {
-                                break 'node_loop;
-                            }
-                            println!("{section_header_line}");
-                            let x = line_blocks[0].parse::<Float>();
-                            let y = line_blocks[1].parse::<Float>();
-                            let z = line_blocks[2].parse::<Float>();
-                            if x.is_ok() && y.is_ok() && z.is_ok() {
-                                nodes.push(Node {
-                                    cell_indices: Vec::new(),
-                                    position: Vector {
-                                        x: x.unwrap(),
-                                        y: y.unwrap(),
-                                        z: z.unwrap(),
-                                    },
-                                    velocity: Vector {
-                                        x: 0.,
-                                        y: 0.,
-                                        z: 0.,
-                                    },
-                                    pressure: 0.,
-                                });
-                            } else {
-                                break 'node_loop;
+                            if line_blocks.len() == 3 {
+                                let x = line_blocks[0].parse::<Float>();
+                                let y = line_blocks[1].parse::<Float>();
+                                let z = line_blocks[2].parse::<Float>();
+                                if x.is_ok() && y.is_ok() && z.is_ok() {
+                                    nodes.insert(
+                                        node_index,
+                                        Node {
+                                            cell_indices: Vec::new(),
+                                            position: Vector {
+                                                x: x.unwrap(),
+                                                y: y.unwrap(),
+                                                z: z.unwrap(),
+                                            },
+                                            velocity: Vector {
+                                                x: 0.,
+                                                y: 0.,
+                                                z: 0.,
+                                            },
+                                            pressure: 0.,
+                                        },
+                                    );
+                                } else {
+                                    break 'node_loop;
+                                }
                             }
                             match lines.next() {
-                                Some(line_contents) => current_line = line_contents,
+                                Some(line_contents) => {
+                                    current_line = line_contents;
+                                    node_index += 1;
+                                }
                                 None => break 'node_loop,
                             }
                         }
@@ -136,61 +145,7 @@ pub mod solver_io {
                         // skip_zone_zero!(section_header_blocks);
                         println!("Beginning reading shadow faces."); // periodic shadow faces
                     }
-                    "(12" => 'read_cells: {
-                        // skip_zone_zero!('read_cells, section_header_blocks);
-                        // let items = read_section_header_common(&section_header_line);
-                        // let (_, zone_id, start_index, end_index, fluid_zone_type, element_type) =
-                        //     items
-                        //         .iter()
-                        //         .map(|n| *n)
-                        //         .collect_tuple()
-                        //         .expect("correct number of items");
-                        // 'cell_loop: loop {
-                        //     println!("{current_line}");
-                        //     let line_blocks: Vec<&str> =
-                        //         current_line.split_ascii_whitespace().collect();
-                        //     if line_blocks.len() < 2 {
-                        //         break;
-                        //     }
-                        //     let node_count = line_blocks.len() - 2;
-                        //     if face_type != 0
-                        //         && face_type != 5
-                        //         && face_type != node_count.try_into().unwrap()
-                        //     {
-                        //         break 'face_loop;
-                        //     }
-                        //     println!("{section_header_line}");
-                        //
-                        //     faces.push(Face {
-                        //         cell_indices: line_blocks[node_count..]
-                        //             .into_iter()
-                        //             .map(|cell_id| Uint::from_str_radix(cell_id, 16))
-                        //             .flatten()
-                        //             .collect(),
-                        //         node_indices: line_blocks[..node_count]
-                        //             .into_iter()
-                        //             .map(|node_id| Uint::from_str_radix(node_id, 16))
-                        //             .flatten()
-                        //             .collect(),
-                        //         centroid: Vector {
-                        //             x: 0.,
-                        //             y: 0.,
-                        //             z: 0.,
-                        //         },
-                        //         velocity: Vector {
-                        //             x: 0.,
-                        //             y: 0.,
-                        //             z: 0.,
-                        //         },
-                        //         pressure: 0.,
-                        //     });
-                        //     match lines.next() {
-                        //         Some(line_contents) => current_line = line_contents,
-                        //         None => break 'face_loop,
-                        //     }
-                        //
-                        // }
-                    }
+                    "(12" => (), // cells
                     "(13" => 'read_faces: {
                         skip_zone_zero!('read_faces, section_header_blocks);
                         let items = read_section_header_common(&section_header_line);
@@ -224,8 +179,19 @@ pub mod solver_io {
                         println!("Beginning reading faces."); // cells
 
                         let mut current_line = lines.next().expect("face section has contents");
+                        let mut face_index = start_index;
                         'face_loop: loop {
-                            println!("{current_line}");
+                            if current_line == "(" {
+                                current_line = lines.next().unwrap();
+                                continue 'face_loop;
+                            } 
+                            if current_line.starts_with(")") {
+                                break 'face_loop;
+                            }
+                            println!("Face {face_index}: {current_line}");
+                            // if current_line[0] == '(' || current_line[0] == ')' {
+                            //
+                            // }
                             let line_blocks: Vec<&str> =
                                 current_line.split_ascii_whitespace().collect();
                             if line_blocks.len() < 2 {
@@ -238,33 +204,37 @@ pub mod solver_io {
                             {
                                 break 'face_loop;
                             }
-                            println!("{section_header_line}");
-
-                            faces.push(Face {
-                                cell_indices: line_blocks[node_count..]
-                                    .into_iter()
-                                    .map(|cell_id| Uint::from_str_radix(cell_id, 16))
-                                    .flatten()
-                                    .collect(),
-                                node_indices: line_blocks[..node_count]
-                                    .into_iter()
-                                    .map(|node_id| Uint::from_str_radix(node_id, 16))
-                                    .flatten()
-                                    .collect(),
-                                centroid: Vector {
-                                    x: 0.,
-                                    y: 0.,
-                                    z: 0.,
+                            faces.insert(
+                                face_index,
+                                Face {
+                                    cell_indices: line_blocks[node_count..]
+                                        .into_iter()
+                                        .map(|cell_id| Uint::from_str_radix(cell_id, 16))
+                                        .flatten()
+                                        .collect(),
+                                    node_indices: line_blocks[..node_count]
+                                        .into_iter()
+                                        .map(|node_id| Uint::from_str_radix(node_id, 16))
+                                        .flatten()
+                                        .collect(),
+                                    centroid: Vector {
+                                        x: 0.,
+                                        y: 0.,
+                                        z: 0.,
+                                    },
+                                    velocity: Vector {
+                                        x: 0.,
+                                        y: 0.,
+                                        z: 0.,
+                                    },
+                                    pressure: 0.,
                                 },
-                                velocity: Vector {
-                                    x: 0.,
-                                    y: 0.,
-                                    z: 0.,
-                                },
-                                pressure: 0.,
-                            });
+                            );
                             match lines.next() {
-                                Some(line_contents) => current_line = line_contents,
+                                Some(line_contents) => {
+                                    current_line = line_contents;
+                                    face_index += 1;
+                                }
                                 None => break 'face_loop,
                             }
                         }
@@ -281,7 +251,27 @@ pub mod solver_io {
             }
         }
 
-        
+        // I don't really understand the reference semantics here
+        for (face_index, mut face) in &mut faces {
+            for node_index in &face.node_indices {
+                face.centroid += nodes[node_index].position;
+            }
+            face.centroid /= face.node_indices.len();
+            for cell_index in &face.cell_indices {
+                // Could this check be done with a filter or something?
+                if *cell_index == 0 {
+                    continue;
+                }
+                let mut cell = cells.entry(*cell_index).or_insert(Cell::default());
+                cell.face_indices.push(*face_index);
+                cell.centroid += face.centroid;
+            }
+        }
+
+        for (cell_index, mut cell) in &mut cells {
+            cell.centroid /= cell.face_indices.len();
+            println!("Cell {}: {}", cell_index, cell.centroid);
+        }
 
         Mesh {
             nodes,

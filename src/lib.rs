@@ -6,9 +6,13 @@
 // Each cell has scalars & vectors
 
 pub mod common {
+    use std::{fmt, ops::{Add, AddAssign, DivAssign}};
+
     pub type Int = i32;
     pub type Float = f32;
     pub type Uint = u32;
+
+    #[derive(Copy, Clone)]
     pub struct Vector {
         pub x: Float,
         pub y: Float,
@@ -39,10 +43,56 @@ pub mod common {
             }
         }
     }
+    impl Add for Vector {
+        type Output = Self;
+
+        fn add(self, other: Self) -> Self {
+            Self {
+                x: self.x + other.x,
+                y: self.y + other.y,
+                z: self.z + other.z,
+            }
+        }
+    }
+
+    impl AddAssign for Vector {
+        fn add_assign(&mut self, other: Self) {
+            *self = Self {
+                x: self.x + other.x,
+                y: self.y + other.y,
+                z: self.z + other.z,
+            }
+        }
+    }
+
+    // Is this really the best way to do this...?
+    macro_rules! div_assign {
+        ($T: ty) => {
+            impl DivAssign<$T> for Vector {
+                fn div_assign(&mut self, rhs: $T) {
+                    *self = Self {
+                        x: self.x / (rhs as Float),
+                        y: self.y / (rhs as Float),
+                        z: self.z / (rhs as Float),
+                    }
+                }
+            }
+        };
+    }
+    div_assign!(usize);
+    div_assign!(Uint);
+    div_assign!(Float);
+
+    impl fmt::Display for Vector {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "({}, {}, {})", self.x, self.y, self.z)
+        }
+    }
 }
 
-
 pub mod mesh {
+    use std::collections::HashMap;
+
     use crate::common::*;
 
     pub enum GreenGaussVariants {
@@ -61,6 +111,25 @@ pub mod mesh {
         pub velocity: Vector,
         pub pressure: Float,
     }
+    impl Cell {}
+    impl Default for Cell {
+        fn default() -> Cell {
+            Cell {
+                face_indices: Vec::new(),
+                centroid: Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                },
+                velocity: Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                },
+                pressure: 0.,
+            }
+        }
+    }
 
     pub struct Node {
         pub cell_indices: Vec<Uint>,
@@ -77,22 +146,57 @@ pub mod mesh {
             }
         }
     }
+    impl Default for Node {
+        fn default() -> Node {
+            Node {
+                cell_indices: Vec::new(),
+                position: Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                },
+                velocity: Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                },
+                pressure: 0.,
+            }
+        }
+    }
 
     pub struct Face {
         pub cell_indices: Vec<Uint>,
         pub node_indices: Vec<Uint>,
         pub centroid: Vector,
-        pub pressure: Float,
         pub velocity: Vector,
+        pub pressure: Float,
     }
-    impl Face {
+    impl Face {}
+    impl Default for Face {
+        fn default() -> Face {
+            Face {
+                cell_indices: Vec::new(),
+                node_indices: Vec::new(),
+                centroid: Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                },
+                velocity: Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                },
+                pressure: 0.,
+            }
+        }
     }
 
     pub struct Mesh {
-        pub nodes: Vec<Node>,
-        pub faces: Vec<Face>,
-        pub cells: Vec<Cell>,
+        pub nodes: HashMap<Uint, Node>,
+        pub faces: HashMap<Uint, Face>,
+        pub cells: HashMap<Uint, Cell>,
     }
-    impl Mesh {
-    }
+    impl Mesh {}
 }
