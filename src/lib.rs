@@ -8,7 +8,7 @@
 pub mod common {
     use std::{
         fmt,
-        ops::{Add, AddAssign, DivAssign},
+        ops::{Add, AddAssign, DivAssign, Neg, Sub},
     };
 
     pub type Int = i32;
@@ -22,22 +22,22 @@ pub mod common {
         pub z: Float,
     }
     impl Vector {
-        fn scalar_divf(&self, divisor: Float) -> Vector {
-            Vector {
-                x: self.x / divisor,
-                y: self.y / divisor,
-                z: self.z / divisor,
-            }
-        }
-
-        fn dot(&self, other: &Vector) -> Float {
+        pub fn dot(&self, other: &Vector) -> Float {
             self.x * other.x + self.y * other.y + self.z * other.z
         }
 
-        fn norm(&self) -> Float {
+        pub fn cross(&self, other: &Vector) -> Vector {
+            Vector {
+                x: self.y * other.z - self.z * other.y,
+                y: self.z * other.x - self.x * other.z,
+                z: self.x * other.y - self.y * other.x,
+            }
+        }
+
+        pub fn norm(&self) -> Float {
             (self.x.powf(2 as Float) + self.y.powf(2 as Float) + self.z.powf(2 as Float)).sqrt()
         }
-        fn unit(&self) -> Vector {
+        pub fn unit(&self) -> Vector {
             let len: Float = self.norm();
             Vector {
                 x: self.x / len,
@@ -68,6 +68,19 @@ pub mod common {
         }
     }
 
+    impl Sub for Vector {
+        type Output = Self;
+
+        fn sub(self, other: Self) -> Self {
+            Self {
+                x: self.x - other.x,
+                y: self.y - other.y,
+                z: self.z - other.z,
+            }
+        }
+
+    }
+
     // Is this really the best way to do this...?
     macro_rules! div_assign {
         ($T: ty) => {
@@ -85,10 +98,31 @@ pub mod common {
     div_assign!(usize);
     div_assign!(Uint);
     div_assign!(Float);
+    
+    impl Neg for Vector {
+        type Output = Self;
+        fn neg(self) -> Self {
+            Vector {
+                x: -self.x,
+                y: -self.y,
+                z: -self.z
+            }
+        }
+    }
 
     impl fmt::Display for Vector {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "({}, {}, {})", self.x, self.y, self.z)
+        }
+    }
+
+    impl Default for Vector {
+        fn default() -> Vector {
+            Vector {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            }
         }
     }
 }
@@ -122,11 +156,11 @@ pub mod mesh {
     }
 
     // pub fn get_face_types() -> HashMap<Uint, &'static str> {
-            // (0, "?"),
-            // (2, "linear face (2 nodes)"),
-            // (3, "triangular face (3 nodes)"),
-            // (4, "quadrilateral face (4 nodes)"),
-            // (5, "polygonal (N nodes)"),
+    // (0, "?"),
+    // (2, "linear face (2 nodes)"),
+    // (3, "triangular face (3 nodes)"),
+    // (4, "quadrilateral face (4 nodes)"),
+    // (5, "polygonal (N nodes)"),
     // }
 
     pub enum GreenGaussVariants {
@@ -152,16 +186,8 @@ pub mod mesh {
             Cell {
                 zone_number: 0,
                 face_indices: Vec::new(),
-                centroid: Vector {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                },
-                velocity: Vector {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                },
+                centroid: Vector::default(),
+                velocity: Vector::default(),
                 pressure: 0.,
             }
         }
@@ -186,16 +212,8 @@ pub mod mesh {
         fn default() -> Node {
             Node {
                 cell_indices: Vec::new(),
-                position: Vector {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                },
-                velocity: Vector {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                },
+                position: Vector::default(),
+                velocity: Vector::default(),
                 pressure: 0.,
             }
         }
@@ -206,6 +224,7 @@ pub mod mesh {
         pub cell_indices: Vec<Uint>,
         pub node_indices: Vec<Uint>,
         pub centroid: Vector,
+        pub normal: Vector,
         pub velocity: Vector,
         pub pressure: Float,
     }
@@ -216,16 +235,9 @@ pub mod mesh {
                 zone_number: 0,
                 cell_indices: Vec::new(),
                 node_indices: Vec::new(),
-                centroid: Vector {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                },
-                velocity: Vector {
-                    x: 0.,
-                    y: 0.,
-                    z: 0.,
-                },
+                centroid: Vector::default(),
+                normal: Vector::default(), // points toward cell 0!
+                velocity: Vector::default(),
                 pressure: 0.,
             }
         }

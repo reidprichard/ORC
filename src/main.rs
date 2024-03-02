@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+// TODO: Make this only take block 1? Or handle error here in case 1 doesn't exist?
 macro_rules! skip_zone_zero {
     ($label:tt, $line_blocks:expr) => {
         if $line_blocks[1] == "(0" {
@@ -13,13 +14,8 @@ pub mod solver_io {
     use itertools::Itertools;
     use orc::common::*;
     use orc::mesh::*;
-    // use orc::mesh::Cell;
-    // use orc::mesh::Face;
-    // use orc::mesh::Mesh;
-    // use orc::mesh::Node;
     use regex::Regex;
     use std::collections::HashMap;
-    use std::fs;
     use std::fs::File;
     use std::io::{self, BufRead};
 
@@ -122,11 +118,7 @@ pub mod solver_io {
                                                 y: y.unwrap(),
                                                 z: z.unwrap(),
                                             },
-                                            velocity: Vector {
-                                                x: 0.,
-                                                y: 0.,
-                                                z: 0.,
-                                            },
+                                            velocity: Vector::default(),
                                             pressure: 0.,
                                         },
                                     );
@@ -147,7 +139,8 @@ pub mod solver_io {
                         // skip_zone_zero!(section_header_blocks);
                         println!("Beginning reading shadow faces."); // periodic shadow faces
                     }
-                    "(12" => {
+                    "(12" => 'read_cells: {
+                        skip_zone_zero!('read_cells, section_header_blocks);
                         let items = read_section_header_common(&section_header_line);
                         let (_, zone_id, start_index, end_index, zone_type, element_type) = items
                             .iter()
@@ -209,16 +202,9 @@ pub mod solver_io {
                                         .map(|node_id| Uint::from_str_radix(node_id, 16))
                                         .flatten()
                                         .collect(),
-                                    centroid: Vector {
-                                        x: 0.,
-                                        y: 0.,
-                                        z: 0.,
-                                    },
-                                    velocity: Vector {
-                                        x: 0.,
-                                        y: 0.,
-                                        z: 0.,
-                                    },
+                                    centroid: Vector::default(),
+                                    normal: Vector::default(),
+                                    velocity: Vector::default(),
                                     pressure: 0.,
                                 },
                             );
@@ -243,8 +229,16 @@ pub mod solver_io {
             }
         }
 
-        // I don't really understand the reference semantics here
         for (face_index, mut face) in &mut faces {
+            if face.node_indices.len() < 3 {
+                panic!("face has less than 3 nodes");
+            }
+            let n1 = face.node_indices.get(0).unwrap();
+            let n2 = face.node_indices.get(1).unwrap();
+            let n3 = face.node_indices.get(2).unwrap();
+            face.normal = (nodes[n3].position - nodes[n1].position)
+                .cross(&(nodes[n2].position - nodes[n1].position)).unit();
+            // I don't really understand the reference semantics here
             for node_index in &face.node_indices {
                 face.centroid += nodes[node_index].position;
             }
@@ -305,7 +299,7 @@ pub mod solver_io {
 pub mod solver {
     use orc::common::*;
     use orc::mesh::*;
-    use sprs::CsMat;
+    use sprs::{CsMat, CsVec};
 
     pub enum PressureVelocityCoupling {
         SIMPLE,
@@ -321,11 +315,15 @@ pub mod solver {
         SecondOrder,
     }
 
+    pub struct LinearSystem {
+        a: CsMat<Float>,
+        b: Vec<Float>,
+    }
+
     pub struct SolutionMatrices {
-        u: CsMat<Float>,
-        v: CsMat<Float>,
-        w: CsMat<Float>,
-        p: CsMat<Float>,
+        u: LinearSystem,
+        v: LinearSystem,
+        w: LinearSystem,
     }
 
     fn get_velocity_source_term(location: Vector) -> Vector {
@@ -340,15 +338,33 @@ pub mod solver {
         let cell_count = mesh.cells.len();
         let face_count = mesh.faces.len();
         let u_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
+        let u_source: Vec<Float> = Vec::new();
         let v_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
+        let v_source: Vec<Float> = Vec::new();
         let w_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
-        let p_matrix: CsMat<Float> = CsMat::zero((face_count, face_count));
+        let w_source: Vec<Float> = Vec::new();
+
+        match momentum_scheme {
+            MomentumDiscretization::CD => {}
+            _ => panic!("Invalid momentum scheme."),
+        }
+
+        // let p_matrix: CsMat<Float> = CsMat::zero((face_count, face_count));
+        // let p_source: Vec<Float> = Vec::new();
 
         SolutionMatrices {
-            u: u_matrix,
-            v: v_matrix,
-            w: w_matrix,
-            p: p_matrix,
+            u: LinearSystem {
+                a: u_matrix,
+                b: u_source,
+            },
+            v: LinearSystem {
+                a: v_matrix,
+                b: v_source,
+            },
+            w: LinearSystem {
+                a: w_matrix,
+                b: w_source,
+            },
         }
     }
 
