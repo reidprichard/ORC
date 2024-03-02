@@ -46,6 +46,7 @@ pub mod common {
             }
         }
     }
+
     impl Add for Vector {
         type Output = Self;
 
@@ -78,7 +79,6 @@ pub mod common {
                 z: self.z - other.z,
             }
         }
-
     }
 
     // Is this really the best way to do this...?
@@ -98,14 +98,14 @@ pub mod common {
     div_assign!(usize);
     div_assign!(Uint);
     div_assign!(Float);
-    
+
     impl Neg for Vector {
         type Output = Self;
         fn neg(self) -> Self {
             Vector {
                 x: -self.x,
                 y: -self.y,
-                z: -self.z
+                z: -self.z,
             }
         }
     }
