@@ -6,7 +6,10 @@
 // Each cell has scalars & vectors
 
 pub mod common {
-    use std::{fmt, ops::{Add, AddAssign, DivAssign}};
+    use std::{
+        fmt,
+        ops::{Add, AddAssign, DivAssign},
+    };
 
     pub type Int = i32;
     pub type Float = f32;
@@ -91,9 +94,40 @@ pub mod common {
 }
 
 pub mod mesh {
+    use crate::common::*;
     use std::collections::HashMap;
 
-    use crate::common::*;
+    pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
+        HashMap::from([(0, "dead zone"), (1, "fluid zone"), (17, "solid zone")])
+    }
+
+    pub fn get_boundary_condition_types() -> HashMap<Uint, &'static str> {
+        HashMap::from([
+            (2, "interior"),
+            (3, "wall"),
+            (4, "pressure-inlet, inlet-vent, intake-fan"),
+            (5, "pressure-outlet, exhaust-fan, outlet-vent"),
+            (7, "symmetry"),
+            (8, "periodic-shadow"),
+            (9, "pressure-far-field"),
+            (10, "velocity-inlet"),
+            (12, "periodic"),
+            (14, "fan, porous-jump, radiator"),
+            (20, "mass-flow-inlet"),
+            (24, "interface"),
+            (31, "parent (hanging node)"),
+            (36, "outflow"),
+            (37, "axis"),
+        ])
+    }
+
+    // pub fn get_face_types() -> HashMap<Uint, &'static str> {
+            // (0, "?"),
+            // (2, "linear face (2 nodes)"),
+            // (3, "triangular face (3 nodes)"),
+            // (4, "quadrilateral face (4 nodes)"),
+            // (5, "polygonal (N nodes)"),
+    // }
 
     pub enum GreenGaussVariants {
         CellBased,
@@ -106,6 +140,7 @@ pub mod mesh {
     }
 
     pub struct Cell {
+        pub zone_number: Uint,
         pub face_indices: Vec<Uint>,
         pub centroid: Vector,
         pub velocity: Vector,
@@ -115,6 +150,7 @@ pub mod mesh {
     impl Default for Cell {
         fn default() -> Cell {
             Cell {
+                zone_number: 0,
                 face_indices: Vec::new(),
                 centroid: Vector {
                     x: 0.,
@@ -166,6 +202,7 @@ pub mod mesh {
     }
 
     pub struct Face {
+        pub zone_number: Uint,
         pub cell_indices: Vec<Uint>,
         pub node_indices: Vec<Uint>,
         pub centroid: Vector,
@@ -176,6 +213,7 @@ pub mod mesh {
     impl Default for Face {
         fn default() -> Face {
             Face {
+                zone_number: 0,
                 cell_indices: Vec::new(),
                 node_indices: Vec::new(),
                 centroid: Vector {

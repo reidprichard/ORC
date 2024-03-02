@@ -12,11 +12,11 @@ macro_rules! skip_zone_zero {
 pub mod solver_io {
     use itertools::Itertools;
     use orc::common::*;
-    use orc::mesh;
-    use orc::mesh::Cell;
-    use orc::mesh::Face;
-    use orc::mesh::Mesh;
-    use orc::mesh::Node;
+    use orc::mesh::*;
+    // use orc::mesh::Cell;
+    // use orc::mesh::Face;
+    // use orc::mesh::Mesh;
+    // use orc::mesh::Node;
     use regex::Regex;
     use std::collections::HashMap;
     use std::fs;
@@ -27,7 +27,7 @@ pub mod solver_io {
     // faces: (13 (zone-id first-index last-index bc-type   face-type))
     // nodes: (10 (zone-id first-index last-index type      ND))
 
-    pub fn read_mesh(mesh_path: &str) -> mesh::Mesh {
+    pub fn read_mesh(mesh_path: &str) -> Mesh {
         fn read_mesh_lines(filename: &str) -> io::Result<io::Lines<io::BufReader<File>>> {
             // Example had filename generic type P and ... where P: AsRef<Path> ... in signature but I
             // don't understand it ¯\_(ツ)_/¯
@@ -101,7 +101,7 @@ pub mod solver_io {
                             if current_line == "(" {
                                 current_line = lines.next().unwrap();
                                 continue 'node_loop;
-                            } 
+                            }
                             if current_line.starts_with(")") {
                                 break 'node_loop;
                             }
@@ -155,7 +155,7 @@ pub mod solver_io {
                             .collect_tuple()
                             .expect("cell section has 6 entries");
                         cell_zones.entry(zone_id).or_insert(zone_type);
-                    },
+                    }
                     "(13" => 'read_faces: {
                         skip_zone_zero!('read_faces, section_header_blocks);
                         let items = read_section_header_common(&section_header_line);
@@ -166,26 +166,6 @@ pub mod solver_io {
                             .expect("face section has 6 entries");
                         face_zones.entry(zone_id).or_insert(boundary_type);
                         // TODO: Add error checking to not allow unsupported BC types
-                        // 2: interior
-                        // 3: wall
-                        // 4: pressure-inlet, inlet-vent, intake-fan
-                        // 5: pressure-outlet, exhaust-fan, outlet-vent
-                        // 7: symmetry
-                        // 8: periodic-shadow
-                        // 9: pressure-far-field
-                        // 10: velocity-inlet
-                        // 12: periodic
-                        // 14: fan, porous-jump, radiator
-                        // 20: mass-flow-inlet
-                        // 24: interface
-                        // 31: parent (hanging node)
-                        // 36: outflow
-                        // 37: axis
-                        // 0: ?
-                        // 2: linear face (2 nodes)
-                        // 3: triangular face (3 nodes)
-                        // 4: quadrilateral face (4 nodes)
-                        // 5: polygonal (N nodes)
                         // Is using `usize` bad here?
                         println!("Beginning reading faces."); // cells
 
@@ -195,7 +175,7 @@ pub mod solver_io {
                             if current_line == "(" {
                                 current_line = lines.next().unwrap();
                                 continue 'face_loop;
-                            } 
+                            }
                             if current_line.starts_with(")") {
                                 break 'face_loop;
                             }
@@ -218,6 +198,7 @@ pub mod solver_io {
                             faces.insert(
                                 face_index,
                                 Face {
+                                    zone_number: zone_id,
                                     cell_indices: line_blocks[node_count..]
                                         .into_iter()
                                         .map(|cell_id| Uint::from_str_radix(cell_id, 16))
@@ -276,12 +257,29 @@ pub mod solver_io {
                 let mut cell = cells.entry(*cell_index).or_insert(Cell::default());
                 cell.face_indices.push(*face_index);
                 cell.centroid += face.centroid;
+                // TODO: Get cell zones
             }
         }
 
         for (cell_index, mut cell) in &mut cells {
             cell.centroid /= cell.face_indices.len();
             println!("Cell {}: {}", cell_index, cell.centroid);
+        }
+
+        for (cell_zone_index, cell_zone_type) in &cell_zones {
+            println!(
+                "Cell zone {}: {}",
+                cell_zone_index,
+                get_cell_zone_types()[cell_zone_type]
+            );
+        }
+
+        for (face_zone_index, face_zone_type) in &face_zones {
+            println!(
+                "Face zone {}: {}",
+                face_zone_index,
+                get_boundary_condition_types()[face_zone_type]
+            );
         }
 
         Mesh {
@@ -306,23 +304,66 @@ pub mod solver_io {
 
 pub mod solver {
     use orc::common::*;
-    use orc::mesh;
+    use orc::mesh::*;
+    use sprs::CsMat;
+
     pub enum PressureVelocityCoupling {
         SIMPLE,
+    }
+
+    pub enum MomentumDiscretization {
+        CD,
+    }
+
+    pub enum PressureInterpolation {
+        Linear,
+        Standard,
+        SecondOrder,
+    }
+
+    pub struct SolutionMatrices {
+        u: CsMat<Float>,
+        v: CsMat<Float>,
+        w: CsMat<Float>,
+        p: CsMat<Float>,
     }
 
     fn get_velocity_source_term(location: Vector) -> Vector {
         location
     }
 
-    fn initialize_domain() {}
+    fn build_solution_matrices(
+        mesh: Mesh,
+        momentum_scheme: MomentumDiscretization,
+        pressure_scheme: PressureInterpolation,
+    ) -> SolutionMatrices {
+        let cell_count = mesh.cells.len();
+        let face_count = mesh.faces.len();
+        let u_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
+        let v_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
+        let w_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
+        let p_matrix: CsMat<Float> = CsMat::zero((face_count, face_count));
+
+        SolutionMatrices {
+            u: u_matrix,
+            v: v_matrix,
+            w: w_matrix,
+            p: p_matrix,
+        }
+    }
+
+    fn initialize_flow(mesh: Mesh) {
+        // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
+        // - Wall: d/dn (psi) = 0
+        // - Inlet: d/dn (psi) = V
+        // - Outlet: psi = 0
+    }
 
     fn iterate_steady(iteration_count: u32) {
         // 1. Guess the
     }
 }
 
-use orc::mesh;
 fn main() {
     // Interface: allow user to choose from
     // 1. Read mesh
