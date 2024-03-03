@@ -18,12 +18,15 @@ pub mod solver_io {
     use std::collections::HashMap;
     use std::fs::File;
     use std::io::{self, BufRead};
+    use log::debug;
 
     // cells: (12 (zone-id first-index last-index type      element-type))
     // faces: (13 (zone-id first-index last-index bc-type   face-type))
     // nodes: (10 (zone-id first-index last-index type      ND))
 
     pub fn read_mesh(mesh_path: &str) -> Mesh {
+        println!("Beginning reading mesh from {mesh_path}");
+
         fn read_mesh_lines(filename: &str) -> io::Result<io::Lines<io::BufReader<File>>> {
             // Example had filename generic type P and ... where P: AsRef<Path> ... in signature but I
             // don't understand it ¯\_(ツ)_/¯
@@ -32,7 +35,6 @@ pub mod solver_io {
         }
 
         fn read_section_header_common(header_line: &str) -> Vec<Uint> {
-            // is returning a tuple best?
             let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
             // let re = Regex::new(r"\(\d+ \(([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+)")
             //     .expect("valid regex");
@@ -82,14 +84,14 @@ pub mod solver_io {
                     "(2" => (), // dimensions
                     "(10" => 'read_nodes: {
                         skip_zone_zero!('read_nodes, section_header_blocks);
-                        println!("section: {section_header_line}");
+                        debug!("section: {section_header_line}");
                         let items = read_section_header_common(&section_header_line);
                         let (_, zone_id, start_index, end_index, node_type, dims) = items
                             .iter()
                             .map(|n| *n)
                             .collect_tuple()
                             .expect("correct number of items");
-                        println!("Beginning reading nodes from {start_index} to {end_index}.");
+                        debug!("Beginning reading nodes from {start_index} to {end_index}.");
 
                         let mut current_line = lines.next().expect("node section has contents");
                         let mut node_index = start_index;
@@ -101,7 +103,7 @@ pub mod solver_io {
                             if current_line.starts_with(")") {
                                 break 'node_loop;
                             }
-                            println!("Node {node_index}: {current_line}");
+                            debug!("Node {node_index}: {current_line}");
                             let line_blocks: Vec<&str> =
                                 current_line.split_ascii_whitespace().collect();
                             if line_blocks.len() == 3 {
@@ -112,14 +114,12 @@ pub mod solver_io {
                                     nodes.insert(
                                         node_index,
                                         Node {
-                                            cell_indices: Vec::new(),
                                             position: Vector {
                                                 x: x.unwrap(),
                                                 y: y.unwrap(),
                                                 z: z.unwrap(),
                                             },
-                                            velocity: Vector::default(),
-                                            pressure: 0.,
+                                            .. Node::default()
                                         },
                                     );
                                 } else {
@@ -137,7 +137,7 @@ pub mod solver_io {
                     }
                     "(18" => {
                         // skip_zone_zero!(section_header_blocks);
-                        println!("Beginning reading shadow faces."); // periodic shadow faces
+                        debug!("Beginning reading shadow faces."); // periodic shadow faces
                     }
                     "(12" => 'read_cells: {
                         skip_zone_zero!('read_cells, section_header_blocks);
@@ -160,7 +160,7 @@ pub mod solver_io {
                         face_zones.entry(zone_id).or_insert(boundary_type);
                         // TODO: Add error checking to not allow unsupported BC types
                         // Is using `usize` bad here?
-                        println!("Beginning reading faces."); // cells
+                        debug!("Beginning reading faces."); // cells
 
                         let mut current_line = lines.next().expect("face section has contents");
                         let mut face_index = start_index;
@@ -172,7 +172,7 @@ pub mod solver_io {
                             if current_line.starts_with(")") {
                                 break 'face_loop;
                             }
-                            println!("Face {face_index}: {current_line}");
+                            debug!("Face {face_index}: {current_line}");
                             // if current_line[0] == '(' || current_line[0] == ')' {
                             //
                             // }
@@ -202,10 +202,7 @@ pub mod solver_io {
                                         .map(|node_id| Uint::from_str_radix(node_id, 16))
                                         .flatten()
                                         .collect(),
-                                    centroid: Vector::default(),
-                                    normal: Vector::default(),
-                                    velocity: Vector::default(),
-                                    pressure: 0.,
+                                    ..Face::default()
                                 },
                             );
                             match lines.next() {
@@ -227,17 +224,22 @@ pub mod solver_io {
                     None => break,
                 }
             }
+        } else {
+            panic!("Unable to read mesh.");
         }
 
         for (face_index, mut face) in &mut faces {
             if face.node_indices.len() < 3 {
                 panic!("face has less than 3 nodes");
             }
-            let n1 = face.node_indices.get(0).unwrap();
-            let n2 = face.node_indices.get(1).unwrap();
-            let n3 = face.node_indices.get(2).unwrap();
-            face.normal = (nodes[n3].position - nodes[n1].position)
-                .cross(&(nodes[n2].position - nodes[n1].position)).unit();
+            let face_nodes: Vec<Node> = face.node_indices.iter().map(|n| nodes.get(*n).unwrap()).collect::Vec<Node>();
+            face.normal = (face_nodes[2].position - face_nodes[1].position)
+                .cross(&(face_nodes[1].position - face_nodes[0].position)).unit();
+            // match face.node_indices.len() {
+            //     3 => {
+            //         
+            //     }
+            // }
             // I don't really understand the reference semantics here
             for node_index in &face.node_indices {
                 face.centroid += nodes[node_index].position;
@@ -257,11 +259,11 @@ pub mod solver_io {
 
         for (cell_index, mut cell) in &mut cells {
             cell.centroid /= cell.face_indices.len();
-            println!("Cell {}: {}", cell_index, cell.centroid);
+            debug!("Cell {}: {}", cell_index, cell.centroid);
         }
 
         for (cell_zone_index, cell_zone_type) in &cell_zones {
-            println!(
+            debug!(
                 "Cell zone {}: {}",
                 cell_zone_index,
                 get_cell_zone_types()[cell_zone_type]
@@ -269,12 +271,14 @@ pub mod solver_io {
         }
 
         for (face_zone_index, face_zone_type) in &face_zones {
-            println!(
+            debug!(
                 "Face zone {}: {}",
                 face_zone_index,
                 get_boundary_condition_types()[face_zone_type]
             );
         }
+
+        println!("Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}", cells.len(), faces.len(), nodes.len());
 
         Mesh {
             nodes,
@@ -389,11 +393,7 @@ fn main() {
     // 5. Write data
     // 6. Write settings
     // 7. Run solver
-    println!("Hello, world!");
-    // let msh = mesh::Mesh{
-    //     nodes: Vec<mesh::Node>,
-    //     faces: Vec<mesh::Face>,
-    //     cells: Vec<mesh::Cell>,
-    // };
-    let mesh = solver_io::read_mesh("/home/admin/3x3_cube.msh");
+    println!("Starting.");
+    let mesh = solver_io::read_mesh("./examples/3x3_cube.msh");
+    println!("Complete.");
 }

@@ -176,6 +176,7 @@ pub mod mesh {
     pub struct Cell {
         pub zone_number: Uint,
         pub face_indices: Vec<Uint>,
+        pub volume: Float,
         pub centroid: Vector,
         pub velocity: Vector,
         pub pressure: Float,
@@ -186,6 +187,7 @@ pub mod mesh {
             Cell {
                 zone_number: 0,
                 face_indices: Vec::new(),
+                volume: 0.,
                 centroid: Vector::default(),
                 velocity: Vector::default(),
                 pressure: 0.,
@@ -223,6 +225,7 @@ pub mod mesh {
         pub zone_number: Uint,
         pub cell_indices: Vec<Uint>,
         pub node_indices: Vec<Uint>,
+        pub area: Float,
         pub centroid: Vector,
         pub normal: Vector,
         pub velocity: Vector,
@@ -235,6 +238,7 @@ pub mod mesh {
                 zone_number: 0,
                 cell_indices: Vec::new(),
                 node_indices: Vec::new(),
+                area: 0.,
                 centroid: Vector::default(),
                 normal: Vector::default(), // points toward cell 0!
                 velocity: Vector::default(),
