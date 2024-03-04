@@ -232,14 +232,39 @@ pub mod solver_io {
             if face.node_indices.len() < 3 {
                 panic!("face has less than 3 nodes");
             }
-            let face_nodes: Vec<Node> = face.node_indices.iter().map(|n| nodes.get(*n).unwrap()).collect::Vec<Node>();
+            let face_nodes: Vec<&Node> = face.node_indices.iter().map(|n| nodes.get(n).unwrap()).collect();
             face.normal = (face_nodes[2].position - face_nodes[1].position)
                 .cross(&(face_nodes[1].position - face_nodes[0].position)).unit();
-            // match face.node_indices.len() {
-            //     3 => {
-            //         
-            //     }
-            // }
+            match face_nodes.len() {
+                3 => {
+                    // Triangular face
+                    face.area = (face_nodes[2].position - face_nodes[1].position).cross(&(face_nodes[1].position - face_nodes[0].position)).norm()/2.;
+                }
+                4 => {
+                    // Quadrilateral face
+                    face.area = (face_nodes[3].position - face_nodes[1].position).cross(&(face_nodes[2].position - face_nodes[0].position)).norm()/2.;
+                }
+                node_count => {
+                    // Polyhedral face - UNTESTED
+                    
+                    // Shoelace formula allows calculation of polygon area in 2D; we need to
+                    // translate to a 2D coordinate system to allow this
+                    let axis_1 = (face_nodes[1].position - face_nodes[0].position).unit();
+                    let axis_2 = axis_1.cross(&face.normal).unit();
+                    let translate = |x: &Vector| -> (Float, Float) {
+                        (x.dot(&axis_1), x.dot(&axis_2))
+                    };
+                    let mut area: Float = 0.;
+                    let mut node_index = 0;
+                    while node_index < face_nodes.len() {
+                        let pos_1 = translate(&face_nodes[node_index].position);
+                        let pos_2 = translate(&face_nodes[(node_index + 1) % node_count].position);
+                        area += pos_1.0 * pos_2.1 - pos_1.1 * pos_2.0;
+                        node_index += 1;
+                    }
+                    face.area = Float::abs(area) / 2.;
+                }
+            }
             // I don't really understand the reference semantics here
             for node_index in &face.node_indices {
                 face.centroid += nodes[node_index].position;
@@ -259,7 +284,16 @@ pub mod solver_io {
 
         for (cell_index, mut cell) in &mut cells {
             cell.centroid /= cell.face_indices.len();
-            debug!("Cell {}: {}", cell_index, cell.centroid);
+            let cell_faces: Vec<&Face> = cell.face_indices.iter().map(|n| faces.get(n).unwrap()).collect();
+            if (cell_faces.len() < 4) {
+                panic!("Cell cannot have fewer than 4 faces.");
+            }
+            let mut volume = 0.;
+            for face in &cell_faces {
+                volume += Float::abs(face.area*(face.centroid - cell.centroid).dot(&face.normal))/3.;
+            }
+            cell.volume = volume;
+            debug!("Cell {}: {}, {}", cell_index, cell.centroid, cell.volume);
         }
 
         for (cell_zone_index, cell_zone_type) in &cell_zones {

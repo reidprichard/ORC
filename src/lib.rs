@@ -195,6 +195,7 @@ pub mod mesh {
         }
     }
 
+    // #[derive(Copy, Clone)]
     pub struct Node {
         pub cell_indices: Vec<Uint>,
         pub position: Vector,
