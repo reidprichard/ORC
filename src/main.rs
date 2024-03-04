@@ -288,11 +288,9 @@ pub mod solver_io {
             if (cell_faces.len() < 4) {
                 panic!("Cell cannot have fewer than 4 faces.");
             }
-            let mut volume = 0.;
             for face in &cell_faces {
-                volume += Float::abs(face.area*(face.centroid - cell.centroid).dot(&face.normal))/3.;
+                cell.volume += Float::abs(face.area*(face.centroid - cell.centroid).dot(&face.normal))/3.;
             }
-            cell.volume = volume;
             debug!("Cell {}: {}, {}", cell_index, cell.centroid, cell.volume);
         }
 
@@ -419,6 +417,7 @@ pub mod solver {
 }
 
 fn main() {
+    env_logger::init();
     // Interface: allow user to choose from
     // 1. Read mesh
     // 2. Read data
