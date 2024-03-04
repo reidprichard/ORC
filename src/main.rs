@@ -404,7 +404,7 @@ pub mod solver {
     }
 
     fn get_velocity_source_term(location: Vector) -> Vector {
-        location
+        Vector::default()
     }
 
     fn build_solution_matrices(
