@@ -12,7 +12,7 @@ pub mod solver;
 pub mod common {
     use std::{
         fmt,
-        ops::{Add, AddAssign, DivAssign, Neg, Sub},
+        ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub},
     };
 
     pub type Int = i32;
@@ -85,6 +85,18 @@ pub mod common {
         }
     }
 
+    impl Div<Uint> for Vector {
+        type Output = Self;
+
+        fn div(self, rhs: Uint) -> Self {
+            Vector {
+                x: self.x / (rhs as Float),
+                y: self.y / (rhs as Float),
+                z: self.z / (rhs as Float),
+            }
+        }
+    }
+
     // Is this really the best way to do this...?
     macro_rules! div_assign {
         ($T: ty) => {
@@ -102,6 +114,27 @@ pub mod common {
     div_assign!(usize);
     div_assign!(Uint);
     div_assign!(Float);
+
+    macro_rules! mult {
+        ($T: ty) => {
+            impl Mul<$T> for Vector {
+                type Output = Self;
+                fn mul(self, rhs:$T) -> Self {
+                    Vector {
+                        x: self.x * (rhs as Float),
+                        y: self.y * (rhs as Float),
+                        z: self.z * (rhs as Float),
+                    }
+                }
+            }
+            
+        };
+    }
+
+    mult!(usize);
+    mult!(Uint);
+    mult!(Float);
+
 
     impl Neg for Vector {
         type Output = Self;
@@ -130,4 +163,19 @@ pub mod common {
             }
         }
     }
+    const X: Vector = Vector {
+        x: 1.,
+        y: 0.,
+        z: 0.,
+    };
+    const Y: Vector = Vector {
+        x: 0.,
+        y: 1.,
+        z: 0.,
+    };
+    const Z: Vector = Vector {
+        x: 0.,
+        y: 0.,
+        z: 1.,
+    };
 }

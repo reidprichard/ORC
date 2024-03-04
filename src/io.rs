@@ -236,6 +236,16 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         face.normal = (face_nodes[2].position - face_nodes[1].position)
             .cross(&(face_nodes[1].position - face_nodes[0].position))
             .unit();
+        // TGRID format has face normal as defined here pointing toward cell 0
+        // If cell 0 does not exist (e.g. face is on boundary), we need to remove
+        // that cell and flip the normal vector
+        if face.cell_indices[0] == 0 {
+            face.normal = -face.normal;
+            face.cell_indices.remove(0);
+        }
+        else if face.cell_indices[1] == 0 {
+            face.cell_indices.remove(1);
+        }
         match face_nodes.len() {
             3 => {
                 // Triangular face
@@ -357,9 +367,12 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let z_max = node_positions
         .iter()
         .fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.z));
+
+    let format_pos_padded = |n:Float| -> String {format!("{n:<10.2e}")};
+    let format_pos = |n:Float| -> String {format!("{n:.2e}")};
     println!(
-        "Domain extents:\nX:({:.2e}, {:.2e})\nY:({:.1e}, {:.2e})\nZ:({:.2e}, {:.2e})",
-        x_min, x_max, y_min, y_max, z_min, z_max
+        "Domain extents:\nX:({}, {})\nY:({}, {})\nZ:({}, {})",
+        format_pos_padded(x_min), format_pos(x_max), format_pos_padded(y_min), format_pos(y_max), format_pos_padded(z_min), format_pos(z_max)
     );
 
     Mesh {

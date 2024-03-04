@@ -154,6 +154,7 @@ impl Default for Node {
 
 pub struct Face {
     pub zone_number: Uint,
+    // TODO: Make this an array
     pub cell_indices: Vec<Uint>,
     pub node_indices: Vec<Uint>,
     pub area: Float,
