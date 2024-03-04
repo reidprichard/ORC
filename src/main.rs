@@ -12,13 +12,13 @@ macro_rules! skip_zone_zero {
 
 pub mod solver_io {
     use itertools::Itertools;
+    use log::{debug, info};
     use orc::common::*;
     use orc::mesh::*;
     use regex::Regex;
     use std::collections::HashMap;
     use std::fs::File;
     use std::io::{self, BufRead};
-    use log::debug;
 
     // cells: (12 (zone-id first-index last-index type      element-type))
     // faces: (13 (zone-id first-index last-index bc-type   face-type))
@@ -84,14 +84,14 @@ pub mod solver_io {
                     "(2" => (), // dimensions
                     "(10" => 'read_nodes: {
                         skip_zone_zero!('read_nodes, section_header_blocks);
-                        debug!("section: {section_header_line}");
+                        info!("section: {section_header_line}");
                         let items = read_section_header_common(&section_header_line);
                         let (_, zone_id, start_index, end_index, node_type, dims) = items
                             .iter()
                             .map(|n| *n)
                             .collect_tuple()
                             .expect("correct number of items");
-                        debug!("Beginning reading nodes from {start_index} to {end_index}.");
+                        info!("Beginning reading nodes from {start_index} to {end_index}.");
 
                         let mut current_line = lines.next().expect("node section has contents");
                         let mut node_index = start_index;
@@ -119,7 +119,7 @@ pub mod solver_io {
                                                 y: y.unwrap(),
                                                 z: z.unwrap(),
                                             },
-                                            .. Node::default()
+                                            ..Node::default()
                                         },
                                     );
                                 } else {
@@ -137,7 +137,7 @@ pub mod solver_io {
                     }
                     "(18" => {
                         // skip_zone_zero!(section_header_blocks);
-                        debug!("Beginning reading shadow faces."); // periodic shadow faces
+                        info!("Beginning reading shadow faces."); // periodic shadow faces
                     }
                     "(12" => 'read_cells: {
                         skip_zone_zero!('read_cells, section_header_blocks);
@@ -160,7 +160,7 @@ pub mod solver_io {
                         face_zones.entry(zone_id).or_insert(boundary_type);
                         // TODO: Add error checking to not allow unsupported BC types
                         // Is using `usize` bad here?
-                        debug!("Beginning reading faces."); // cells
+                        info!("Beginning reading faces."); // cells
 
                         let mut current_line = lines.next().expect("face section has contents");
                         let mut face_index = start_index;
@@ -232,28 +232,38 @@ pub mod solver_io {
             if face.node_indices.len() < 3 {
                 panic!("face has less than 3 nodes");
             }
-            let face_nodes: Vec<&Node> = face.node_indices.iter().map(|n| nodes.get(n).unwrap()).collect();
+            let face_nodes: Vec<&Node> = face
+                .node_indices
+                .iter()
+                .map(|n| nodes.get(n).unwrap())
+                .collect();
             face.normal = (face_nodes[2].position - face_nodes[1].position)
-                .cross(&(face_nodes[1].position - face_nodes[0].position)).unit();
+                .cross(&(face_nodes[1].position - face_nodes[0].position))
+                .unit();
             match face_nodes.len() {
                 3 => {
                     // Triangular face
-                    face.area = (face_nodes[2].position - face_nodes[1].position).cross(&(face_nodes[1].position - face_nodes[0].position)).norm()/2.;
+                    face.area = (face_nodes[2].position - face_nodes[1].position)
+                        .cross(&(face_nodes[1].position - face_nodes[0].position))
+                        .norm()
+                        / 2.;
                 }
                 4 => {
                     // Quadrilateral face
-                    face.area = (face_nodes[3].position - face_nodes[1].position).cross(&(face_nodes[2].position - face_nodes[0].position)).norm()/2.;
+                    face.area = (face_nodes[3].position - face_nodes[1].position)
+                        .cross(&(face_nodes[2].position - face_nodes[0].position))
+                        .norm()
+                        / 2.;
                 }
                 node_count => {
                     // Polyhedral face - UNTESTED
-                    
+
                     // Shoelace formula allows calculation of polygon area in 2D; we need to
                     // translate to a 2D coordinate system to allow this
                     let axis_1 = (face_nodes[1].position - face_nodes[0].position).unit();
                     let axis_2 = axis_1.cross(&face.normal).unit();
-                    let translate = |x: &Vector| -> (Float, Float) {
-                        (x.dot(&axis_1), x.dot(&axis_2))
-                    };
+                    let translate =
+                        |x: &Vector| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
                     let mut area: Float = 0.;
                     let mut node_index = 0;
                     while node_index < face_nodes.len() {
@@ -270,6 +280,10 @@ pub mod solver_io {
                 face.centroid += nodes[node_index].position;
             }
             face.centroid /= face.node_indices.len();
+            info!(
+                "Face {}: centroid={}, area={:.2e}",
+                face_index, face.centroid, face.area
+            );
             for cell_index in &face.cell_indices {
                 // Could this check be done with a filter or something?
                 if *cell_index == 0 {
@@ -277,6 +291,7 @@ pub mod solver_io {
                 }
                 let mut cell = cells.entry(*cell_index).or_insert(Cell::default());
                 cell.face_indices.push(*face_index);
+                // TODO: more rigorous centroid calc
                 cell.centroid += face.centroid;
                 // TODO: Get cell zones
             }
@@ -284,18 +299,26 @@ pub mod solver_io {
 
         for (cell_index, mut cell) in &mut cells {
             cell.centroid /= cell.face_indices.len();
-            let cell_faces: Vec<&Face> = cell.face_indices.iter().map(|n| faces.get(n).unwrap()).collect();
+            let cell_faces: Vec<&Face> = cell
+                .face_indices
+                .iter()
+                .map(|n| faces.get(n).unwrap())
+                .collect();
             if (cell_faces.len() < 4) {
                 panic!("Cell cannot have fewer than 4 faces.");
             }
             for face in &cell_faces {
-                cell.volume += Float::abs(face.area*(face.centroid - cell.centroid).dot(&face.normal))/3.;
+                cell.volume +=
+                    Float::abs(face.area * (face.centroid - cell.centroid).dot(&face.normal)) / 3.;
             }
-            debug!("Cell {}: {}, {}", cell_index, cell.centroid, cell.volume);
+            info!(
+                "Cell {}: centroid={}, volume={:.2e}",
+                cell_index, cell.centroid, cell.volume
+            );
         }
 
         for (cell_zone_index, cell_zone_type) in &cell_zones {
-            debug!(
+            info!(
                 "Cell zone {}: {}",
                 cell_zone_index,
                 get_cell_zone_types()[cell_zone_type]
@@ -303,14 +326,30 @@ pub mod solver_io {
         }
 
         for (face_zone_index, face_zone_type) in &face_zones {
-            debug!(
+            info!(
                 "Face zone {}: {}",
                 face_zone_index,
                 get_boundary_condition_types()[face_zone_type]
             );
         }
 
-        println!("Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}", cells.len(), faces.len(), nodes.len());
+        println!(
+            "Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}",
+            cells.len(),
+            faces.len(),
+            nodes.len()
+        );
+
+        // TODO: Rewrite more concisely
+        // Very ugly way to do this
+        let node_positions:Vec<Vector> = nodes.iter().map(|(_,n)| n.position).collect();
+        let x_min = node_positions.iter().fold(Float::INFINITY, |acc, &n| acc.min(n.x));
+        let x_max = node_positions.iter().fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.x));
+        let y_min = node_positions.iter().fold(Float::INFINITY, |acc, &n| acc.min(n.y));
+        let y_max = node_positions.iter().fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.y));
+        let z_min = node_positions.iter().fold(Float::INFINITY, |acc, &n| acc.min(n.z));
+        let z_max = node_positions.iter().fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.z));
+        println!("Domain extents:\nX:({:.2e}, {:.2e})\nY:({:.1e}, {:.2e})\nZ:({:.2e}, {:.2e})", x_min, x_max, y_min, y_max, z_min, z_max);
 
         Mesh {
             nodes,
@@ -333,6 +372,8 @@ pub mod solver_io {
 }
 
 pub mod solver {
+    use std::collections::HashMap;
+
     use orc::common::*;
     use orc::mesh::*;
     use sprs::{CsMat, CsVec};
@@ -370,19 +411,34 @@ pub mod solver {
         mesh: Mesh,
         momentum_scheme: MomentumDiscretization,
         pressure_scheme: PressureInterpolation,
+        boundary_conditions: HashMap<Uint, Uint>,
     ) -> SolutionMatrices {
+        use std::collections::HashSet;
         let cell_count = mesh.cells.len();
         let face_count = mesh.faces.len();
         let u_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
-        let u_source: Vec<Float> = Vec::new();
+        let u_source: Vec<Float> = vec![0.; cell_count];
         let v_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
-        let v_source: Vec<Float> = Vec::new();
+        let v_source: Vec<Float> = vec![0.; cell_count];
         let w_matrix: CsMat<Float> = CsMat::zero((cell_count, cell_count));
-        let w_source: Vec<Float> = Vec::new();
+        let w_source: Vec<Float> = vec![0.; cell_count];
 
         match momentum_scheme {
             MomentumDiscretization::CD => {}
             _ => panic!("Invalid momentum scheme."),
+        }
+
+        for (cell_index, cell) in &mesh.cells {
+            let neighbor_indices: HashSet<&Uint> = cell
+                .face_indices
+                .iter()
+                .map(|face_index| &mesh.faces[face_index])
+                .map(|face| &face.cell_indices)
+                .flatten()
+                .filter(|c| *c != cell_index)
+                .collect();
+            // 1. Diffusion term
+            // 2. Advection term
         }
 
         // let p_matrix: CsMat<Float> = CsMat::zero((face_count, face_count));

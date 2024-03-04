@@ -111,8 +111,9 @@ pub mod common {
     }
 
     impl fmt::Display for Vector {
+        // TODO: Switch between regular and scientific fmt based on magnitude
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "({}, {}, {})", self.x, self.y, self.z)
+            write!(f, "({:.2e}, {:.2e}, {:.2e})", self.x, self.y, self.z)
         }
     }
 
@@ -129,29 +130,89 @@ pub mod common {
 
 pub mod mesh {
     use crate::common::*;
+    use core::fmt;
     use std::collections::HashMap;
 
     pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
         HashMap::from([(0, "dead zone"), (1, "fluid zone"), (17, "solid zone")])
     }
 
-    pub fn get_boundary_condition_types() -> HashMap<Uint, &'static str> {
+    // TODO: Move BCs somewhere more suitable
+    pub enum BoundaryConditionTypes {
+        Interior,
+        Wall,
+        PressureInlet,
+        PressureOutlet,
+        Symmetry,
+        PeriodicShadow,
+        PressureFarField,
+        VelocityInlet,
+        Periodic,
+        PorousJump,
+        MassFlowInlet,
+        Interface,
+        Parent,
+        Outflow,
+        Axis,
+    }
+    impl fmt::Display for BoundaryConditionTypes {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "{}",
+                match &self {
+                    BoundaryConditionTypes::Interior => "Interior",
+                    BoundaryConditionTypes::Wall => "Wall",
+                    BoundaryConditionTypes::PressureInlet => "PressureInlet",
+                    BoundaryConditionTypes::PressureOutlet => "PressureOutlet",
+                    BoundaryConditionTypes::Symmetry => "Symmetry",
+                    BoundaryConditionTypes::PeriodicShadow => "PeriodicShadow",
+                    BoundaryConditionTypes::PressureFarField => "PressureFarField",
+                    BoundaryConditionTypes::VelocityInlet => "VelocityInlet",
+                    BoundaryConditionTypes::Periodic => "Periodic",
+                    BoundaryConditionTypes::PorousJump => "PorousJump",
+                    BoundaryConditionTypes::MassFlowInlet => "MassFlowInlet",
+                    BoundaryConditionTypes::Interface => "Interface",
+                    BoundaryConditionTypes::Parent => "Parent",
+                    BoundaryConditionTypes::Outflow => "Outflow",
+                    BoundaryConditionTypes::Axis => "Axis",
+                }
+            )
+        }
+    }
+    // (2, "interior"),
+    // (3, "wall"),
+    // (4, "pressure-inlet, inlet-vent, intake-fan"),
+    // (5, "pressure-outlet, exhaust-fan, outlet-vent"),
+    // (7, "symmetry"),
+    // (8, "periodic-shadow"),
+    // (9, "pressure-far-field"),
+    // (10, "velocity-inlet"),
+    // (12, "periodic"),
+    // (14, "fan, porous-jump, radiator"),
+    // (20, "mass-flow-inlet"),
+    // (24, "interface"),
+    // (31, "parent (hanging node)"),
+    // (36, "outflow"),
+    // (37, "axis"),
+
+    pub fn get_boundary_condition_types() -> HashMap<Uint, BoundaryConditionTypes> {
         HashMap::from([
-            (2, "interior"),
-            (3, "wall"),
-            (4, "pressure-inlet, inlet-vent, intake-fan"),
-            (5, "pressure-outlet, exhaust-fan, outlet-vent"),
-            (7, "symmetry"),
-            (8, "periodic-shadow"),
-            (9, "pressure-far-field"),
-            (10, "velocity-inlet"),
-            (12, "periodic"),
-            (14, "fan, porous-jump, radiator"),
-            (20, "mass-flow-inlet"),
-            (24, "interface"),
-            (31, "parent (hanging node)"),
-            (36, "outflow"),
-            (37, "axis"),
+            (2, BoundaryConditionTypes::Interior),
+            (3, BoundaryConditionTypes::Wall),
+            (4, BoundaryConditionTypes::PressureInlet),
+            (5, BoundaryConditionTypes::PressureOutlet),
+            (7, BoundaryConditionTypes::Symmetry),
+            (8, BoundaryConditionTypes::PeriodicShadow),
+            (9, BoundaryConditionTypes::PressureFarField),
+            (10, BoundaryConditionTypes::VelocityInlet),
+            (12, BoundaryConditionTypes::Periodic),
+            (14, BoundaryConditionTypes::PorousJump),
+            (20, BoundaryConditionTypes::MassFlowInlet),
+            (24, BoundaryConditionTypes::Interface),
+            (31, BoundaryConditionTypes::Parent),
+            (36, BoundaryConditionTypes::Outflow),
+            (37, BoundaryConditionTypes::Axis),
         ])
     }
 
