@@ -125,6 +125,18 @@ pub mod common {
         }
     }
 
+    // Element-wise division
+    impl Div<Vector> for Vector {
+        type Output = Self;
+        fn div(self, rhs: Vector) -> Self {
+            Vector {
+                x: self.x / rhs.x,
+                y: self.y / rhs.y,
+                z: self.z / rhs.z
+            }
+        }
+    }
+
     // Is this really the best way to do this...?
     macro_rules! vector_div_assign {
         ($T: ty) => {
@@ -216,6 +228,14 @@ pub mod common {
                 x: Vector::zero(),
                 y: Vector::zero(),
                 z: Vector::zero(),
+            }
+        }
+        
+        pub fn dot(&self, vector:&Vector) -> Vector {
+            Vector {
+                x: self.x.dot(&vector),
+                y: self.x.dot(&vector),
+                z: self.z.dot(&vector)
             }
         }
     }
