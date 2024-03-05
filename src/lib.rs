@@ -179,6 +179,17 @@ pub mod common {
         };
     }
 
+    impl Mul<Vector> for Vector {
+        type Output = Self;
+        fn mul(self, rhs: Vector) -> Self {
+            Vector {
+                x: self.x * rhs.x,
+                y: self.y * rhs.y,
+                z: self.z * rhs.z,
+            }
+        }
+    }
+
     vector_mult!(usize);
     vector_mult!(Uint);
     vector_mult!(Float);
