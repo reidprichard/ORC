@@ -122,17 +122,24 @@ pub mod common {
         }
     }
 
-    impl Div<Uint> for Vector {
-        type Output = Self;
+    macro_rules! vector_div {
+        ($T: ty) => {
+            impl Div<$T> for Vector {
+                type Output = Self;
 
-        fn div(self, rhs: Uint) -> Self {
-            Vector {
-                x: self.x / (rhs as Float),
-                y: self.y / (rhs as Float),
-                z: self.z / (rhs as Float),
+                fn div(self, rhs: $T) -> Self {
+                    Vector {
+                        x: self.x / (rhs as Float),
+                        y: self.y / (rhs as Float),
+                        z: self.z / (rhs as Float),
+                    }
+                }
             }
-        }
+        };
     }
+
+    vector_div!(Uint);
+    vector_div!(Float);
 
     // Element-wise division
     impl Div<Vector> for Vector {
@@ -179,6 +186,7 @@ pub mod common {
         };
     }
 
+    // Element-wise multiply
     impl Mul<Vector> for Vector {
         type Output = Self;
         fn mul(self, rhs: Vector) -> Self {
