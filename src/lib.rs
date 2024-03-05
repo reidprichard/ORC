@@ -88,7 +88,19 @@ pub mod common {
         }
     }
 
-    impl Add for Vector {
+    impl Add<Float> for Vector {
+        type Output = Self;
+
+        fn add(self, other: Float) -> Self {
+            Self {
+                x: self.x + other,
+                y: self.y + other,
+                z: self.z + other,
+            }
+        }
+    }
+
+    impl Add<Self> for Vector {
         type Output = Self;
 
         fn add(self, other: Self) -> Self {
@@ -122,7 +134,7 @@ pub mod common {
         }
     }
 
-    impl Sub<Vector> for Vector {
+    impl Sub<Self> for Vector {
         type Output = Self;
 
         fn sub(self, other: Self) -> Self {
@@ -154,7 +166,7 @@ pub mod common {
     vector_div!(Float);
 
     // Element-wise division
-    impl Div<Vector> for Vector {
+    impl Div<Self> for Vector {
         type Output = Self;
         fn div(self, rhs: Vector) -> Self {
             Vector {
@@ -199,7 +211,7 @@ pub mod common {
     }
 
     // Element-wise multiply
-    impl Mul<Vector> for Vector {
+    impl Mul<Self> for Vector {
         type Output = Self;
         fn mul(self, rhs: Vector) -> Self {
             Vector {
