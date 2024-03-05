@@ -30,7 +30,17 @@ pub struct SolutionMatrices {
 }
 
 fn get_velocity_source_term(location: Vector) -> Vector {
-    Vector::default()
+    Vector::zero()
+}
+
+fn interpolate_face_velocity(mesh: &Mesh, face_number: &Uint) -> Vector {
+    // ****** TODO: Add skewness corrections!!! ********
+    let face = &mesh.faces[face_number];
+    face.cell_indices
+        .iter()
+        .map(|c| &mesh.cells[c].velocity)
+        .fold(Vector::zero(), |acc, v| acc + *v)
+        / (face.cell_indices.len() as Uint)
 }
 
 pub fn build_solution_matrices(
@@ -56,73 +66,120 @@ pub fn build_solution_matrices(
         _ => panic!("Invalid momentum scheme."),
     }
 
-    for (cell_index, cell) in &mesh.cells {
-        // &cell.face_indices.iter().map(|f| mesh.faces.get_mut(f).expect("face exists").velocity = Vector::default());
+    let mut warned: bool = false;
+
+    let mut warning_msg = || {
+                if warned == false {
+                    println!("Warning: boundary faces not properly handled in gradient calcs.");
+                    warned = true;
+                }
+    };
+
+    for (cell_number, cell) in &mesh.cells {
+        // &cell.face_indices.iter().map(|f| mesh.faces.get_mut(f).expect("face exists").velocity = Vector::zero());
 
         // Transient term
 
-        // Convection term
-        for face_index in &cell.face_indices {
-            let face = &mut mesh.faces.get_mut(face_index).expect("face exists");
-            if face.cell_indices.len() < 2 {
-                continue; // assume boundary cells have already been treated
+        // TODO: Rewrite this as a 3x3 tensor
+        let mut grad_u = Vector::zero();
+        let mut grad_v = Vector::zero();
+        let mut grad_w = Vector::zero();
+        let mut interior_face_count: Uint = 0;
+
+        for face_number in &cell.face_indices {
+            let mut face_velocity: Vector = Vector::zero();
+            if mesh.faces[face_number].cell_indices.len() < 2 {
+                match mesh.faces[face_number].boundary_type {
+                    BoundaryConditionTypes::Interior => panic!("Interior one-sided face."),
+                    BoundaryConditionTypes::Wall => (), // already zero
+                    BoundaryConditionTypes::PressureInlet => (warning_msg()),
+                    BoundaryConditionTypes::PressureOutlet => (warning_msg()),
+                    BoundaryConditionTypes::Symmetry => (warning_msg()),
+                    BoundaryConditionTypes::PeriodicShadow => (),
+                    BoundaryConditionTypes::PressureFarField => (),
+                    BoundaryConditionTypes::VelocityInlet => (),
+                    BoundaryConditionTypes::Periodic => (),
+                    BoundaryConditionTypes::PorousJump => (),
+                    BoundaryConditionTypes::MassFlowInlet => (),
+                    BoundaryConditionTypes::Interface => (),
+                    BoundaryConditionTypes::Parent => (),
+                    BoundaryConditionTypes::Outflow => (),
+                    BoundaryConditionTypes::Axis => (),
+                    _ => (),
+                }
+            } else {
+                face_velocity = interpolate_face_velocity(&mesh, face_number);
             }
-            // ****** TODO: Add skewness corrections!!! ********
-            let face_velocity = face
+            let face_vector = mesh.faces[face_number].centroid - cell.centroid;
+            grad_u += face_vector * face_velocity.x;
+            grad_v += face_vector * face_velocity.y;
+            grad_w += face_vector * face_velocity.z;
+        }
+
+        // Convection term
+        for face_number in &cell.face_indices {
+            let face_velocity = interpolate_face_velocity(&mesh, face_number);
+
+            let face = &mut mesh.faces.get_mut(face_number).expect("face exists");
+            if face.cell_indices.len() < 2 {
+                // TODO: Handle BCs
+                continue;
+            }
+            let mut upwind_cell_number = face.cell_indices[0];
+            let neighbor_cell_number = *face
                 .cell_indices
                 .iter()
-                .map(|c| &mesh.cells[c].velocity)
-                .fold(Vector::default(), |acc, v| acc + *v)
-                / (face.cell_indices.len() as Uint);
-            let mut upwind_cell_index = face.cell_indices[0];
-            let neighbor_cell_index = *face
-                .cell_indices
-                .iter()
-                .filter(|c| *c != cell_index)
+                .filter(|c| *c != cell_number)
                 .collect::<Vec<&Uint>>()
                 .get(0)
                 .unwrap();
             // By default, face.normal points toward cell 0
             // We need it facing outward
-            let mut face_normal = -face.normal;
+            let mut outward_face_normal = -face.normal;
             // If cell 1 exists and is upwind, use that
             if face.normal.dot(&cell.velocity) < 0. {
-                upwind_cell_index = face.cell_indices[1];
-                face_normal = -face_normal;
+                upwind_cell_number = face.cell_indices[1];
+                outward_face_normal = -outward_face_normal;
             }
 
-            let flux = face_velocity * rho * face_normal.dot(&face_velocity);
+            let convective_term =
+                face_velocity * rho * outward_face_normal.dot(&face_velocity) * face.area;
             u_matrix.add_triplet(
-                *cell_index as usize - 1,
-                *neighbor_cell_index as usize - 1,
-                flux.x,
+                *cell_number as usize - 1,
+                *neighbor_cell_number as usize - 1,
+                convective_term.x,
             );
             v_matrix.add_triplet(
-                *cell_index as usize - 1,
-                *neighbor_cell_index as usize - 1,
-                flux.y,
+                *cell_number as usize - 1,
+                *neighbor_cell_number as usize - 1,
+                convective_term.y,
             );
             w_matrix.add_triplet(
-                *cell_index as usize - 1,
-                *neighbor_cell_index as usize - 1,
-                flux.z,
+                *cell_number as usize - 1,
+                *neighbor_cell_number as usize - 1,
+                convective_term.z,
             );
         }
 
         // Diffusion term
+        grad_u /= cell.volume;
+        grad_v /= cell.volume;
+        grad_w /= cell.volume;
+
+        for face_number in &cell.face_indices {}
 
         let mut cell_faces: Vec<&Face> = cell
             .face_indices
             .iter()
-            .map(|face_index| &mesh.faces[face_index])
+            .map(|face_number| &mesh.faces[face_number])
             .collect();
 
-        // cell_faces.get(0).unwrap().velocity = Vector::default();
+        // cell_faces.get(0).unwrap().velocity = Vector::zero();
         // let neighbor_cells: Vec<&Cell> = cell_faces
         //     .iter()
         //     .map(|face| &face.cell_indices)
         //     .flatten()
-        //     .filter(|c| *c != cell_index)
+        //     .filter(|c| *c != cell_number)
         //     .map(|cell| &mesh.cells[cell])
         //     .collect();
 
@@ -130,7 +187,7 @@ pub fn build_solution_matrices(
 
         // 2. Advection term
         // for face in cell_faces {
-        //     (*face).velocity = Vector::default();//face.cell_indices.iter().map(|i| &mesh.cells[i].velocity).fold(Vector::default(), |acc, v| acc + *v) / (face.cell_indices.len() as Uint);
+        //     (*face).velocity = Vector::zero();//face.cell_indices.iter().map(|i| &mesh.cells[i].velocity).fold(Vector::zero(), |acc, v| acc + *v) / (face.cell_indices.len() as Uint);
         // }
     }
 

@@ -26,6 +26,14 @@ pub mod common {
         pub z: Float,
     }
     impl Vector {
+        pub fn zero() -> Vector {
+            Vector {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            }
+        }
+
         pub fn dot(&self, other: &Vector) -> Float {
             self.x * other.x + self.y * other.y + self.z * other.z
         }
@@ -119,7 +127,7 @@ pub mod common {
         ($T: ty) => {
             impl Mul<$T> for Vector {
                 type Output = Self;
-                fn mul(self, rhs:$T) -> Self {
+                fn mul(self, rhs: $T) -> Self {
                     Vector {
                         x: self.x * (rhs as Float),
                         y: self.y * (rhs as Float),
@@ -127,14 +135,12 @@ pub mod common {
                     }
                 }
             }
-            
         };
     }
 
     mult!(usize);
     mult!(Uint);
     mult!(Float);
-
 
     impl Neg for Vector {
         type Output = Self;

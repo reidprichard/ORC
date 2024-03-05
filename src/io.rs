@@ -45,7 +45,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let mut nodes: HashMap<Uint, Node> = HashMap::new();
     let mut faces: HashMap<Uint, Face> = HashMap::new();
     let mut cells: HashMap<Uint, Cell> = HashMap::new();
-    let mut face_zones: HashMap<Uint, Uint> = HashMap::new();
+    let mut face_zones: HashMap<Uint, BoundaryCondition> = HashMap::new();
     let mut cell_zones: HashMap<Uint, Uint> = HashMap::new();
 
     let mut node_indices: Vec<Uint> = Vec::new();
@@ -153,10 +153,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .map(|n| *n)
                         .collect_tuple()
                         .expect("face section has 6 entries");
-                    face_zones.entry(zone_id).or_insert(boundary_type);
-                    // TODO: Add error checking to not allow unsupported BC types
-                    // Is using `usize` bad here?
-                    info!("Beginning reading faces."); // cells
+                    face_zones.entry(zone_id).or_insert(
+                        BoundaryCondition {
+                            zone_type: BoundaryConditionTypes::try_from(boundary_type).expect("valid BC type"),
+                            boundary_condition_value: 0.,
+                        }
+                    );
+                    info!("Beginning reading faces from zone {zone_id}."); // cells
 
                     let mut current_line = lines.next().expect("face section has contents");
                     let mut face_index = start_index;
@@ -187,7 +190,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         faces.insert(
                             face_index,
                             Face {
-                                zone_number: zone_id,
+                                boundary_type: BoundaryConditionTypes::try_from(boundary_type)
+                                    .expect("valid BC type"),
                                 cell_indices: line_blocks[node_count..]
                                     .into_iter()
                                     .map(|cell_id| Uint::from_str_radix(cell_id, 16))
@@ -242,8 +246,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         if face.cell_indices[0] == 0 {
             face.normal = -face.normal;
             face.cell_indices.remove(0);
-        }
-        else if face.cell_indices[1] == 0 {
+        } else if face.cell_indices[1] == 0 {
             face.cell_indices.remove(1);
         }
         match face_nodes.len() {
@@ -268,8 +271,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 // translate to a 2D coordinate system to allow this
                 let axis_1 = (face_nodes[1].position - face_nodes[0].position).unit();
                 let axis_2 = axis_1.cross(&face.normal).unit();
-                let translate =
-                    |x: &Vector| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
+                let translate = |x: &Vector| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
                 let mut area: Float = 0.;
                 let mut node_index = 0;
                 while node_index < face_nodes.len() {
@@ -335,7 +337,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         info!(
             "Face zone {}: {}",
             face_zone_index,
-            get_boundary_condition_types()[face_zone_type]
+            face_zone_type.zone_type
         );
     }
 
@@ -368,11 +370,16 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         .iter()
         .fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.z));
 
-    let format_pos_padded = |n:Float| -> String {format!("{n:<10.2e}")};
-    let format_pos = |n:Float| -> String {format!("{n:.2e}")};
+    let format_pos_padded = |n: Float| -> String { format!("{n:<10.2e}") };
+    let format_pos = |n: Float| -> String { format!("{n:.2e}") };
     println!(
         "Domain extents:\nX:({}, {})\nY:({}, {})\nZ:({}, {})",
-        format_pos_padded(x_min), format_pos(x_max), format_pos_padded(y_min), format_pos(y_max), format_pos_padded(z_min), format_pos(z_max)
+        format_pos_padded(x_min),
+        format_pos(x_max),
+        format_pos_padded(y_min),
+        format_pos(y_max),
+        format_pos_padded(z_min),
+        format_pos(z_max)
     );
 
     Mesh {
