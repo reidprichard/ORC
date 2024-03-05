@@ -138,7 +138,6 @@ pub struct Cell {
     pub velocity: Vector,
     pub pressure: Float,
 }
-impl Cell {}
 impl Default for Cell {
     fn default() -> Cell {
         Cell {
@@ -221,5 +220,20 @@ impl Mesh {
             .filter(|fz| fz.name == zone_name)
             .next()
             .expect("zone name exists in mesh")
+    }
+    fn calculate_velocity_gradient(&self, cell_number: &Uint) -> Tensor {
+        let cell = self.cells.get(cell_number).expect("valid cell number");
+        cell.face_numbers.iter().map(|face_number| {
+            let face = &self.faces[face_number];
+            let mut neighbor_count = 0;
+            face
+                .cell_numbers
+                .iter()
+                .filter(|c| **c != 0)
+                .inspect(|_| neighbor_count += 1)
+                .map(|c| self.cells[c].velocity)
+                .fold(Vector::zero(), |acc, v| acc + v)
+                .outer(&face.centroid) / neighbor_count
+        }).fold(Tensor::zero(), |acc, t| acc + t)
     }
 }
