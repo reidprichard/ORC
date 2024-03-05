@@ -45,8 +45,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let mut nodes: HashMap<Uint, Node> = HashMap::new();
     let mut faces: HashMap<Uint, Face> = HashMap::new();
     let mut cells: HashMap<Uint, Cell> = HashMap::new();
-    let mut face_zones: HashMap<Uint, BoundaryCondition> = HashMap::new();
-    let mut cell_zones: HashMap<Uint, Uint> = HashMap::new();
+    let mut face_zones: HashMap<Uint, FaceZone> = HashMap::new();
+    let mut cell_zones: HashMap<Uint, CellZone> = HashMap::new();
 
     let mut node_indices: Vec<Uint> = Vec::new();
     let mut face_indices: Vec<Uint> = Vec::new();
@@ -68,6 +68,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         face_count: 6,
     };
 
+    let mut zone_name: String = String::new();
+
     if let Ok(mesh_file_lines) = read_mesh_lines(mesh_path) {
         let mut lines = mesh_file_lines.flatten();
         let mut section_header_line = lines.next().expect("mesh is at least one line long");
@@ -75,7 +77,14 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             let section_header_blocks: Vec<&str> =
                 section_header_line.split_ascii_whitespace().collect();
             match section_header_blocks[0] {
-                "(0" => (), // comment
+                "(0" => 'read_comment: {
+                    zone_name = section_header_line
+                        .rsplit_once(" ")
+                        .expect("comment has a space")
+                        .1
+                        .trim_end_matches("\")")
+                        .to_string();
+                }
                 "(1" => (), // header
                 "(2" => (), // dimensions
                 "(10" => 'read_nodes: {
@@ -143,7 +152,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .map(|n| *n)
                         .collect_tuple()
                         .expect("cell section has 6 entries");
-                    cell_zones.entry(zone_id).or_insert(zone_type);
+                    cell_zones.entry(zone_id).or_insert(CellZone {
+                        zone_type,
+                        // name: zone_name.clone(), // Fluent doesn't seem to set comments for zone
+                        // name
+                    });
                 }
                 "(13" => 'read_faces: {
                     skip_zone_zero!('read_faces, section_header_blocks);
@@ -153,12 +166,12 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .map(|n| *n)
                         .collect_tuple()
                         .expect("face section has 6 entries");
-                    face_zones.entry(zone_id).or_insert(
-                        BoundaryCondition {
-                            zone_type: BoundaryConditionTypes::try_from(boundary_type).expect("valid BC type"),
-                            boundary_condition_value: 0.,
-                        }
-                    );
+                    face_zones.entry(zone_id).or_insert(FaceZone {
+                        zone_type: BoundaryConditionTypes::try_from(boundary_type)
+                            .expect("valid BC type"),
+                        name: zone_name.clone(),
+                        value: 0.,
+                    });
                     info!("Beginning reading faces from zone {zone_id}."); // cells
 
                     let mut current_line = lines.next().expect("face section has contents");
@@ -190,8 +203,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         faces.insert(
                             face_index,
                             Face {
-                                boundary_type: BoundaryConditionTypes::try_from(boundary_type)
-                                    .expect("valid BC type"),
+                                zone: zone_id,
                                 cell_indices: line_blocks[node_count..]
                                     .into_iter()
                                     .map(|cell_id| Uint::from_str_radix(cell_id, 16))
@@ -325,22 +337,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         );
     }
 
-    for (cell_zone_index, cell_zone_type) in &cell_zones {
-        info!(
-            "Cell zone {}: {}",
-            cell_zone_index,
-            get_cell_zone_types()[cell_zone_type]
-        );
-    }
-
-    for (face_zone_index, face_zone_type) in &face_zones {
-        info!(
-            "Face zone {}: {}",
-            face_zone_index,
-            face_zone_type.zone_type
-        );
-    }
-
     println!(
         "Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}",
         cells.len(),
@@ -373,7 +369,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let format_pos_padded = |n: Float| -> String { format!("{n:<10.2e}") };
     let format_pos = |n: Float| -> String { format!("{n:.2e}") };
     println!(
-        "Domain extents:\nX:({}, {})\nY:({}, {})\nZ:({}, {})",
+        "Domain extents:\nX: ({}, {})\nY: ({}, {})\nZ: ({}, {})",
         format_pos_padded(x_min),
         format_pos(x_max),
         format_pos_padded(y_min),
@@ -381,6 +377,21 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         format_pos_padded(z_min),
         format_pos(z_max)
     );
+
+    for (cell_zone_index, cell_zone) in &cell_zones {
+        println!(
+            "Cell zone {}: {}",
+            cell_zone_index,
+            get_cell_zone_types()[&cell_zone.zone_type],
+        );
+    }
+
+    for (face_zone_index, face_zone) in &face_zones {
+        println!(
+            "Face zone {}: {} ({})",
+            face_zone_index, face_zone.zone_type, face_zone.name
+        );
+    }
 
     Mesh {
         nodes,

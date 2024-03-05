@@ -6,12 +6,20 @@ pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
     HashMap::from([(0, "dead zone"), (1, "fluid zone"), (17, "solid zone")])
 }
 
-pub struct BoundaryCondition {
+// TODO: Allow BC vector for velocity BC non-normal to boundary
+pub struct FaceZone {
     pub zone_type: BoundaryConditionTypes,
-    pub boundary_condition_value: Float,
+    pub value: Float,
+    pub name: String,
+}
+
+pub struct CellZone {
+    pub zone_type: Uint,
+    // pub name: String,
 }
 
 // TODO: Move BCs somewhere more suitable
+#[derive(Debug)]
 pub enum BoundaryConditionTypes {
     Interior,
     Wall,
@@ -32,7 +40,6 @@ pub enum BoundaryConditionTypes {
 
 macro_rules! bc_types_from {
     ($T: ty) => {
-
         impl TryFrom<$T> for BoundaryConditionTypes {
             type Error = &'static str;
 
@@ -173,7 +180,7 @@ impl Default for Node {
 }
 
 pub struct Face {
-    pub boundary_type: BoundaryConditionTypes,
+    pub zone: Uint,
     // TODO: Make this an array
     pub cell_indices: Vec<Uint>,
     pub node_indices: Vec<Uint>,
@@ -187,7 +194,7 @@ impl Face {}
 impl Default for Face {
     fn default() -> Face {
         Face {
-            boundary_type: BoundaryConditionTypes::Interior,
+            zone: 0,
             cell_indices: Vec::new(),
             node_indices: Vec::new(),
             area: 0.,
@@ -203,7 +210,16 @@ pub struct Mesh {
     pub nodes: HashMap<Uint, Node>,
     pub faces: HashMap<Uint, Face>,
     pub cells: HashMap<Uint, Cell>,
-    pub face_zones: HashMap<Uint, BoundaryCondition>,
-    pub cell_zones: HashMap<Uint, Uint>,
+    pub face_zones: HashMap<Uint, FaceZone>,
+    pub cell_zones: HashMap<Uint, CellZone>,
 }
-impl Mesh {}
+impl Mesh {
+    pub fn get_face_zone(&mut self, zone_name: &str) -> &mut FaceZone {
+        self.face_zones
+            .iter_mut()
+            .map(|(zone_num, fz)| fz)
+            .filter(|fz| fz.name == zone_name)
+            .next()
+            .expect("zone name exists in mesh")
+    }
+}

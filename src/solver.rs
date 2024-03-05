@@ -68,13 +68,6 @@ pub fn build_solution_matrices(
 
     let mut warned: bool = false;
 
-    let mut warning_msg = || {
-                if warned == false {
-                    println!("Warning: boundary faces not properly handled in gradient calcs.");
-                    warned = true;
-                }
-    };
-
     for (cell_number, cell) in &mesh.cells {
         // &cell.face_indices.iter().map(|f| mesh.faces.get_mut(f).expect("face exists").velocity = Vector::zero());
 
@@ -88,24 +81,27 @@ pub fn build_solution_matrices(
 
         for face_number in &cell.face_indices {
             let mut face_velocity: Vector = Vector::zero();
-            if mesh.faces[face_number].cell_indices.len() < 2 {
-                match mesh.faces[face_number].boundary_type {
+            let face = &mesh.faces[face_number];
+            if face.cell_indices.len() < 2 {
+                let face_bc = &mesh.face_zones[&face.zone];
+                match face_bc.zone_type {
                     BoundaryConditionTypes::Interior => panic!("Interior one-sided face."),
                     BoundaryConditionTypes::Wall => (), // already zero
-                    BoundaryConditionTypes::PressureInlet => (warning_msg()),
-                    BoundaryConditionTypes::PressureOutlet => (warning_msg()),
-                    BoundaryConditionTypes::Symmetry => (warning_msg()),
-                    BoundaryConditionTypes::PeriodicShadow => (),
-                    BoundaryConditionTypes::PressureFarField => (),
-                    BoundaryConditionTypes::VelocityInlet => (),
-                    BoundaryConditionTypes::Periodic => (),
-                    BoundaryConditionTypes::PorousJump => (),
-                    BoundaryConditionTypes::MassFlowInlet => (),
-                    BoundaryConditionTypes::Interface => (),
-                    BoundaryConditionTypes::Parent => (),
-                    BoundaryConditionTypes::Outflow => (),
-                    BoundaryConditionTypes::Axis => (),
-                    _ => (),
+                    BoundaryConditionTypes::VelocityInlet => {
+                        face_velocity = face.normal * face_bc.value;
+                    }
+                    BoundaryConditionTypes::PressureInlet => {
+                        // TODO: Write something proper!!
+                        face_velocity = cell.velocity;
+                    }
+                    BoundaryConditionTypes::PressureOutlet => {
+                        // TODO: Write something proper!!
+                        face_velocity = cell.velocity;
+                    }
+                    _ => {
+                        println!("*** {} ***", face_bc.zone_type);
+                        panic!("BC not supported");
+                    }
                 }
             } else {
                 face_velocity = interpolate_face_velocity(&mesh, face_number);
@@ -142,22 +138,29 @@ pub fn build_solution_matrices(
                 outward_face_normal = -outward_face_normal;
             }
 
-            let convective_term =
+            let advective_term =
                 face_velocity * rho * outward_face_normal.dot(&face_velocity) * face.area;
+            
+            let diffusive_term = Vector {
+                x: face.normal.dot(&grad_u),
+                y: face.normal.dot(&grad_v),
+                z: face.normal.dot(&grad_w),
+            } * nu;
+
             u_matrix.add_triplet(
                 *cell_number as usize - 1,
                 *neighbor_cell_number as usize - 1,
-                convective_term.x,
+                advective_term.x + diffusive_term.x,
             );
             v_matrix.add_triplet(
                 *cell_number as usize - 1,
                 *neighbor_cell_number as usize - 1,
-                convective_term.y,
+                advective_term.y + diffusive_term.y,
             );
             w_matrix.add_triplet(
                 *cell_number as usize - 1,
                 *neighbor_cell_number as usize - 1,
-                convective_term.z,
+                advective_term.z + diffusive_term.z,
             );
         }
 
@@ -173,22 +176,6 @@ pub fn build_solution_matrices(
             .iter()
             .map(|face_number| &mesh.faces[face_number])
             .collect();
-
-        // cell_faces.get(0).unwrap().velocity = Vector::zero();
-        // let neighbor_cells: Vec<&Cell> = cell_faces
-        //     .iter()
-        //     .map(|face| &face.cell_indices)
-        //     .flatten()
-        //     .filter(|c| *c != cell_number)
-        //     .map(|cell| &mesh.cells[cell])
-        //     .collect();
-
-        // 1. Diffusion term
-
-        // 2. Advection term
-        // for face in cell_faces {
-        //     (*face).velocity = Vector::zero();//face.cell_indices.iter().map(|i| &mesh.cells[i].velocity).fold(Vector::zero(), |acc, v| acc + *v) / (face.cell_indices.len() as Uint);
-        // }
     }
 
     // let p_matrix: CsMat<Float> = CsMat::zero((face_count, face_count));
