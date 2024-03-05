@@ -110,7 +110,19 @@ pub mod common {
         }
     }
 
-    impl Sub for Vector {
+    impl Sub<Float> for Vector {
+        type Output = Self;
+
+        fn sub(self, other: Float) -> Self {
+            Self {
+                x: self.x - other,
+                y: self.y - other,
+                z: self.z - other,
+            }
+        }
+    }
+
+    impl Sub<Vector> for Vector {
         type Output = Self;
 
         fn sub(self, other: Self) -> Self {
