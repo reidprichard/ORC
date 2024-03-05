@@ -11,7 +11,9 @@ pub mod solver;
 
 pub mod common {
     use std::{
-        fmt, iter::Sum, ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub}
+        fmt,
+        iter::Sum,
+        ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub},
     };
 
     pub type Int = i32;
@@ -30,6 +32,13 @@ pub mod common {
                 x: 0.,
                 y: 0.,
                 z: 0.,
+            }
+        }
+        pub fn one() -> Vector {
+            Vector {
+                x: 1.,
+                y: 1.,
+                z: 1.,
             }
         }
 
@@ -132,7 +141,7 @@ pub mod common {
             Vector {
                 x: self.x / rhs.x,
                 y: self.y / rhs.y,
-                z: self.z / rhs.z
+                z: self.z / rhs.z,
             }
         }
     }
@@ -230,12 +239,12 @@ pub mod common {
                 z: Vector::zero(),
             }
         }
-        
-        pub fn dot(&self, vector:&Vector) -> Vector {
+
+        pub fn dot(&self, vector: &Vector) -> Vector {
             Vector {
                 x: self.x.dot(&vector),
                 y: self.x.dot(&vector),
-                z: self.z.dot(&vector)
+                z: self.z.dot(&vector),
             }
         }
     }
