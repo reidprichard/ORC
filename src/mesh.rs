@@ -132,7 +132,7 @@ pub enum GradientReconstructionMethods {
 
 pub struct Cell {
     pub zone_number: Uint,
-    pub face_indices: Vec<Uint>,
+    pub face_numbers: Vec<Uint>,
     pub volume: Float,
     pub centroid: Vector,
     pub velocity: Vector,
@@ -143,7 +143,7 @@ impl Default for Cell {
     fn default() -> Cell {
         Cell {
             zone_number: 0,
-            face_indices: Vec::new(),
+            face_numbers: Vec::new(),
             volume: 0.,
             centroid: Vector::zero(),
             velocity: Vector::zero(),
@@ -154,7 +154,7 @@ impl Default for Cell {
 
 // #[derive(Copy, Clone)]
 pub struct Node {
-    pub cell_indices: Vec<Uint>,
+    pub cell_numbers: Vec<Uint>,
     pub position: Vector,
     pub velocity: Vector,
     pub pressure: Float,
@@ -171,7 +171,7 @@ impl Node {
 impl Default for Node {
     fn default() -> Node {
         Node {
-            cell_indices: Vec::new(),
+            cell_numbers: Vec::new(),
             position: Vector::zero(),
             velocity: Vector::zero(),
             pressure: 0.,
@@ -182,8 +182,8 @@ impl Default for Node {
 pub struct Face {
     pub zone: Uint,
     // TODO: Make this an array
-    pub cell_indices: Vec<Uint>,
-    pub node_indices: Vec<Uint>,
+    pub cell_numbers: Vec<Uint>,
+    pub node_numbers: Vec<Uint>,
     pub area: Float,
     pub centroid: Vector,
     pub normal: Vector,
@@ -195,8 +195,8 @@ impl Default for Face {
     fn default() -> Face {
         Face {
             zone: 0,
-            cell_indices: Vec::new(),
-            node_indices: Vec::new(),
+            cell_numbers: Vec::new(),
+            node_numbers: Vec::new(),
             area: 0.,
             centroid: Vector::zero(),
             normal: Vector::zero(), // points toward cell 0!

@@ -36,11 +36,11 @@ fn get_velocity_source_term(location: Vector) -> Vector {
 fn interpolate_face_velocity(mesh: &Mesh, face_number: &Uint) -> Vector {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[face_number];
-    face.cell_indices
+    face.cell_numbers
         .iter()
         .map(|c| &mesh.cells[c].velocity)
         .fold(Vector::zero(), |acc, v| acc + *v)
-        / (face.cell_indices.len() as Uint)
+        / (face.cell_numbers.len() as Uint)
 }
 
 pub fn build_solution_matrices(
@@ -73,16 +73,19 @@ pub fn build_solution_matrices(
 
         // Transient term
 
+        // **** Step 1: calculate gradients at cell centers **** //
         // TODO: Rewrite this as a 3x3 tensor
         let mut grad_u = Vector::zero();
         let mut grad_v = Vector::zero();
         let mut grad_w = Vector::zero();
         let mut interior_face_count: Uint = 0;
 
-        for face_number in &cell.face_indices {
+        for face_number in &cell.face_numbers {
             let mut face_velocity: Vector = Vector::zero();
             let face = &mesh.faces[face_number];
-            if face.cell_indices.len() < 2 {
+
+            // Boundary cell
+            if face.cell_numbers.len() < 2 {
                 let face_bc = &mesh.face_zones[&face.zone];
                 match face_bc.zone_type {
                     BoundaryConditionTypes::Interior => panic!("Interior one-sided face."),
@@ -104,6 +107,7 @@ pub fn build_solution_matrices(
                     }
                 }
             } else {
+                // Interior cell
                 face_velocity = interpolate_face_velocity(&mesh, face_number);
             }
             let face_vector = mesh.faces[face_number].centroid - cell.centroid;
@@ -112,67 +116,74 @@ pub fn build_solution_matrices(
             grad_w += face_vector * face_velocity.z;
         }
 
-        // Convection term
-        for face_number in &cell.face_indices {
-            let face_velocity = interpolate_face_velocity(&mesh, face_number);
+        // **** Step 2: Calculate diffusive terms **** //
+        for face_number in &cell.face_numbers {
+            let mut diffusive_term = Vector::zero();
 
+            let face_velocity = interpolate_face_velocity(&mesh, face_number);
             let face = &mut mesh.faces.get_mut(face_number).expect("face exists");
-            if face.cell_indices.len() < 2 {
-                // TODO: Handle BCs
-                continue;
-            }
-            let mut upwind_cell_number = face.cell_indices[0];
-            let neighbor_cell_number = *face
-                .cell_indices
-                .iter()
-                .filter(|c| *c != cell_number)
-                .collect::<Vec<&Uint>>()
-                .get(0)
-                .unwrap();
             // By default, face.normal points toward cell 0
             // We need it facing outward
-            let mut outward_face_normal = -face.normal;
-            // If cell 1 exists and is upwind, use that
-            if face.normal.dot(&cell.velocity) < 0. {
-                upwind_cell_number = face.cell_indices[1];
-                outward_face_normal = -outward_face_normal;
-            }
+            let mut outward_face_normal: Vector = face.normal * (if face.cell_numbers.get(0).unwrap() == cell_number {-1.} else {1.});
 
+            let mut neighbor_cell_number = 1;
             let advective_term =
                 face_velocity * rho * outward_face_normal.dot(&face_velocity) * face.area;
-            
-            let diffusive_term = Vector {
-                x: face.normal.dot(&grad_u),
-                y: face.normal.dot(&grad_v),
-                z: face.normal.dot(&grad_w),
-            } * nu;
+
+            if face.cell_numbers.len() < 2 {
+                let diffusive_term = Vector {
+                    x: 0.,
+                    y: 0.,
+                    z: 0.,
+                };
+                // TODO: Handle BCs
+            } else {
+                let mut upwind_cell_number = face.cell_numbers[0];
+                let neighbor_cell_number = *face
+                    .cell_numbers
+                    .iter()
+                    .filter(|c| *c != cell_number)
+                    .collect::<Vec<&Uint>>()
+                    .get(0)
+                    .unwrap();
+                // If cell 1 exists and is upwind, use that
+                if face.normal.dot(&cell.velocity) < 0. {
+                    upwind_cell_number = face.cell_numbers[1];
+                    outward_face_normal = -outward_face_normal;
+                }
+
+                let diffusive_term = Vector {
+                    x: face.normal.dot(&grad_u),
+                    y: face.normal.dot(&grad_v),
+                    z: face.normal.dot(&grad_w),
+                } * nu;
+            }
 
             u_matrix.add_triplet(
                 *cell_number as usize - 1,
-                *neighbor_cell_number as usize - 1,
+                neighbor_cell_number as usize - 1,
                 advective_term.x + diffusive_term.x,
             );
             v_matrix.add_triplet(
                 *cell_number as usize - 1,
-                *neighbor_cell_number as usize - 1,
+                neighbor_cell_number as usize - 1,
                 advective_term.y + diffusive_term.y,
             );
             w_matrix.add_triplet(
                 *cell_number as usize - 1,
-                *neighbor_cell_number as usize - 1,
+                neighbor_cell_number as usize - 1,
                 advective_term.z + diffusive_term.z,
             );
         }
 
-        // Diffusion term
         grad_u /= cell.volume;
         grad_v /= cell.volume;
         grad_w /= cell.volume;
 
-        for face_number in &cell.face_indices {}
+        for face_number in &cell.face_numbers {}
 
         let mut cell_faces: Vec<&Face> = cell
-            .face_indices
+            .face_numbers
             .iter()
             .map(|face_number| &mesh.faces[face_number])
             .collect();

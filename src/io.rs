@@ -27,6 +27,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         // Example had filename generic type P and ... where P: AsRef<Path> ... in signature but I
         // don't understand it ¯\_(ツ)_/¯
         let file = File::open(filename)?;
+        // let metadata = file.metadata()?;
+        // println!("File len: {}", metadata.len());
         Ok(io::BufReader::new(file).lines())
     }
 
@@ -70,10 +72,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     let mut zone_name: String = String::new();
 
-    if let Ok(mesh_file_lines) = read_mesh_lines(mesh_path) {
-        let mut lines = mesh_file_lines.flatten();
-        let mut section_header_line = lines.next().expect("mesh is at least one line long");
+    if let Ok(file_lines) = read_mesh_lines(mesh_path) {
+        let mut mesh_file_lines = file_lines.flatten();
+        let mut section_header_line = mesh_file_lines.next().expect("mesh is at least one line long");
         loop {
+            // TODO: Print progress bar to console
             let section_header_blocks: Vec<&str> =
                 section_header_line.split_ascii_whitespace().collect();
             match section_header_blocks[0] {
@@ -98,11 +101,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .expect("correct number of items");
                     info!("Beginning reading nodes from {start_index} to {end_index}.");
 
-                    let mut current_line = lines.next().expect("node section has contents");
+                    let mut current_line = mesh_file_lines.next().expect("node section has contents");
                     let mut node_index = start_index;
                     'node_loop: loop {
                         if current_line == "(" {
-                            current_line = lines.next().unwrap();
+                            current_line = mesh_file_lines.next().unwrap();
                             continue 'node_loop;
                         }
                         if current_line.starts_with(")") {
@@ -131,7 +134,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 break 'node_loop;
                             }
                         }
-                        match lines.next() {
+                        match mesh_file_lines.next() {
                             Some(line_contents) => {
                                 current_line = line_contents;
                                 node_index += 1;
@@ -174,11 +177,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     });
                     info!("Beginning reading faces from zone {zone_id}."); // cells
 
-                    let mut current_line = lines.next().expect("face section has contents");
+                    let mut current_line = mesh_file_lines.next().expect("face section has contents");
                     let mut face_index = start_index;
                     'face_loop: loop {
                         if current_line == "(" {
-                            current_line = lines.next().unwrap();
+                            current_line = mesh_file_lines.next().unwrap();
                             continue 'face_loop;
                         }
                         if current_line.starts_with(")") {
@@ -204,12 +207,12 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             face_index,
                             Face {
                                 zone: zone_id,
-                                cell_indices: line_blocks[node_count..]
+                                cell_numbers: line_blocks[node_count..]
                                     .into_iter()
                                     .map(|cell_id| Uint::from_str_radix(cell_id, 16))
                                     .flatten()
                                     .collect(),
-                                node_indices: line_blocks[..node_count]
+                                node_numbers: line_blocks[..node_count]
                                     .into_iter()
                                     .map(|node_id| Uint::from_str_radix(node_id, 16))
                                     .flatten()
@@ -217,7 +220,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 ..Face::default()
                             },
                         );
-                        match lines.next() {
+                        match mesh_file_lines.next() {
                             Some(line_contents) => {
                                 current_line = line_contents;
                                 face_index += 1;
@@ -231,7 +234,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 "(61" => (), // interface face parents for nonconformal
                 _ => (),
             }
-            match lines.next() {
+            match mesh_file_lines.next() {
                 Some(line_content) => section_header_line = line_content,
                 None => break,
             }
@@ -241,11 +244,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 
     for (face_index, mut face) in &mut faces {
-        if face.node_indices.len() < 3 {
+        if face.node_numbers.len() < 3 {
             panic!("face has less than 3 nodes");
         }
         let face_nodes: Vec<&Node> = face
-            .node_indices
+            .node_numbers
             .iter()
             .map(|n| nodes.get(n).unwrap())
             .collect();
@@ -255,11 +258,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         // TGRID format has face normal as defined here pointing toward cell 0
         // If cell 0 does not exist (e.g. face is on boundary), we need to remove
         // that cell and flip the normal vector
-        if face.cell_indices[0] == 0 {
+        if face.cell_numbers[0] == 0 {
             face.normal = -face.normal;
-            face.cell_indices.remove(0);
-        } else if face.cell_indices[1] == 0 {
-            face.cell_indices.remove(1);
+            face.cell_numbers.remove(0);
+        } else if face.cell_numbers[1] == 0 {
+            face.cell_numbers.remove(1);
         }
         match face_nodes.len() {
             3 => {
@@ -296,21 +299,21 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             }
         }
         // I don't really understand the reference semantics here
-        for node_index in &face.node_indices {
+        for node_index in &face.node_numbers {
             face.centroid += nodes[node_index].position;
         }
-        face.centroid /= face.node_indices.len();
+        face.centroid /= face.node_numbers.len();
         info!(
             "Face {}: centroid={}, area={:.2e}",
             face_index, face.centroid, face.area
         );
-        for cell_index in &face.cell_indices {
+        for cell_index in &face.cell_numbers {
             // Could this check be done with a filter or something?
             if *cell_index == 0 {
                 continue;
             }
             let mut cell = cells.entry(*cell_index).or_insert(Cell::default());
-            cell.face_indices.push(*face_index);
+            cell.face_numbers.push(*face_index);
             // TODO: more rigorous centroid calc
             cell.centroid += face.centroid;
             // TODO: Get cell zones
@@ -318,9 +321,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 
     for (cell_index, mut cell) in &mut cells {
-        cell.centroid /= cell.face_indices.len();
+        cell.centroid /= cell.face_numbers.len();
         let cell_faces: Vec<&Face> = cell
-            .face_indices
+            .face_numbers
             .iter()
             .map(|n| faces.get(n).unwrap())
             .collect();
