@@ -11,8 +11,7 @@ pub mod solver;
 
 pub mod common {
     use std::{
-        fmt,
-        ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub},
+        fmt, iter::Sum, ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub}
     };
 
     pub type Int = i32;
@@ -49,12 +48,33 @@ pub mod common {
         pub fn norm(&self) -> Float {
             (self.x.powf(2 as Float) + self.y.powf(2 as Float) + self.z.powf(2 as Float)).sqrt()
         }
+
         pub fn unit(&self) -> Vector {
             let len: Float = self.norm();
             Vector {
                 x: self.x / len,
                 y: self.y / len,
                 z: self.z / len,
+            }
+        }
+
+        pub fn outer(&self, other: &Self) -> Tensor {
+            Tensor {
+                x: Vector {
+                    x: self.x * other.x,
+                    y: self.x * other.y,
+                    z: self.z * other.z,
+                },
+                y: Vector {
+                    x: self.y * other.x,
+                    y: self.y * other.y,
+                    z: self.z * other.z,
+                },
+                z: Vector {
+                    x: self.z * other.x,
+                    y: self.z * other.y,
+                    z: self.z * other.z,
+                },
             }
         }
     }
@@ -106,7 +126,7 @@ pub mod common {
     }
 
     // Is this really the best way to do this...?
-    macro_rules! div_assign {
+    macro_rules! vector_div_assign {
         ($T: ty) => {
             impl DivAssign<$T> for Vector {
                 fn div_assign(&mut self, rhs: $T) {
@@ -119,11 +139,11 @@ pub mod common {
             }
         };
     }
-    div_assign!(usize);
-    div_assign!(Uint);
-    div_assign!(Float);
+    vector_div_assign!(usize);
+    vector_div_assign!(Uint);
+    vector_div_assign!(Float);
 
-    macro_rules! mult {
+    macro_rules! vector_mult {
         ($T: ty) => {
             impl Mul<$T> for Vector {
                 type Output = Self;
@@ -138,9 +158,9 @@ pub mod common {
         };
     }
 
-    mult!(usize);
-    mult!(Uint);
-    mult!(Float);
+    vector_mult!(usize);
+    vector_mult!(Uint);
+    vector_mult!(Float);
 
     impl Neg for Vector {
         type Output = Self;
@@ -184,4 +204,48 @@ pub mod common {
         y: 0.,
         z: 1.,
     };
+
+    pub struct Tensor {
+        pub x: Vector,
+        pub y: Vector,
+        pub z: Vector,
+    }
+    impl Tensor {
+        pub fn zero() -> Self {
+            Tensor {
+                x: Vector::zero(),
+                y: Vector::zero(),
+                z: Vector::zero(),
+            }
+        }
+    }
+
+    impl Add<Self> for Tensor {
+        type Output = Self;
+        fn add(self, rhs: Tensor) -> Tensor {
+            Tensor {
+                x: self.x + rhs.x,
+                y: self.y + rhs.y,
+                z: self.z + rhs.z,
+            }
+        }
+    }
+
+    macro_rules! tensor_div {
+        ($T: ty) => {
+            impl Div<$T> for Tensor {
+                type Output = Self;
+                fn div(self, rhs: $T) -> Self {
+                    Tensor {
+                        x: self.x * (rhs as Float),
+                        y: self.y * (rhs as Float),
+                        z: self.z * (rhs as Float),
+                    }
+                }
+            }
+        };
+    }
+
+    tensor_div!(Uint);
+    tensor_div!(Float);
 }
