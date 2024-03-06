@@ -1,3 +1,5 @@
+# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD
+
 A simple CFD solver implemented in Rust with minimal dependencies. Anticipated features:
 - Co-located grid
 - Unstructured 3D mesh
