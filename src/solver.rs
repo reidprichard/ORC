@@ -72,17 +72,27 @@ pub fn build_solution_matrices(
     let tvd_psi = |r: Vector| -> Vector {
         match momentum_scheme {
             MomentumDiscretization::UD => Vector::zero(),
-            MomentumDiscretization::CD => Vector::one(),
+            MomentumDiscretization::CD => Vector::ones(),
             _ => panic!("unsupported momentum scheme"),
         }
     };
 
     for (cell_number, cell) in &mesh.cells {
         let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        let mut a_p = 0.;
+        // TODO: set this
+        let s_p = Vector::zero(); // proportional source term
+        let s_u = get_velocity_source_term(cell.centroid); // general source term
+        // TODO: Implement cross-diffusion
+        let s_d_cross = Vector::zero(); // cross diffusion source term
+
+        let mut a_p = Vector::ones() * s_p; // this cell's coefficients
+
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
             let f_i = face.velocity.dot(&face.normal) * rho; // Advection (flux) coefficient
+
+            let e_xi = (cell.centroid - face.centroid).unit();
+            // TODO: calc
             let d_i = 0.; // Diffusion coefficient
             let face_velocity = interpolate_face_velocity(&mesh, *face_number);
             let neighbor_count = face.cell_numbers.len();
@@ -150,9 +160,6 @@ pub fn build_solution_matrices(
                     let neighbor_cell_velocity_gradient =
                         &mesh.calculate_velocity_gradient(neighbor_cell_number);
 
-                    // Either upwind or downwind can be equivalently used in the numerator
-                    // per Versteeg & Malalasekara (note that the numerator cell's velocity
-                    // must come second in the denominator)
                     let tvd_r: Vector = this_cell_velocity_gradient
                         .dot(&(mesh.cells[&neighbor_cell_number].centroid - cell.centroid)) // r_pa
                         * 2.
@@ -164,51 +171,55 @@ pub fn build_solution_matrices(
                     let upwind_advective_coefficients = (-psi_r + 1.) * f_i / 2;
                     let downwind_advective_coefficients = psi_r * f_i / 2;
 
-                    let mut this_cell_coefficients = Vector::zero();
                     let mut neighbor_cell_coefficients = Vector::zero();
 
                     if upwind_cell_number == *cell_number {
-                        this_cell_coefficients += upwind_advective_coefficients;
+                        a_p += upwind_advective_coefficients;
                         neighbor_cell_coefficients += downwind_advective_coefficients;
                     } else {
                         neighbor_cell_coefficients += upwind_advective_coefficients;
-                        this_cell_coefficients += downwind_advective_coefficients;
+                        a_p += downwind_advective_coefficients;
                     }
+
 
                     // TODO: DRY
                     u_matrix.add_triplet(
-                        (*cell_number-1).try_into().unwrap(),
-                        (*cell_number-1).try_into().unwrap(),
-                        this_cell_coefficients.x,
+                        (*cell_number - 1).try_into().unwrap(),
+                        (neighbor_cell_number - 1).try_into().unwrap(),
+                        neighbor_cell_coefficients.x,
                     );
                     v_matrix.add_triplet(
-                        (*cell_number-1).try_into().unwrap(),
-                        (*cell_number-1).try_into().unwrap(),
-                        this_cell_coefficients.y,
+                        (*cell_number - 1).try_into().unwrap(),
+                        (neighbor_cell_number - 1).try_into().unwrap(),
+                        neighbor_cell_coefficients.y,
                     );
                     w_matrix.add_triplet(
-                        (*cell_number-1).try_into().unwrap(),
-                        (*cell_number-1).try_into().unwrap(),
-                        this_cell_coefficients.z,
+                        (*cell_number - 1).try_into().unwrap(),
+                        (neighbor_cell_number - 1).try_into().unwrap(),
+                        neighbor_cell_coefficients.z,
                     );
-                    u_matrix.add_triplet(
-                        (*cell_number-1).try_into().unwrap(),
-                        (neighbor_cell_number-1).try_into().unwrap(),
-                        this_cell_coefficients.x,
-                    );
-                    v_matrix.add_triplet(
-                        (*cell_number-1).try_into().unwrap(),
-                        (neighbor_cell_number-1).try_into().unwrap(),
-                        this_cell_coefficients.y,
-                    );
-                    w_matrix.add_triplet(
-                        (*cell_number-1).try_into().unwrap(),
-                        (neighbor_cell_number-1).try_into().unwrap(),
-                        this_cell_coefficients.z,
-                    );
+
+                    let source = 0.; // general source term
+                    let source_deferred = 0.; // additional source term
+                    let cross_diffusion_source = 0;
                 }
                 _ => panic!("faces must have 1 or 2 neighbors"),
             }
+            u_matrix.add_triplet(
+                (*cell_number - 1).try_into().unwrap(),
+                (*cell_number - 1).try_into().unwrap(),
+                a_p.x,
+            );
+            v_matrix.add_triplet(
+                (*cell_number - 1).try_into().unwrap(),
+                (*cell_number - 1).try_into().unwrap(),
+                a_p.y,
+            );
+            w_matrix.add_triplet(
+                (*cell_number - 1).try_into().unwrap(),
+                (*cell_number - 1).try_into().unwrap(),
+                a_p.z,
+            );
         }
     }
 
