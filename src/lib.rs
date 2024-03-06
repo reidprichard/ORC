@@ -26,6 +26,7 @@ pub mod common {
         pub y: Float,
         pub z: Float,
     }
+
     impl Vector {
         pub fn zero() -> Vector {
             Vector {
@@ -34,7 +35,8 @@ pub mod common {
                 z: 0.,
             }
         }
-        pub fn one() -> Vector {
+
+        pub fn ones() -> Vector {
             Vector {
                 x: 1.,
                 y: 1.,
@@ -283,6 +285,7 @@ pub mod common {
             }
         }
 
+        // TODO: pass by value?
         pub fn dot(&self, vector: &Vector) -> Vector {
             Vector {
                 x: self.x.dot(&vector),
