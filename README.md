@@ -1,6 +1,6 @@
 # <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD
 
-A simple CFD solver implemented in Rust with minimal dependencies. Anticipated features:
+A simple finite volume CFD solver implemented in Rust with minimal dependencies. Anticipated features:
 - Co-located grid
 - Unstructured 3D mesh
 - Supported cell types:
@@ -22,9 +22,9 @@ Roadmap:
 - [ ] Build solution matrices (75% complete)
 - [ ] Initialize flow
 - [ ] Iterate steady
-- [ ] Iterate transient
-- [ ] Multigrid
 - [ ] Read/write solution data
 - [ ] Read/write settings
 - [ ] CLI
+- [ ] Multigrid
+- [ ] Iterate transient
 - [ ] Standard k-epsilon turbulence model?
