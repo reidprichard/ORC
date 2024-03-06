@@ -10,11 +10,14 @@ fn main() {
     // Interface: allow user to choose from
     // 1. Read mesh
     println!("Starting.");
+    println!("Reading mesh.");
     let mut mesh = orc::io::read_mesh("./examples/channel_flow_1.msh");
     mesh.get_face_zone("INLET").zone_type = BoundaryConditionTypes::PressureInlet;
     mesh.get_face_zone("OUTLET").zone_type = BoundaryConditionTypes::PressureOutlet;
     mesh.get_face_zone("PERIODIC_-Z").zone_type = BoundaryConditionTypes::Wall;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = BoundaryConditionTypes::Wall;
+
+    println!("Building solution matrices.");
     let linear_system = build_solution_matrices(
         &mut mesh,
         MomentumDiscretization::UD,
