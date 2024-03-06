@@ -10,7 +10,9 @@ A simple CFD solver implemented in Rust with minimal dependencies. Anticipated f
   - Hexahedron (6 faces, 8 nodes)
   - Polyhedron (M faces, N nodes)
 - SIMPLE pressure-velocity coupling
-- UD/CD momentum discretization
+- TVD momentum schemes (UD/CD currently implemented)
+- Green-Gauss gradient reconstruction
+- ?? pressure interpolation
 - Algebraic multigrid
 
 **Pre-alpha** with basic functionality still in the works.
