@@ -221,8 +221,8 @@ impl Mesh {
             .next()
             .expect("zone name exists in mesh")
     }
-    fn calculate_velocity_gradient(&self, cell_number: &Uint) -> Tensor {
-        let cell = self.cells.get(cell_number).expect("valid cell number");
+    pub fn calculate_velocity_gradient(&self, cell_number: Uint) -> Tensor {
+        let cell = self.cells.get(&cell_number).expect("valid cell number");
         cell.face_numbers.iter().map(|face_number| {
             let face = &self.faces[face_number];
             let mut neighbor_count = 0;
