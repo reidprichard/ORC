@@ -23,6 +23,9 @@ macro_rules! skip_zone_zero {
 pub fn read_mesh(mesh_path: &str) -> Mesh {
     println!("Beginning reading mesh from {mesh_path}");
 
+    let format_pos_padded = |n: Float| -> String { format!("{n:<10.2e}") };
+    let format_pos = |n: Float| -> String { format!("{n:.2e}") };
+
     fn read_mesh_lines(filename: &str) -> io::Result<io::Lines<io::BufReader<File>>> {
         // Example had filename generic type P and ... where P: AsRef<Path> ... in signature but I
         // don't understand it ¯\_(ツ)_/¯
@@ -97,11 +100,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     // dimensions
                     dimensions = section_header_blocks
                         .get(1)
-                        .expect("two header items")
+                        .expect("dimensions section should have two items")
                         .strip_suffix(")")
-                        .expect("ends with )")
+                        .expect("second item ends with )")
                         .parse()
-                        .expect("second block is integer dimension count");
+                        .expect("second item is integer dimension count");
                     if (dimensions != 2 && dimensions != 3) {
                         panic!("Mesh is not 2D or 3D.");
                     }
@@ -129,7 +132,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         if current_line.starts_with(")") {
                             break 'node_loop;
                         }
-                        debug!("Node {node_index}: {current_line}");
+                        // debug!("Node {node_index}: {current_line}");
                         let line_blocks: Vec<&str> =
                             current_line.split_ascii_whitespace().collect();
                         if line_blocks.len() == dimensions.into() {
@@ -141,9 +144,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 "{} should be a string representation of a float",
                                 line_blocks[1]
                             ));
-                            let z = 0.;
+                            let mut z = 0.;
                             if (dimensions == 3) {
-                                line_blocks[2].parse::<Float>().expect(&format!(
+                                z = line_blocks[2].parse::<Float>().expect(&format!(
                                     "{} should be a string representation of a float",
                                     line_blocks[2]
                                 ));
@@ -154,6 +157,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                     position: Vector { x, y, z },
                                     ..Node::default()
                                 },
+                            );
+                            debug!(
+                                "Node {}: {} {} {}",
+                                node_index,
+                                format_pos_padded(x),
+                                format_pos_padded(y),
+                                format_pos_padded(z)
                             );
                         }
                         match mesh_file_lines.next() {
@@ -271,13 +281,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         let face_nodes: Vec<&Node> = face
             .node_numbers
             .iter()
-            .map(|n| {
-                nodes.get(n).unwrap_or_else(|| {
-                    println!("Node {n}");
-                    println!("Nodes length: {}", nodes.len());
-                    panic!("idk");
-                })
-            })
+            .map(|n| nodes.get(n).expect("nodes should have all been read"))
             .collect();
         match dimensions {
             2 => {
@@ -305,50 +309,55 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         } else if face.cell_numbers[1] == 0 {
             face.cell_numbers.remove(1);
         }
-        match face_nodes.len() {
+        face.centroid = face
+            .node_numbers
+            .iter()
+            .fold(Vector::zero(), |acc, n| acc + nodes[n].position)
+            / (face.node_numbers.len() as Float);
+        face.area = match face_nodes.len() {
+            0 | 1 => panic!("faces must have 2+ nodes"),
             2 => {
                 // 2D
                 assert!(dimensions == 2);
-                face.area = (face_nodes[1].position - face_nodes[0].position).norm();
-            }
-            3 => {
-                // Triangular face
-                face.area = (face_nodes[2].position - face_nodes[1].position)
-                    .cross(&(face_nodes[1].position - face_nodes[0].position))
-                    .norm()
-                    / 2.;
-            }
-            4 => {
-                // Quadrilateral face
-                face.area = (face_nodes[3].position - face_nodes[1].position)
-                    .cross(&(face_nodes[2].position - face_nodes[0].position))
-                    .norm()
-                    / 2.;
+                (face_nodes[1].position - face_nodes[0].position).norm()
             }
             node_count => {
-                // Polyhedral face - UNTESTED
+                // 3D
+                // Both implementations assume face is coplanar
+                // Would potentially be faster to treat triangles and quadrilaterals specially but
+                // KISS
 
+                // ** Method 1: Shoelace formula - UNTESTED **
                 // Shoelace formula allows calculation of polygon area in 2D; we need to
                 // translate to a 2D coordinate system to allow this
-                let axis_1 = (face_nodes[1].position - face_nodes[0].position).unit();
-                let axis_2 = axis_1.cross(&face.normal).unit();
-                let translate = |x: &Vector| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
-                let mut area: Float = 0.;
-                let mut node_index = 0;
-                while node_index < face_nodes.len() {
-                    let pos_1 = translate(&face_nodes[node_index].position);
-                    let pos_2 = translate(&face_nodes[(node_index + 1) % node_count].position);
-                    area += pos_1.0 * pos_2.1 - pos_1.1 * pos_2.0;
-                    node_index += 1;
-                }
-                face.area = Float::abs(area) / 2.;
+                // let axis_1 = (face_nodes[1].position - face_nodes[0].position).unit();
+                // let axis_2 = axis_1.cross(&face.normal).unit();
+                // let translate = |x: &Vector| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
+                // let mut area: Float = 0.;
+                // let mut node_index = 0;
+                // while node_index < face_nodes.len() {
+                //     let pos_1 = translate(&face_nodes[node_index].position);
+                //     let pos_2 = translate(&face_nodes[(node_index + 1) % node_count].position);
+                //     area += pos_1.0 * pos_2.1 - pos_1.1 * pos_2.0;
+                //     node_index += 1;
+                // }
+                // face.area = Float::abs(area) / 2.;
+
+                // ** Method 2 - decompose into triangles **
+                // If polygon is convex (which I think is guaranteed), we can just decompose into
+                // triangles
+                let calculate_triangle_area = | vertex_1:&Vector, vertex_2:&Vector, vertex_3:&Vector | -> Float {
+                    Float::abs((*vertex_2 - *vertex_1).cross(&(*vertex_3 - *vertex_1)).norm()) / 2.
+                };
+                let mut area:Float = face.node_numbers.windows(2).fold(0., |acc, w| {
+                    acc + calculate_triangle_area(&face.centroid, &nodes[&w[0]].position, &nodes[&w[1]].position)
+                });
+                let first = face.node_numbers[0];
+                let last = face.node_numbers[face.node_numbers.len() - 1];
+                area + calculate_triangle_area(&face.centroid, &nodes[&first].position, &nodes[&last].position)
             }
-        }
+        };
         // I don't really understand the reference semantics here
-        for node_index in &face.node_numbers {
-            face.centroid += nodes[node_index].position;
-        }
-        face.centroid /= face.node_numbers.len();
         info!(
             "Face {}: centroid={}, area={:.2e}",
             face_index, face.centroid, face.area
@@ -376,8 +385,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         if (cell_faces.len() < 4) {
             panic!("Cell cannot have fewer than 4 faces.");
         }
+        // 1/2 * b * h (area of triangle) for 2D
+        // 1/3 * b * h (area of pyramid) for 3D
         cell.volume = cell_faces.iter().fold(0., |acc, f| {
-            acc + Float::abs(f.area * (f.centroid - cell.centroid).dot(&f.normal)) / Float::from(dimensions)
+            acc + f.area * Float::abs((f.centroid - cell.centroid).dot(&f.normal))
+                / (dimensions as Float)
         });
         info!(
             "Cell {}: centroid={}, volume={:.2e}",
@@ -414,8 +426,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         .iter()
         .fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.z));
 
-    let format_pos_padded = |n: Float| -> String { format!("{n:<10.2e}") };
-    let format_pos = |n: Float| -> String { format!("{n:.2e}") };
     println!(
         "Domain extents:\nX: ({}, {})\nY: ({}, {})\nZ: ({}, {})",
         format_pos_padded(x_min),

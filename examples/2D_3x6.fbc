@@ -1,0 +1,21 @@
+# family_boco file written by ICEM CFD by Reid on Fri Mar 15 5:33:23 PM Eastern Daylight Time 2024
+## solver Ansys Fluent
+"POINTS"
+"POINTS" "color" 11194675
+"LINES"
+#ARGS noname
+"LINES" "INTER" 0
+"INLET"
+#ARGS noname
+"INLET" "PRESI" 0
+"OUTLET"
+#ARGS noname
+"OUTLET" "PRESO" 0
+"TOP"
+#ARGS noname
+"TOP" "WALL" 0
+"BOTTOM"
+#ARGS noname
+"BOTTOM" "WALL" 0
+"FLUID"
+

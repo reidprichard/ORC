@@ -1,9 +1,9 @@
 set domainHeight 1
 set domainLength 2
 
-set fileName 2D-quad-between-mapped-layers_coarse
-set verticalNodeCount 3
-set horizontalNodeCount 5 
+set fileName 2D_3x6
+set verticalNodeCount 4
+set horizontalNodeCount 7 
 
 ## Begins block of code that ctrl+z will undo so the entire script can be undone
 ic_undo_group_begin
@@ -192,7 +192,7 @@ ic_boco_save "$fileName.fbc"
 
 ## ic_exec args
 ## A simplified version of this. ??????? Possibly referring to the argument ic_run_application_exec: Runs some external application, given the full path.
-ic_exec {C:/Program Files/ANSYS Inc/v232/icemcfd/win64_amd/icemcfd/output-interfaces/fluent6} -dom "C:/Users/Reid/orc/examples/$fileName.uns" -b $fileName.fbc -dim2d -scale .001,.001,1.0 ./$fileName
+ic_exec {C:/Program Files/ANSYS Inc/v232/icemcfd/win64_amd/icemcfd/output-interfaces/fluent6} -dom "C:/Users/Reid/orc/examples/$fileName.uns" -b $fileName.fbc -dim2d ./$fileName
 
 ## ****************** Evaluates mesh *********************
 
