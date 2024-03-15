@@ -132,25 +132,29 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         debug!("Node {node_index}: {current_line}");
                         let line_blocks: Vec<&str> =
                             current_line.split_ascii_whitespace().collect();
-                        if line_blocks.len() == 3 {
-                            let x = line_blocks[0].parse::<Float>();
-                            let y = line_blocks[1].parse::<Float>();
-                            let z = line_blocks[2].parse::<Float>();
-                            if x.is_ok() && y.is_ok() && z.is_ok() {
-                                nodes.insert(
-                                    node_index,
-                                    Node {
-                                        position: Vector {
-                                            x: x.unwrap(),
-                                            y: y.unwrap(),
-                                            z: z.unwrap(),
-                                        },
-                                        ..Node::default()
-                                    },
-                                );
-                            } else {
-                                break 'node_loop;
+                        if line_blocks.len() == dimensions.into() {
+                            let x = line_blocks[0].parse::<Float>().expect(&format!(
+                                "{} should be a string representation of a float",
+                                line_blocks[0]
+                            ));
+                            let y = line_blocks[1].parse::<Float>().expect(&format!(
+                                "{} should be a string representation of a float",
+                                line_blocks[1]
+                            ));
+                            let z = 0.;
+                            if (dimensions == 3) {
+                                line_blocks[2].parse::<Float>().expect(&format!(
+                                    "{} should be a string representation of a float",
+                                    line_blocks[2]
+                                ));
                             }
+                            nodes.insert(
+                                node_index,
+                                Node {
+                                    position: Vector { x, y, z },
+                                    ..Node::default()
+                                },
+                            );
                         }
                         match mesh_file_lines.next() {
                             Some(line_contents) => {
@@ -207,9 +211,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             break 'face_loop;
                         }
                         debug!("Face {face_index}: {current_line}");
-                        // if current_line[0] == '(' || current_line[0] == ')' {
-                        //
-                        // }
                         let line_blocks: Vec<&str> =
                             current_line.split_ascii_whitespace().collect();
                         if line_blocks.len() < 2 {
@@ -270,11 +271,31 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         let face_nodes: Vec<&Node> = face
             .node_numbers
             .iter()
-            .map(|n| nodes.get(n).expect("node should have been created"))
+            .map(|n| {
+                nodes.get(n).unwrap_or_else(|| {
+                    println!("Node {n}");
+                    println!("Nodes length: {}", nodes.len());
+                    panic!("idk");
+                })
+            })
             .collect();
-        face.normal = (face_nodes[2].position - face_nodes[1].position)
-            .cross(&(face_nodes[1].position - face_nodes[0].position))
-            .unit();
+        match dimensions {
+            2 => {
+                let tangent = face_nodes[1].position - face_nodes[0].position;
+                face.normal = Vector {
+                    x: 1.,
+                    y: -tangent.x * tangent.y,
+                    z: 0.,
+                }
+                .unit();
+            }
+            3 => {
+                face.normal = (face_nodes[2].position - face_nodes[1].position)
+                    .cross(&(face_nodes[1].position - face_nodes[0].position))
+                    .unit();
+            }
+            _ => panic!("dimensions must be 2 or 3"),
+        }
         // TGRID format has face normal as defined here pointing toward cell 0
         // If cell 0 does not exist (e.g. face is on boundary), we need to remove
         // that cell and flip the normal vector
@@ -285,6 +306,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             face.cell_numbers.remove(1);
         }
         match face_nodes.len() {
+            2 => {
+                // 2D
+                assert!(dimensions == 2);
+                face.area = (face_nodes[1].position - face_nodes[0].position).norm();
+            }
             3 => {
                 // Triangular face
                 face.area = (face_nodes[2].position - face_nodes[1].position)
@@ -350,10 +376,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         if (cell_faces.len() < 4) {
             panic!("Cell cannot have fewer than 4 faces.");
         }
-        for face in &cell_faces {
-            cell.volume +=
-                Float::abs(face.area * (face.centroid - cell.centroid).dot(&face.normal)) / 3.;
-        }
+        cell.volume = cell_faces.iter().fold(0., |acc, f| {
+            acc + Float::abs(f.area * (f.centroid - cell.centroid).dot(&f.normal)) / Float::from(dimensions)
+        });
         info!(
             "Cell {}: centroid={}, volume={:.2e}",
             cell_index, cell.centroid, cell.volume

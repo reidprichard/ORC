@@ -2,8 +2,8 @@
 #![allow(unused)]
 
 use orc::io::read_mesh;
-use orc::solver::*;
 use orc::mesh::*;
+use orc::solver::*;
 
 fn main() {
     env_logger::init();
@@ -14,8 +14,10 @@ fn main() {
     let mut mesh = orc::io::read_mesh("./examples/2D_2x4.msh");
     mesh.get_face_zone("INLET").zone_type = BoundaryConditionTypes::PressureInlet;
     mesh.get_face_zone("OUTLET").zone_type = BoundaryConditionTypes::PressureOutlet;
-    mesh.get_face_zone("PERIODIC_-Z").zone_type = BoundaryConditionTypes::Wall;
-    mesh.get_face_zone("PERIODIC_+Z").zone_type = BoundaryConditionTypes::Wall;
+    // mesh.get_face_zone("PERIODIC_-Z").zone_type = BoundaryConditionTypes::Wall;
+    // mesh.get_face_zone("PERIODIC_+Z").zone_type = BoundaryConditionTypes::Wall;
+    mesh.get_face_zone("BOTTOM").zone_type = BoundaryConditionTypes::Wall;
+    mesh.get_face_zone("TOP").zone_type = BoundaryConditionTypes::Wall;
 
     println!("Building solution matrices.");
     let linear_system = build_solution_matrices(
