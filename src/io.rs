@@ -286,10 +286,18 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         match dimensions {
             2 => {
                 let tangent = face_nodes[1].position - face_nodes[0].position;
-                face.normal = Vector {
-                    x: 1.,
-                    y: -tangent.x * tangent.y,
-                    z: 0.,
+                face.normal = if tangent.x == 0. {
+                    Vector {
+                        x: -tangent.y / tangent.x,
+                        y: 1.,
+                        z: 0.,
+                    }
+                } else {
+                    Vector {
+                        x: 1.,
+                        y: -tangent.x / tangent.y,
+                        z: 0.,
+                    }
                 }
                 .unit();
             }
@@ -346,15 +354,28 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 // ** Method 2 - decompose into triangles **
                 // If polygon is convex (which I think is guaranteed), we can just decompose into
                 // triangles
-                let calculate_triangle_area = | vertex_1:&Vector, vertex_2:&Vector, vertex_3:&Vector | -> Float {
-                    Float::abs((*vertex_2 - *vertex_1).cross(&(*vertex_3 - *vertex_1)).norm()) / 2.
-                };
-                let mut area:Float = face.node_numbers.windows(2).fold(0., |acc, w| {
-                    acc + calculate_triangle_area(&face.centroid, &nodes[&w[0]].position, &nodes[&w[1]].position)
+                let calculate_triangle_area =
+                    |vertex_1: &Vector, vertex_2: &Vector, vertex_3: &Vector| -> Float {
+                        Float::abs(
+                            (*vertex_2 - *vertex_1)
+                                .cross(&(*vertex_3 - *vertex_1))
+                                .norm(),
+                        ) / 2.
+                    };
+                let mut area: Float = face.node_numbers.windows(2).fold(0., |acc, w| {
+                    acc + calculate_triangle_area(
+                        &face.centroid,
+                        &nodes[&w[0]].position,
+                        &nodes[&w[1]].position,
+                    )
                 });
                 let first = face.node_numbers[0];
                 let last = face.node_numbers[face.node_numbers.len() - 1];
-                area + calculate_triangle_area(&face.centroid, &nodes[&first].position, &nodes[&last].position)
+                area + calculate_triangle_area(
+                    &face.centroid,
+                    &nodes[&first].position,
+                    &nodes[&last].position,
+                )
             }
         };
         // I don't really understand the reference semantics here
@@ -382,12 +403,20 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             .iter()
             .map(|n| faces.get(n).unwrap())
             .collect();
-        if (cell_faces.len() < 4) {
-            panic!("Cell cannot have fewer than 4 faces.");
+        if (cell_faces.len() < (dimensions + 1) as usize) {
+            panic!("cell has too few faces");
         }
         // 1/2 * b * h (area of triangle) for 2D
         // 1/3 * b * h (area of pyramid) for 3D
-        cell.volume = cell_faces.iter().fold(0., |acc, f| {
+        cell.volume = cell_faces.iter().fold(0. as Float, |acc, f| {
+            println!("{}, {}, {}", f.centroid, cell.centroid, f.normal);
+            // println!(
+            //     "{}: {} * {} = {}",
+            //     cell_index,
+            //     f.area,
+            //     Float::abs((f.centroid - cell.centroid).dot(&f.normal)),
+            //     f.area * Float::abs((f.centroid - cell.centroid).dot(&f.normal))
+            // );
             acc + f.area * Float::abs((f.centroid - cell.centroid).dot(&f.normal))
                 / (dimensions as Float)
         });
