@@ -54,6 +54,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let mut face_indices: Vec<Uint> = Vec::new();
     let mut cell_indices: Vec<Uint> = Vec::new();
 
+    let mut dimensions: u8 = 0;
+
     struct CellType {
         id: i8,
         node_count: i16,
@@ -74,7 +76,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     if let Ok(file_lines) = read_mesh_lines(mesh_path) {
         let mut mesh_file_lines = file_lines.flatten();
-        let mut section_header_line = mesh_file_lines.next().expect("mesh is at least one line long");
+        let mut section_header_line = mesh_file_lines
+            .next()
+            .expect("mesh is at least one line long");
         loop {
             // TODO: Print progress bar to console
             let section_header_blocks: Vec<&str> =
@@ -89,7 +93,19 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .to_string();
                 }
                 "(1" => (), // header
-                "(2" => (), // dimensions
+                "(2" => {
+                    // dimensions
+                    dimensions = section_header_blocks
+                        .get(1)
+                        .expect("two header items")
+                        .strip_suffix(")")
+                        .expect("ends with )")
+                        .parse()
+                        .expect("second block is integer dimension count");
+                    if (dimensions != 2 && dimensions != 3) {
+                        panic!("Mesh is not 2D or 3D.");
+                    }
+                }
                 "(10" => 'read_nodes: {
                     skip_zone_zero!('read_nodes, section_header_blocks);
                     info!("section: {section_header_line}");
@@ -98,10 +114,12 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .iter()
                         .map(|n| *n)
                         .collect_tuple()
-                        .expect("correct number of items");
+                        .expect("nodes header has six items");
                     info!("Beginning reading nodes from {start_index} to {end_index}.");
 
-                    let mut current_line = mesh_file_lines.next().expect("node section has contents");
+                    let mut current_line = mesh_file_lines
+                        .next()
+                        .expect("node section shouldn't be empty");
                     let mut node_index = start_index;
                     'node_loop: loop {
                         if current_line == "(" {
@@ -177,7 +195,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     });
                     info!("Beginning reading faces from zone {zone_id}."); // cells
 
-                    let mut current_line = mesh_file_lines.next().expect("face section has contents");
+                    let mut current_line =
+                        mesh_file_lines.next().expect("face section has contents");
                     let mut face_index = start_index;
                     'face_loop: loop {
                         if current_line == "(" {
@@ -244,13 +263,14 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 
     for (face_index, mut face) in &mut faces {
-        if face.node_numbers.len() < 3 {
-            panic!("face has less than 3 nodes");
+        if face.node_numbers.len() < dimensions.into() {
+            println!("dimensions: {}", face.node_numbers.len());
+            panic!("face has too few nodes");
         }
         let face_nodes: Vec<&Node> = face
             .node_numbers
             .iter()
-            .map(|n| nodes.get(n).unwrap())
+            .map(|n| nodes.get(n).expect("node should have been created"))
             .collect();
         face.normal = (face_nodes[2].position - face_nodes[1].position)
             .cross(&(face_nodes[1].position - face_nodes[0].position))

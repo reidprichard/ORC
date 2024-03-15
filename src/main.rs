@@ -11,7 +11,7 @@ fn main() {
     // 1. Read mesh
     println!("Starting.");
     println!("Reading mesh.");
-    let mut mesh = orc::io::read_mesh("./examples/channel_flow_1.msh");
+    let mut mesh = orc::io::read_mesh("./examples/2D_2x4.msh");
     mesh.get_face_zone("INLET").zone_type = BoundaryConditionTypes::PressureInlet;
     mesh.get_face_zone("OUTLET").zone_type = BoundaryConditionTypes::PressureOutlet;
     mesh.get_face_zone("PERIODIC_-Z").zone_type = BoundaryConditionTypes::Wall;
