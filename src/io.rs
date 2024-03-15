@@ -288,14 +288,14 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 let tangent = face_nodes[1].position - face_nodes[0].position;
                 face.normal = if tangent.x == 0. {
                     Vector {
-                        x: -tangent.y / tangent.x,
-                        y: 1.,
+                        x: 1.,
+                        y: -tangent.x / tangent.y,
                         z: 0.,
                     }
                 } else {
                     Vector {
-                        x: 1.,
-                        y: -tangent.x / tangent.y,
+                        x: -tangent.y / tangent.x,
+                        y: 1.,
                         z: 0.,
                     }
                 }
