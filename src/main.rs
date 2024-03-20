@@ -89,6 +89,7 @@ fn main() {
         &mut mesh,
         MomentumDiscretization::UD,
         PressureInterpolation::Linear,
+        VelocityInterpolation::Linear,
         1000.,
         0.001,
     );

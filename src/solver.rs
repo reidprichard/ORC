@@ -3,19 +3,28 @@ use crate::mesh::*;
 use sprs::{CsMat, CsVec, TriMat};
 use std::collections::HashMap;
 
+#[derive(Copy, Clone)]
 pub enum PressureVelocityCoupling {
     SIMPLE,
 }
 
+#[derive(Copy, Clone)]
 pub enum MomentumDiscretization {
     UD,
     CD,
 }
 
+#[derive(Copy, Clone)]
 pub enum PressureInterpolation {
     Linear,
     Standard,
     SecondOrder,
+}
+
+#[derive(Copy, Clone)]
+pub enum VelocityInterpolation {
+    Linear,
+    RhieChow2,
 }
 
 pub struct LinearSystem {
@@ -33,22 +42,35 @@ fn get_velocity_source_term(location: Vector) -> Vector {
     Vector::zero()
 }
 
-fn interpolate_face_velocity(mesh: &Mesh, face_number: Uint) -> Vector {
+fn interpolate_face_velocity(
+    mesh: &Mesh,
+    face_number: Uint,
+    interpolation_scheme: VelocityInterpolation,
+) -> Vector {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_number];
-    face.cell_numbers
-        .iter()
-        .map(|c| &mesh.cells[c].velocity)
-        .fold(Vector::zero(), |acc, v| acc + *v)
-        / (face.cell_numbers.len() as Uint)
+    match interpolation_scheme {
+        VelocityInterpolation::Linear => {
+            face.cell_numbers
+                .iter()
+                .map(|c| &mesh.cells[c].velocity)
+                .fold(Vector::zero(), |acc, v| acc + *v)
+                / (face.cell_numbers.len() as Uint)
+        }
+        VelocityInterpolation::RhieChow2 => {
+            // see Versteeg & Malalasekara p340-341
+            panic!("unsupported");
+        }
+    }
 }
 
 pub fn build_solution_matrices(
     mesh: &mut Mesh,
     momentum_scheme: MomentumDiscretization,
-    pressure_scheme: PressureInterpolation,
+    pressure_interpolation_scheme: PressureInterpolation,
+    velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
-    nu: Float,
+    mu: Float,
 ) -> SolutionMatrices {
     use std::collections::HashSet;
 
@@ -77,27 +99,21 @@ pub fn build_solution_matrices(
         }
     };
 
+    // Iterate over all cells in the mesh
     for (cell_number, cell) in &mesh.cells {
         let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        // TODO: set this
+        // TODO: Implement S_p
         let s_p = Vector::zero(); // proportional source term
         let s_u = get_velocity_source_term(cell.centroid); // general source term
-        // TODO: Implement cross-diffusion
+                                                           // TODO: Implement cross-diffusion
         let s_d_cross = Vector::zero(); // cross diffusion source term
 
         let mut a_p = Vector::ones() * s_p; // this cell's coefficients
 
+        // Iterate over this cell's faces
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
-            let f_i = face.velocity.dot(&face.normal) * rho; // Advection (flux) coefficient
-
-            let e_xi = (cell.centroid - face.centroid).unit();
-            // TODO: calc
-            let d_i = 0.; // Diffusion coefficient
-            let face_velocity = interpolate_face_velocity(&mesh, *face_number);
-            let neighbor_count = face.cell_numbers.len();
-
-            match neighbor_count {
+            match face.cell_numbers.len() {
                 1 => {
                     let face_bc = &mesh.face_zones[&face.zone];
                     match face_bc.zone_type {
@@ -122,54 +138,53 @@ pub fn build_solution_matrices(
                     // Maybe a face's boundary status should be encoded in a bool?
                 }
                 2 => {
+                    let face_velocity = interpolate_face_velocity(
+                        &mesh,
+                        *face_number,
+                        velocity_interpolation_scheme,
+                    );
+                    // bad way to do this
                     let (upwind_cell_number, downwind_cell_number): (Uint, Uint) = {
                         if face_velocity.dot(&face.normal) > 0. {
                             // Face normal points toward cell 0, so velocity must be coming from cell 1
-                            (
-                                if (neighbor_count > 1) {
-                                    face.cell_numbers[1]
-                                } else {
-                                    0
-                                },
-                                face.cell_numbers[0],
-                            )
+                            (face.cell_numbers[1], face.cell_numbers[0])
                         } else {
                             // Face normal and velocity are pointing different directions so cell 0 upwind
-                            (
-                                face.cell_numbers[0],
-                                if (neighbor_count > 1) {
-                                    face.cell_numbers[1]
-                                } else {
-                                    0
-                                },
-                            )
+                            (face.cell_numbers[0], face.cell_numbers[1])
                         }
                     };
 
-                    let (upwind_velocity, downwind_velocity) = (
+                    let (upwind_velocity, downwind_velocity): (Vector, Vector) = (
                         mesh.cells[&upwind_cell_number].velocity,
                         mesh.cells[&downwind_cell_number].velocity,
                     );
 
-                    let neighbor_cell_number = if upwind_cell_number != *cell_number {
+                    let neighbor_cell_number: Uint = if upwind_cell_number != *cell_number {
                         upwind_cell_number
                     } else {
                         downwind_cell_number
                     };
 
-                    let neighbor_cell_velocity_gradient =
+                    // TODO: If using CD or UD, skip the gradient calcs since psi is (1,1,1) or
+                    // (0,0,0) respectively
+                    let neighbor_cell_velocity_gradient: &Tensor =
                         &mesh.calculate_velocity_gradient(neighbor_cell_number);
-
                     let tvd_r: Vector = this_cell_velocity_gradient
                         .dot(&(mesh.cells[&neighbor_cell_number].centroid - cell.centroid)) // r_pa
                         * 2.
                         / (downwind_velocity - upwind_velocity)
                         - 1.;
+                    let psi_r: Vector = tvd_psi(tvd_r);
 
-                    let psi_r = tvd_psi(tvd_r);
+                    // TODO: set coefficient convention to be out = positive
+                    // Advection (flux) coefficient
+                    let f_i = face_velocity * face.area * rho;
+                    // Diffusion coefficient
+                    let d_i = mu * face.area
+                        / (cell.centroid - mesh.cells[&neighbor_cell_number].centroid).norm();
 
-                    let upwind_advective_coefficients = (-psi_r + 1.) * f_i / 2;
-                    let downwind_advective_coefficients = psi_r * f_i / 2;
+                    let upwind_advective_coefficients: Vector = (-psi_r + 1.) * f_i / 2;
+                    let downwind_advective_coefficients: Vector = psi_r * f_i / 2;
 
                     let mut neighbor_cell_coefficients = Vector::zero();
 
@@ -180,7 +195,6 @@ pub fn build_solution_matrices(
                         neighbor_cell_coefficients += upwind_advective_coefficients;
                         a_p += downwind_advective_coefficients;
                     }
-
 
                     // TODO: DRY
                     u_matrix.add_triplet(
