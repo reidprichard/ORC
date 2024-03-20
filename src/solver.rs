@@ -94,7 +94,8 @@ pub fn build_solution_matrices(
         // TODO: Implement S_p
         let s_p = Vector::zero(); // proportional source term
         let s_u = get_velocity_source_term(cell.centroid); // general source term
-                                                           // TODO: Implement cross-diffusion
+        let s_u_dc = Vector::zero(); // deferred correction source term
+        // TODO: Implement cross-diffusion
         let s_d_cross = Vector::zero(); // cross diffusion source term
 
         // The current cell's coefficients (matrix diagonal)
@@ -144,7 +145,6 @@ pub fn build_solution_matrices(
                         neighbor_cell_number = face.cell_numbers[0];
                     }
 
-
                     // TODO: set coefficient convention to be out = positive
                     // Advection (flux) coefficient
                     let f_i: Float = face_velocity.dot(&outward_face_normal) * face.area * rho;
@@ -160,21 +160,21 @@ pub fn build_solution_matrices(
                     // Face tangent vector -- this feels inefficient
                     // let e_nu: Vector = outward_face_normal.cross(&e_xi.cross(&outward_face_normal)).unit();
                     // Cross diffusion source term
-                    // let s_cross_diffusion = -mu * 
+                    // let s_cross_diffusion = -mu *
 
-                    let a_nb: Vector = Vector::ones() * (d_i + match momentum_scheme {
-                        MomentumDiscretization::UD => {
-                            if f_i > 0. {
-                                f_i
-                            } else {
-                                0.
-                            }
-                        }
-                        MomentumDiscretization::CD => {
-                            f_i / 2.
-                        }
-                        _ => panic!("unsupported momentum scheme"),
-                    });
+                    let a_nb: Vector = Vector::ones()
+                        * (d_i
+                            + match momentum_scheme {
+                                MomentumDiscretization::UD => {
+                                    if f_i > 0. {
+                                        f_i
+                                    } else {
+                                        0.
+                                    }
+                                }
+                                MomentumDiscretization::CD => f_i / 2.,
+                                _ => panic!("unsupported momentum scheme"),
+                            });
                     a_p = a_p - a_nb - f_i + s_p;
 
                     // TODO: DRY
@@ -193,28 +193,29 @@ pub fn build_solution_matrices(
                         (neighbor_cell_number - 1).try_into().unwrap(),
                         a_nb.z,
                     );
-
-                    let s_u = 0.; // general source term
-                    let s_u_dc = 0.; // deferred correction source term
-                    let s_d_cross = 0; // cross diffusion source term
                 }
                 _ => panic!("faces must have 1 or 2 neighbors"),
             }
+            u_source.push(s_u.x + s_u_dc.x + s_d_cross.x);
+            v_source.push(s_u.y + s_u_dc.y + s_d_cross.y);
+            w_source.push(s_u.z + s_u_dc.z + s_d_cross.z);
+
             u_matrix.add_triplet(
                 (*cell_number - 1).try_into().unwrap(),
                 (*cell_number - 1).try_into().unwrap(),
-                a_p.x,
+                a_p.x + s_p.x,
             );
             v_matrix.add_triplet(
                 (*cell_number - 1).try_into().unwrap(),
                 (*cell_number - 1).try_into().unwrap(),
-                a_p.y,
+                a_p.y + s_p.y,
             );
             w_matrix.add_triplet(
                 (*cell_number - 1).try_into().unwrap(),
                 (*cell_number - 1).try_into().unwrap(),
-                a_p.z,
+                a_p.z + s_p.z,
             );
+
         }
     }
 
