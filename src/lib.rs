@@ -13,7 +13,7 @@ pub mod common {
     use std::{
         fmt,
         iter::Sum,
-        ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub},
+        ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
     };
 
     pub type Int = i32;
@@ -180,7 +180,7 @@ pub mod common {
     }
 
     // Is this really the best way to do this...?
-    macro_rules! vector_div_assign {
+    macro_rules! vector_scalar_div_assign {
         ($T: ty) => {
             impl DivAssign<$T> for Vector {
                 fn div_assign(&mut self, rhs: $T) {
@@ -193,11 +193,11 @@ pub mod common {
             }
         };
     }
-    vector_div_assign!(usize);
-    vector_div_assign!(Uint);
-    vector_div_assign!(Float);
+    vector_scalar_div_assign!(usize);
+    vector_scalar_div_assign!(Uint);
+    vector_scalar_div_assign!(Float);
 
-    macro_rules! vector_mult {
+    macro_rules! vector_scalar_mul {
         ($T: ty) => {
             impl Mul<$T> for Vector {
                 type Output = Self;
@@ -224,9 +224,27 @@ pub mod common {
         }
     }
 
-    vector_mult!(usize);
-    vector_mult!(Uint);
-    vector_mult!(Float);
+    vector_scalar_mul!(usize);
+    vector_scalar_mul!(Uint);
+    vector_scalar_mul!(Float);
+
+    macro_rules! vector_scalar_mul_assign {
+        ($T: ty) => {
+            impl MulAssign<$T> for Vector {
+                fn mul_assign(&mut self, rhs: $T) {
+                    *self = Self {
+                        x: self.x * (rhs as Float),
+                        y: self.y * (rhs as Float),
+                        z: self.z * (rhs as Float),
+                    }
+                }
+            }
+        };
+    }
+
+    vector_scalar_mul_assign!(usize);
+    vector_scalar_mul_assign!(Uint);
+    vector_scalar_mul_assign!(Float);
 
     impl Neg for Vector {
         type Output = Self;
