@@ -243,7 +243,8 @@ pub mod common {
     }
 
     vector_scalar_mul_assign!(usize);
-    vector_scalar_mul_assign!(Uint);
+    vector_scalar_mul_assign!(i32);
+    vector_scalar_mul_assign!(i64);
     vector_scalar_mul_assign!(Float);
 
     impl Neg for Vector {
