@@ -51,16 +51,52 @@ fn interpolate_face_velocity(
     let face = &mesh.faces[&face_number];
     match interpolation_scheme {
         VelocityInterpolation::Linear => {
+            let mut divisor: Float = 0.;
             face.cell_numbers
                 .iter()
-                .map(|c| &mesh.cells[c].velocity)
-                .fold(Vector::zero(), |acc, v| acc + *v)
-                / (face.cell_numbers.len() as Uint)
+                .map(|c| {
+                    (
+                        &mesh.cells[c].velocity,
+                        (face.centroid - mesh.cells[c].centroid).norm(),
+                    )
+                })
+                .fold(Vector::zero(), |acc, (v, x)| {
+                    divisor += x;
+                    acc + (*v) * x
+                })
+                / divisor
         }
         VelocityInterpolation::RhieChow2 => {
             // see Versteeg & Malalasekara p340-341
             panic!("unsupported");
         }
+    }
+}
+
+fn interpolate_face_pressure(
+    mesh: &Mesh,
+    face_number: Uint,
+    interpolation_scheme: PressureInterpolation,
+) -> Float {
+    let face = &mesh.faces[&face_number];
+    match interpolation_scheme {
+        PressureInterpolation::Linear => {
+            let mut divisor: Float = 0.;
+            face.cell_numbers
+                .iter()
+                .map(|c| {
+                    (
+                        mesh.cells[c].pressure,
+                        (face.centroid - mesh.cells[c].centroid).norm(),
+                    )
+                })
+                .fold(0., |acc, (p, x)| {
+                    divisor += x;
+                    acc + p / x
+                })
+                / divisor
+        }
+        _ => panic!("not supported"),
     }
 }
 
@@ -93,9 +129,9 @@ pub fn build_solution_matrices(
         let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         // TODO: Implement S_p
         let s_p = Vector::zero(); // proportional source term
-        let s_u = get_velocity_source_term(cell.centroid); // general source term
+        let mut s_u = get_velocity_source_term(cell.centroid); // general source term
         let s_u_dc = Vector::zero(); // deferred correction source term
-        // TODO: Implement cross-diffusion
+                                     // TODO: Implement cross-diffusion
         let s_d_cross = Vector::zero(); // cross diffusion source term
 
         // The current cell's coefficients (matrix diagonal)
@@ -193,6 +229,8 @@ pub fn build_solution_matrices(
                         (neighbor_cell_number - 1).try_into().unwrap(),
                         a_nb.z,
                     );
+
+                    // let face_pressure:Float = interpolate_face_velocity
                 }
                 _ => panic!("faces must have 1 or 2 neighbors"),
             }
@@ -215,7 +253,6 @@ pub fn build_solution_matrices(
                 (*cell_number - 1).try_into().unwrap(),
                 a_p.z + s_p.z,
             );
-
         }
     }
 
