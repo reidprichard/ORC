@@ -164,6 +164,7 @@ pub mod common {
         };
     }
 
+    vector_div!(usize);
     vector_div!(Uint);
     vector_div!(Float);
 
