@@ -202,10 +202,15 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .collect_tuple()
                         .expect("face section has 6 entries");
                     face_zones.entry(zone_id).or_insert(FaceZone {
-                        zone_type: BoundaryConditionTypes::try_from(boundary_type)
+                        zone_type: FaceConditionTypes::try_from(boundary_type)
                             .expect("valid BC type"),
                         name: zone_name.clone(),
-                        value: 0.,
+                        scalar_value: 0.,
+                        vector_value: Vector {
+                            x: 0.,
+                            y: 0.,
+                            z: 0.,
+                        },
                     });
                     info!("Beginning reading faces from zone {zone_id}."); // cells
 
