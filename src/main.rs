@@ -1,5 +1,5 @@
-// #![allow(dead_code)]
-// #![allow(unused)]
+#![allow(dead_code)]
+#![allow(unused)]
 
 use orc::io::read_mesh;
 use orc::mesh::*;
@@ -13,11 +13,16 @@ fn test_2d() -> Mesh {
     let cell_volume = cell_width * cell_height;
     let face_min = f32::min(cell_width, cell_height);
     let face_max = f32::max(cell_width, cell_height);
-    let mut mesh = orc::io::read_mesh("./examples/2D_3x6.msh");
+    let mut mesh = read_mesh("./examples/2D_3x6.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    mesh.get_face_zone("INLET").scalar_value = 100.;
+
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+    mesh.get_face_zone("OUTLET").scalar_value = 0.;
+
     mesh.get_face_zone("BOTTOM").zone_type = FaceConditionTypes::Wall;
+
     mesh.get_face_zone("TOP").zone_type = FaceConditionTypes::Wall;
 
     let (face_min_actual, face_max_actual) =
