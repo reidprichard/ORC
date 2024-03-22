@@ -8,7 +8,7 @@ pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
 
 // TODO: Allow BC vector for velocity BC non-normal to boundary
 pub struct FaceZone {
-    pub zone_type: BoundaryConditionTypes,
+    pub zone_type: FaceConditionTypes,
     pub scalar_value: Float,
     pub vector_value: Vector,
     pub name: String,
@@ -21,7 +21,7 @@ pub struct CellZone {
 
 // TODO: Move BCs somewhere more suitable
 #[derive(Debug)]
-pub enum BoundaryConditionTypes {
+pub enum FaceConditionTypes {
     Interior,
     Wall,
     PressureInlet,
@@ -72,27 +72,27 @@ bc_types_from!(u32);
 bc_types_from!(u16);
 bc_types_from!(u8);
 
-impl fmt::Display for BoundaryConditionTypes {
+impl fmt::Display for FaceConditionTypes {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "{}",
             match &self {
-                BoundaryConditionTypes::Interior => "Interior",
-                BoundaryConditionTypes::Wall => "Wall",
-                BoundaryConditionTypes::PressureInlet => "PressureInlet",
-                BoundaryConditionTypes::PressureOutlet => "PressureOutlet",
-                BoundaryConditionTypes::Symmetry => "Symmetry",
-                BoundaryConditionTypes::PeriodicShadow => "PeriodicShadow",
-                BoundaryConditionTypes::PressureFarField => "PressureFarField",
-                BoundaryConditionTypes::VelocityInlet => "VelocityInlet",
-                BoundaryConditionTypes::Periodic => "Periodic",
-                BoundaryConditionTypes::PorousJump => "PorousJump",
-                BoundaryConditionTypes::MassFlowInlet => "MassFlowInlet",
-                BoundaryConditionTypes::Interface => "Interface",
-                BoundaryConditionTypes::Parent => "Parent",
-                BoundaryConditionTypes::Outflow => "Outflow",
-                BoundaryConditionTypes::Axis => "Axis",
+                FaceConditionTypes::Interior => "Interior",
+                FaceConditionTypes::Wall => "Wall",
+                FaceConditionTypes::PressureInlet => "PressureInlet",
+                FaceConditionTypes::PressureOutlet => "PressureOutlet",
+                FaceConditionTypes::Symmetry => "Symmetry",
+                FaceConditionTypes::PeriodicShadow => "PeriodicShadow",
+                FaceConditionTypes::PressureFarField => "PressureFarField",
+                FaceConditionTypes::VelocityInlet => "VelocityInlet",
+                FaceConditionTypes::Periodic => "Periodic",
+                FaceConditionTypes::PorousJump => "PorousJump",
+                FaceConditionTypes::MassFlowInlet => "MassFlowInlet",
+                FaceConditionTypes::Interface => "Interface",
+                FaceConditionTypes::Parent => "Parent",
+                FaceConditionTypes::Outflow => "Outflow",
+                FaceConditionTypes::Axis => "Axis",
             }
         )
     }
