@@ -129,13 +129,11 @@ pub fn build_solution_matrices(
         // Diffusion from neighbor into this cell = D_i * (phi_nb - phi_P)
         // Flux from neighbor into this cell = F_i *
 
-        let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        // TODO: Implement S_p
-        let s_p = Vector::zero(); // proportional source term
+        // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
+        let mut s_p = Vector::zero(); // proportional source term TODO
         let mut s_u = get_velocity_source_term(cell.centroid); // general source term
-        let s_u_dc = Vector::zero(); // deferred correction source term
-                                     // TODO: Implement cross-diffusion
-        let s_d_cross = Vector::zero(); // cross diffusion source term
+        let mut s_u_dc = Vector::zero(); // deferred correction source term TODO
+        let mut s_d_cross = Vector::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = Vector::ones() * s_p;
@@ -145,13 +143,13 @@ pub fn build_solution_matrices(
             let face = &mesh.faces[face_number];
 
             let face_bc = &mesh.face_zones[&face.zone];
-            let (f_i, d_i, face_pressure, neighbor_cell_number): (Float, Float, Float, Uint) = match face_bc.zone_type {
+            let (f_i, d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
                 BoundaryConditionTypes::Wall => {
                     // Do I need to do anything here?
                     // The advective and diffusive fluxes through this face are zero, and there's
                     // no source here (right?), so I think not.
                     // NOTE: Assumes zero wall-normal pressure gradient
-                    (0., 0., cell.pressure, 0)
+                    (0., 0., face.normal * (-cell.pressure), 0)
                 }
                 BoundaryConditionTypes::VelocityInlet => {
                     // By default, face normals point to cell 0.
@@ -166,10 +164,10 @@ pub fn build_solution_matrices(
                     let d_i: Float = mu * face.area;
 
                     // NOTE: Assumes zero streamwise pressure gradient
-                    (f_i, d_i, cell.pressure, 0)
+                    (f_i, d_i, outward_face_normal * cell.pressure, 0)
                 }
                 BoundaryConditionTypes::PressureInlet | BoundaryConditionTypes::PressureOutlet => {
-                    (0., 0., face_bc.scalar_value, 0)
+                    (0., 0., face.normal * (-face_bc.scalar_value), 0)
                 }
                 _ => {
                     println!("*** {} ***", face_bc.zone_type);
@@ -212,8 +210,17 @@ pub fn build_solution_matrices(
                     // let e_nu: Vector = outward_face_normal.cross(&e_xi.cross(&outward_face_normal)).unit();
                     // Cross diffusion source term
                     // let s_cross_diffusion = -mu *
-                    let face_pressure = interpolate_face_pressure(&mesh, *face_number, pressure_interpolation_scheme);
-                    (f_i, d_i, face_pressure, neighbor_cell_number)
+                    let face_pressure = interpolate_face_pressure(
+                        &mesh,
+                        *face_number,
+                        pressure_interpolation_scheme,
+                    );
+                    (
+                        f_i,
+                        d_i,
+                        outward_face_normal * face_pressure,
+                        neighbor_cell_number,
+                    )
                 }
             }; // end BC match
             let a_nb: Vector = Vector::ones()
@@ -227,7 +234,8 @@ pub fn build_solution_matrices(
                         MomentumDiscretization::CD => f_i / 2.,
                         _ => panic!("unsupported momentum scheme"),
                     });
-            a_p = a_p - a_nb + f_i + s_p; // sign of f_i?
+            a_p += (-a_nb + f_i + s_p); // sign of f_i?
+            s_u += source_term;
 
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
