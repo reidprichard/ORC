@@ -1,5 +1,5 @@
-#![allow(dead_code)]
-#![allow(unused)]
+// #![allow(dead_code)]
+// #![allow(unused)]
 
 use orc::io::read_mesh;
 use orc::mesh::*;
@@ -15,10 +15,10 @@ fn test_2d() -> Mesh {
     let face_max = f32::max(cell_width, cell_height);
     let mut mesh = orc::io::read_mesh("./examples/2D_3x6.msh");
 
-    mesh.get_face_zone("INLET").zone_type = BoundaryConditionTypes::PressureInlet;
-    mesh.get_face_zone("OUTLET").zone_type = BoundaryConditionTypes::PressureOutlet;
-    mesh.get_face_zone("BOTTOM").zone_type = BoundaryConditionTypes::Wall;
-    mesh.get_face_zone("TOP").zone_type = BoundaryConditionTypes::Wall;
+    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+    mesh.get_face_zone("BOTTOM").zone_type = FaceConditionTypes::Wall;
+    mesh.get_face_zone("TOP").zone_type = FaceConditionTypes::Wall;
 
     let (face_min_actual, face_max_actual) =
         mesh.faces.iter().fold((face_max, face_min), |acc, (i, f)| {
@@ -49,10 +49,10 @@ fn test_3d() -> Mesh {
     let cell_volume = face_area * cell_size;
     let mut mesh = orc::io::read_mesh("./examples/3x3_cube.msh");
 
-    mesh.get_face_zone("INLET").zone_type = BoundaryConditionTypes::PressureInlet;
-    mesh.get_face_zone("OUTLET").zone_type = BoundaryConditionTypes::PressureOutlet;
-    mesh.get_face_zone("PERIODIC_-Z").zone_type = BoundaryConditionTypes::Wall;
-    mesh.get_face_zone("PERIODIC_+Z").zone_type = BoundaryConditionTypes::Wall;
+    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Wall;
+    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Wall;
 
     let (face_min_actual, face_max_actual) =
         mesh.faces.iter().fold((face_area, face_area), |acc, (i, f)| {
@@ -85,7 +85,7 @@ fn main() {
     println!("Reading mesh.");
     let mut mesh = test_2d();
     println!("Building solution matrices.");
-    let linear_system = build_solution_matrices(
+    let linear_system = build_discretized_momentum_matrices(
         &mut mesh,
         MomentumDiscretization::UD,
         PressureInterpolation::Linear,

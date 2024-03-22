@@ -100,8 +100,63 @@ fn interpolate_face_pressure(
     }
 }
 
-pub fn build_solution_matrices(
+pub fn solve_steady(
     mesh: &mut Mesh,
+    pressure_velocity_coupling: PressureVelocityCoupling,
+    momentum_scheme: MomentumDiscretization,
+    pressure_interpolation_scheme: PressureInterpolation,
+    velocity_interpolation_scheme: VelocityInterpolation,
+    rho: Float,
+    mu: Float,
+    iteration_count: Uint,
+) {
+    initialize_pressure_field(mesh);
+    match pressure_velocity_coupling {
+        PressureVelocityCoupling::SIMPLE => {
+            for _ in 0..iteration_count {
+                let momentum_matrices = build_discretized_momentum_matrices(
+                    mesh,
+                    momentum_scheme,
+                    pressure_interpolation_scheme,
+                    velocity_interpolation_scheme,
+                    rho,
+                    mu,
+                );
+                let pressure_correction_matrices = 0;
+            }
+        }
+        _ => panic!("unsupported pressure-velocity coupling")
+    }
+}
+
+pub fn build_pressure_correction_matrices(mesh: &Mesh) -> SolutionMatrices {
+    // TODO: ignore boundary cells
+    let cell_count = mesh.cells.len();
+    let mut u_matrix = TriMat::new((cell_count, cell_count));
+    let mut v_matrix = TriMat::new((cell_count, cell_count));
+    let mut w_matrix = TriMat::new((cell_count, cell_count));
+    let mut u_source: Vec<Float> = vec![0.; cell_count];
+    let mut v_source: Vec<Float> = vec![0.; cell_count];
+    let mut w_source: Vec<Float> = vec![0.; cell_count];
+
+    SolutionMatrices {
+        u: LinearSystem {
+            a: u_matrix.to_csr(),
+            b: u_source,
+        },
+        v: LinearSystem {
+            a: v_matrix.to_csr(),
+            b: v_source,
+        },
+        w: LinearSystem {
+            a: w_matrix.to_csr(),
+            b: w_source,
+        },
+    }
+}
+
+pub fn build_discretized_momentum_matrices(
+    mesh: &Mesh,
     momentum_scheme: MomentumDiscretization,
     pressure_interpolation_scheme: PressureInterpolation,
     velocity_interpolation_scheme: VelocityInterpolation,
@@ -110,8 +165,8 @@ pub fn build_solution_matrices(
 ) -> SolutionMatrices {
     use std::collections::HashSet;
 
+    // TODO: Ignore boundary cells
     let cell_count = mesh.cells.len();
-    let face_count = mesh.faces.len();
     let mut u_matrix = TriMat::new((cell_count, cell_count));
     let mut v_matrix = TriMat::new((cell_count, cell_count));
     let mut w_matrix = TriMat::new((cell_count, cell_count));
@@ -293,7 +348,8 @@ pub fn build_solution_matrices(
     }
 }
 
-fn initialize_flow(mesh: Mesh) {
+fn initialize_pressure_field(mesh: &mut Mesh) {
+    // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
     // - Inlet: d/dn (psi) = V
