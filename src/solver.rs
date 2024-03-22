@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::mesh::*;
+use itertools::izip;
 use sprs::{CsMat, CsVec, TriMat};
 // use std::collections::HashMap;
 
@@ -125,6 +126,10 @@ pub fn solve_steady(
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for _ in 0..iteration_count {
+                let mut u: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.x).collect();
+                let mut v: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.y).collect();
+                let mut w: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.z).collect();
+                let mut p: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.pressure).collect();
                 let momentum_matrices = build_discretized_momentum_matrices(
                     mesh,
                     momentum_scheme,
@@ -133,6 +138,36 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
+                solve_linear_system(
+                    &momentum_matrices.u,
+                    &mut u,
+                    20,
+                    SolutionMethod::GaussSeidel,
+                );
+                solve_linear_system(
+                    &momentum_matrices.v,
+                    &mut v,
+                    20,
+                    SolutionMethod::GaussSeidel,
+                );
+                solve_linear_system(
+                    &momentum_matrices.w,
+                    &mut w,
+                    20,
+                    SolutionMethod::GaussSeidel,
+                );
+
+                for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
+                    mesh.cells
+                        .get_mut(&(i + 1).try_into().unwrap())
+                        .unwrap()
+                        .velocity = Vector {
+                        x: u_i,
+                        y: v_i,
+                        z: w_i,
+                    };
+                }
+
                 let pressure_correction_matrices = 0;
             }
         }
@@ -140,15 +175,27 @@ pub fn solve_steady(
     }
 }
 
-pub fn solve_momentum_equations(
-    system: &MomentumMatrices,
+pub fn solve_linear_system(
+    system: &LinearSystem,
+    solution_vector: &mut Vec<Float>,
+    iteration_count: Uint,
     method: SolutionMethod,
-) -> MomentumSolutionVectors {
+) {
     // TODO: implement
-    let u: Vec<Float> = vec![0.];
-    let v: Vec<Float> = vec![0.];
-    let w: Vec<Float> = vec![0.];
-    MomentumSolutionVectors { u, v, w }
+    match method {
+        SolutionMethod::GaussSeidel => {
+            for k in 0..iteration_count {
+                for i in 0..solution_vector.len() {
+                    solution_vector[i] = (system.b[i]
+                        - solution_vector.iter().enumerate().fold(0., |acc, (j, x)| {
+                            system.a.get(i, j).unwrap() * x * Float::from(i != j)
+                        }))
+                        / system.a.get(i, i).unwrap();
+                }
+            }
+        }
+        _ => panic!("unsupported solution method"),
+    }
 }
 
 pub fn build_pressure_correction_matrices(
