@@ -143,21 +143,21 @@ pub fn build_solution_matrices(
         // Iterate over this cell's faces
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
-            let face_pressure =
-                interpolate_face_pressure(&mesh, *face_number, pressure_interpolation_scheme);
 
             let face_bc = &mesh.face_zones[&face.zone];
-            let (f_i, d_i, neighbor_cell_number): (Float, Float, Uint) = match face_bc.zone_type {
+            let (f_i, d_i, face_pressure, neighbor_cell_number): (Float, Float, Float, Uint) = match face_bc.zone_type {
                 BoundaryConditionTypes::Wall => {
                     // Do I need to do anything here?
                     // The advective and diffusive fluxes through this face are zero, and there's
-                    // no source here, so I think not.
-                    (0., 0., 0)
+                    // no source here (right?), so I think not.
+                    // NOTE: Assumes zero wall-normal pressure gradient
+                    (0., 0., cell.pressure, 0)
                 }
                 BoundaryConditionTypes::VelocityInlet => {
                     // By default, face normals point to cell 0.
                     // If a face only has one neighbor, that neighbor will be cell 0.
                     // Therefore, if we reverse this normal, it will be facing outward.
+                    // TODO: Consider flipping convention of face normal direction
                     let outward_face_normal = -face.normal;
                     // Advection (flux) coefficient
                     let f_i: Float =
@@ -165,10 +165,11 @@ pub fn build_solution_matrices(
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area;
 
-                    (f_i, d_i, 0)
+                    // NOTE: Assumes zero streamwise pressure gradient
+                    (f_i, d_i, cell.pressure, 0)
                 }
                 BoundaryConditionTypes::PressureInlet | BoundaryConditionTypes::PressureOutlet => {
-                    (0., 0., 0)
+                    (0., 0., face_bc.scalar_value, 0)
                 }
                 _ => {
                     println!("*** {} ***", face_bc.zone_type);
@@ -211,8 +212,8 @@ pub fn build_solution_matrices(
                     // let e_nu: Vector = outward_face_normal.cross(&e_xi.cross(&outward_face_normal)).unit();
                     // Cross diffusion source term
                     // let s_cross_diffusion = -mu *
-
-                    (f_i, d_i, neighbor_cell_number)
+                    let face_pressure = interpolate_face_pressure(&mesh, *face_number, pressure_interpolation_scheme);
+                    (f_i, d_i, face_pressure, neighbor_cell_number)
                 }
             }; // end BC match
             let a_nb: Vector = Vector::ones()
