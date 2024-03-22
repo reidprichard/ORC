@@ -9,7 +9,8 @@ pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
 // TODO: Allow BC vector for velocity BC non-normal to boundary
 pub struct FaceZone {
     pub zone_type: BoundaryConditionTypes,
-    pub value: Float,
+    pub scalar_value: Float,
+    pub vector_value: Vector,
     pub name: String,
 }
 

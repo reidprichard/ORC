@@ -126,6 +126,9 @@ pub fn build_solution_matrices(
 
     // Iterate over all cells in the mesh
     for (cell_number, cell) in &mesh.cells {
+        // Diffusion from neighbor into this cell = D_i * (phi_nb - phi_P)
+        // Flux from neighbor into this cell = F_i *
+
         let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         // TODO: Implement S_p
         let s_p = Vector::zero(); // proportional source term
@@ -140,31 +143,12 @@ pub fn build_solution_matrices(
         // Iterate over this cell's faces
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
-            match face.cell_numbers.len() {
-                1 => {
-                    let face_bc = &mesh.face_zones[&face.zone];
-                    match face_bc.zone_type {
-                        BoundaryConditionTypes::Interior => panic!("Interior one-sided face."),
-                        BoundaryConditionTypes::Wall => (), // already zero
-                        BoundaryConditionTypes::VelocityInlet => {
-                            // face_velocity = face.normal * face_bc.value;
-                        }
-                        BoundaryConditionTypes::PressureInlet => {
-                            // TODO: Write something proper!!
-                            // face_velocity = cell.velocity;
-                        }
-                        BoundaryConditionTypes::PressureOutlet => {
-                            // TODO: Write something proper!!
-                            // face_velocity = cell.velocity;
-                        }
-                        _ => {
-                            println!("*** {} ***", face_bc.zone_type);
-                            panic!("BC not supported");
-                        }
-                    }
-                    // Maybe a face's boundary status should be encoded in a bool?
-                }
-                2 => {
+            let face_pressure =
+                interpolate_face_pressure(&mesh, *face_number, pressure_interpolation_scheme);
+
+            let face_bc = &mesh.face_zones[&face.zone];
+            let (f_i, d_i, neighbor_cell_number): (Float, Float, Uint) = match face_bc.zone_type {
+                BoundaryConditionTypes::Interior => {
                     let face_velocity = interpolate_face_velocity(
                         &mesh,
                         *face_number,
@@ -174,87 +158,113 @@ pub fn build_solution_matrices(
                     let mut neighbor_cell_number: Uint = 0;
                     let mut outward_face_normal: Vector = face.normal;
                     if face.cell_numbers[0] == *cell_number {
-                        // face normal points to cell 0 by default
-                        neighbor_cell_number = face.cell_numbers[1];
-                    } else {
+                        // face normal points to cell 0 by default, so we need to flip it
                         outward_face_normal *= -1;
+                        neighbor_cell_number = *face
+                            .cell_numbers
+                            .get(1)
+                            .expect("interior faces should have two neighbors");
+                    } else {
+                        // this cell must be cell 1,
                         neighbor_cell_number = face.cell_numbers[0];
                     }
 
-                    // TODO: set coefficient convention to be out = positive
-                    // Advection (flux) coefficient
+                    // Advection (flux) coefficient = advective mass flow rate out this face
                     let f_i: Float = face_velocity.dot(&outward_face_normal) * face.area * rho;
                     // Cell centroids vector
                     let e_xi: Vector = mesh.cells[&neighbor_cell_number].centroid - cell.centroid;
                     // Diffusion coefficient
-                    let d_i: Float = mu
-                        * (outward_face_normal.dot(&outward_face_normal)
-                            / outward_face_normal.dot(&e_xi))
-                        * face.area;
+                    let d_i: Float = mu * face.area * e_xi.norm();
 
                     // Skipping cross diffusion for now
+                    // let d_i: Float = mu
+                    //     * (outward_face_normal.dot(&outward_face_normal)
+                    //         / outward_face_normal.dot(&e_xi))
+                    //     * face.area;
                     // Face tangent vector -- this feels inefficient
                     // let e_nu: Vector = outward_face_normal.cross(&e_xi.cross(&outward_face_normal)).unit();
                     // Cross diffusion source term
                     // let s_cross_diffusion = -mu *
 
-                    let a_nb: Vector = Vector::ones()
-                        * (d_i
-                            + match momentum_scheme {
-                                MomentumDiscretization::UD => {
-                                    if f_i > 0. {
-                                        f_i
-                                    } else {
-                                        0.
-                                    }
-                                }
-                                MomentumDiscretization::CD => f_i / 2.,
-                                _ => panic!("unsupported momentum scheme"),
-                            });
-                    a_p = a_p - a_nb - f_i + s_p;
-
-                    // TODO: DRY
-                    u_matrix.add_triplet(
-                        (*cell_number - 1).try_into().unwrap(),
-                        (neighbor_cell_number - 1).try_into().unwrap(),
-                        a_nb.x,
-                    );
-                    v_matrix.add_triplet(
-                        (*cell_number - 1).try_into().unwrap(),
-                        (neighbor_cell_number - 1).try_into().unwrap(),
-                        a_nb.y,
-                    );
-                    w_matrix.add_triplet(
-                        (*cell_number - 1).try_into().unwrap(),
-                        (neighbor_cell_number - 1).try_into().unwrap(),
-                        a_nb.z,
-                    );
-
-                    // let face_pressure:Float = interpolate_face_velocity
+                    (f_i, d_i, neighbor_cell_number)
                 }
-                _ => panic!("faces must have 1 or 2 neighbors"),
-            }
-            u_source.push(s_u.x + s_u_dc.x + s_d_cross.x);
-            v_source.push(s_u.y + s_u_dc.y + s_d_cross.y);
-            w_source.push(s_u.z + s_u_dc.z + s_d_cross.z);
+                BoundaryConditionTypes::Wall => {
+                    // Do I need to do anything here?
+                    // The advective and diffusive fluxes through this face are zero, and there's
+                    // no source here, so I think not.
+                    (0., 0., 0)
+                }
+                BoundaryConditionTypes::VelocityInlet => {
+                    // By default, face normals point to cell 0.
+                    // If a face only has one neighbor, that neighbor will be cell 0.
+                    // Therefore, if we reverse this normal, it will be facing outward.
+                    let outward_face_normal = -face.normal;
+                    // Advection (flux) coefficient
+                    let f_i: Float =
+                        face_bc.vector_value.dot(&outward_face_normal) * face.area * rho;
+                    // Diffusion coefficient
+                    let d_i: Float = mu * face.area;
 
-            u_matrix.add_triplet(
-                (*cell_number - 1).try_into().unwrap(),
-                (*cell_number - 1).try_into().unwrap(),
-                a_p.x + s_p.x,
-            );
-            v_matrix.add_triplet(
-                (*cell_number - 1).try_into().unwrap(),
-                (*cell_number - 1).try_into().unwrap(),
-                a_p.y + s_p.y,
-            );
-            w_matrix.add_triplet(
-                (*cell_number - 1).try_into().unwrap(),
-                (*cell_number - 1).try_into().unwrap(),
-                a_p.z + s_p.z,
-            );
-        }
-    }
+                    (f_i, d_i, 0)
+                }
+                BoundaryConditionTypes::PressureInlet | BoundaryConditionTypes::PressureOutlet => {
+                    (0., 0., 0)
+                }
+                _ => {
+                    println!("*** {} ***", face_bc.zone_type);
+                    panic!("BC not supported");
+                }
+            }; // end BC match
+            let a_nb: Vector = Vector::ones()
+                * (d_i
+                    + match momentum_scheme {
+                        MomentumDiscretization::UD => {
+                            Float::max(f_i, 0.)
+                        }
+                        MomentumDiscretization::CD => f_i / 2.,
+                        _ => panic!("unsupported momentum scheme"),
+                    });
+            a_p = a_p - a_nb - f_i + s_p;
+
+            // If it's zero, that means it's a boundary face
+            if neighbor_cell_number > 0 {
+                u_matrix.add_triplet(
+                    (*cell_number - 1).try_into().unwrap(),
+                    (neighbor_cell_number - 1).try_into().unwrap(),
+                    a_nb.x,
+                );
+                v_matrix.add_triplet(
+                    (*cell_number - 1).try_into().unwrap(),
+                    (neighbor_cell_number - 1).try_into().unwrap(),
+                    a_nb.y,
+                );
+                w_matrix.add_triplet(
+                    (*cell_number - 1).try_into().unwrap(),
+                    (neighbor_cell_number - 1).try_into().unwrap(),
+                    a_nb.z,
+                );
+            }
+        } // end face loop
+        u_source.push(s_u.x + s_u_dc.x + s_d_cross.x);
+        v_source.push(s_u.y + s_u_dc.y + s_d_cross.y);
+        w_source.push(s_u.z + s_u_dc.z + s_d_cross.z);
+
+        u_matrix.add_triplet(
+            (*cell_number - 1).try_into().unwrap(),
+            (*cell_number - 1).try_into().unwrap(),
+            a_p.x + s_p.x,
+        );
+        v_matrix.add_triplet(
+            (*cell_number - 1).try_into().unwrap(),
+            (*cell_number - 1).try_into().unwrap(),
+            a_p.y + s_p.y,
+        );
+        w_matrix.add_triplet(
+            (*cell_number - 1).try_into().unwrap(),
+            (*cell_number - 1).try_into().unwrap(),
+            a_p.z + s_p.z,
+        );
+    } // end cell loop
 
     SolutionMatrices {
         u: LinearSystem {
