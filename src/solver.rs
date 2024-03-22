@@ -168,7 +168,15 @@ pub fn solve_steady(
                     };
                 }
 
-                let pressure_correction_matrices = 0;
+                let pressure_correction_matrices =
+                    build_pressure_correction_matrices(mesh, &momentum_matrices, rho);
+                let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
+                solve_linear_system(
+                    &pressure_correction_matrices,
+                    &mut p_prime,
+                    20,
+                    SolutionMethod::GaussSeidel,
+                );
             }
         }
         _ => panic!("unsupported pressure-velocity coupling"),
@@ -184,13 +192,13 @@ pub fn solve_linear_system(
     // TODO: implement
     match method {
         SolutionMethod::GaussSeidel => {
-            for k in 0..iteration_count {
-                for i in 0..solution_vector.len() {
+            'iter_loop: for _ in 0..iteration_count {
+                'row_loop: for i in 0..solution_vector.len() {
                     solution_vector[i] = (system.b[i]
                         - solution_vector.iter().enumerate().fold(0., |acc, (j, x)| {
-                            system.a.get(i, j).unwrap() * x * Float::from(i != j)
+                            system.a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
                         }))
-                        / system.a.get(i, i).unwrap();
+                        / system.a.get(i, i).expect("matrix A should have a (nonzero) diagonal element for each element of solution vector")
                 }
             }
         }
@@ -212,9 +220,24 @@ pub fn build_pressure_correction_matrices(
         let a_p: Float = 0.;
         let b_p: Float = 0.;
         for face_number in &cell.face_numbers {
-            let a_nb: Float = 0.;
-            // do stuff
-            a.add_triplet((cell_number - 1) as usize, (face_number - 1) as usize, a_nb);
+            let face = &mesh.faces[face_number];
+            if face.cell_numbers.len() == 1 {
+                continue;
+            }
+
+            let neighbor_cell_number: Uint = if face.cell_numbers[0] != *cell_number {
+                face.cell_numbers[0]
+            } else {
+                face.cell_numbers[1]
+            };
+
+            // let a_nb = rho * Float::powi(face.area,2) / momentum_matrices.`;
+
+            a.add_triplet(
+                (cell_number - 1) as usize,
+                (neighbor_cell_number - 1) as usize,
+                a_nb,
+            );
         }
         a.add_triplet((cell_number - 1) as usize, (cell_number - 1) as usize, a_p);
         b.push(b_p);
@@ -262,7 +285,6 @@ pub fn build_discretized_momentum_matrices(
         // Iterate over this cell's faces
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
-
             let face_bc = &mesh.face_zones[&face.zone];
             let (f_i, d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
@@ -361,18 +383,18 @@ pub fn build_discretized_momentum_matrices(
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
                 u_matrix.add_triplet(
-                    (*cell_number - 1).try_into().unwrap(),
-                    (neighbor_cell_number - 1).try_into().unwrap(),
+                    (*cell_number - 1) as usize,
+                    (neighbor_cell_number - 1) as usize,
                     a_nb.x,
                 );
                 v_matrix.add_triplet(
-                    (*cell_number - 1).try_into().unwrap(),
-                    (neighbor_cell_number - 1).try_into().unwrap(),
+                    (*cell_number - 1) as usize,
+                    (neighbor_cell_number - 1) as usize,
                     a_nb.y,
                 );
                 w_matrix.add_triplet(
-                    (*cell_number - 1).try_into().unwrap(),
-                    (neighbor_cell_number - 1).try_into().unwrap(),
+                    (*cell_number - 1) as usize,
+                    (neighbor_cell_number - 1) as usize,
                     a_nb.z,
                 );
             }

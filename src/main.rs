@@ -107,9 +107,7 @@ fn main() {
     // Interface: allow user to choose from
     // 1. Read mesh
     println!("Starting.");
-    println!("Reading mesh.");
     test_2d();
-    println!("Building solution matrices.");
     // 2. Read data
     // 3. Read settings
     // 4. Write mesh
