@@ -130,7 +130,7 @@ pub fn solve_steady(
                 let mut v: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.y).collect();
                 let mut w: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.z).collect();
                 let mut p: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.pressure).collect();
-                let momentum_matrices = build_discretized_momentum_matrices(
+                let (a, b_u, b_v, b_w) = build_discretized_momentum_matrices(
                     mesh,
                     momentum_scheme,
                     pressure_interpolation_scheme,
@@ -138,24 +138,9 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
-                solve_linear_system(
-                    &momentum_matrices.u,
-                    &mut u,
-                    20,
-                    SolutionMethod::GaussSeidel,
-                );
-                solve_linear_system(
-                    &momentum_matrices.v,
-                    &mut v,
-                    20,
-                    SolutionMethod::GaussSeidel,
-                );
-                solve_linear_system(
-                    &momentum_matrices.w,
-                    &mut w,
-                    20,
-                    SolutionMethod::GaussSeidel,
-                );
+                solve_linear_system(&a, &b_u, &mut u, 20, SolutionMethod::GaussSeidel);
+                solve_linear_system(&a, &b_v, &mut v, 20, SolutionMethod::GaussSeidel);
+                solve_linear_system(&a, &b_w, &mut w, 20, SolutionMethod::GaussSeidel);
 
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
@@ -169,14 +154,14 @@ pub fn solve_steady(
                 }
 
                 let pressure_correction_matrices =
-                    build_pressure_correction_matrices(mesh, &momentum_matrices, rho);
+                    build_pressure_correction_matrices(mesh, &a, rho);
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
-                solve_linear_system(
-                    &pressure_correction_matrices,
-                    &mut p_prime,
-                    20,
-                    SolutionMethod::GaussSeidel,
-                );
+                // solve_linear_system(
+                //     &pressure_correction_matrices,
+                //     &mut p_prime,
+                //     20,
+                //     SolutionMethod::GaussSeidel,
+                // );
             }
         }
         _ => panic!("unsupported pressure-velocity coupling"),
@@ -184,7 +169,8 @@ pub fn solve_steady(
 }
 
 pub fn solve_linear_system(
-    system: &LinearSystem,
+    a: &CsMat<Float>,
+    b: &Vec<Float>,
     solution_vector: &mut Vec<Float>,
     iteration_count: Uint,
     method: SolutionMethod,
@@ -194,11 +180,11 @@ pub fn solve_linear_system(
         SolutionMethod::GaussSeidel => {
             'iter_loop: for _ in 0..iteration_count {
                 'row_loop: for i in 0..solution_vector.len() {
-                    solution_vector[i] = (system.b[i]
+                    solution_vector[i] = (b[i]
                         - solution_vector.iter().enumerate().fold(0., |acc, (j, x)| {
-                            system.a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
+                            a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
                         }))
-                        / system.a.get(i, i).expect("matrix A should have a (nonzero) diagonal element for each element of solution vector")
+                        / a.get(i, i).expect("matrix A should have a (nonzero) diagonal element for each element of solution vector")
                 }
             }
         }
@@ -208,7 +194,7 @@ pub fn solve_linear_system(
 
 pub fn build_pressure_correction_matrices(
     mesh: &Mesh,
-    momentum_matrices: &MomentumMatrices,
+    momentum_matrices: &CsMat<Float>,
     rho: Float,
 ) -> LinearSystem {
     // TODO: ignore boundary cells
@@ -231,7 +217,10 @@ pub fn build_pressure_correction_matrices(
                 face.cell_numbers[1]
             };
 
-            // let a_nb = rho * Float::powi(face.area,2) / momentum_matrices.`;
+            let a_nb = rho * Float::powi(face.area, 2)
+                / momentum_matrices
+                    .get(*cell_number as usize, neighbor_cell_number as usize)
+                    .unwrap();
 
             a.add_triplet(
                 (cell_number - 1) as usize,
@@ -253,12 +242,10 @@ pub fn build_discretized_momentum_matrices(
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
     mu: Float,
-) -> MomentumMatrices {
+) -> (CsMat<Float>, Vec<Float>, Vec<Float>, Vec<Float>) {
     // TODO: Ignore boundary cells
     let cell_count = mesh.cells.len();
-    let mut u_matrix = TriMat::new((cell_count, cell_count));
-    let mut v_matrix = TriMat::new((cell_count, cell_count));
-    let mut w_matrix = TriMat::new((cell_count, cell_count));
+    let mut a = TriMat::new((cell_count, cell_count));
     let mut u_source: Vec<Float> = vec![0.; cell_count];
     let mut v_source: Vec<Float> = vec![0.; cell_count];
     let mut w_source: Vec<Float> = vec![0.; cell_count];
@@ -274,13 +261,13 @@ pub fn build_discretized_momentum_matrices(
         // Flux from neighbor into this cell = F_i *
 
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        let mut s_p = Vector::zero(); // proportional source term TODO
+        let mut s_p = 0.; // proportional source term TODO
         let mut s_u = get_velocity_source_term(cell.centroid); // general source term
         let mut s_u_dc = Vector::zero(); // deferred correction source term TODO
         let mut s_d_cross = Vector::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
-        let mut a_p = Vector::ones() * s_p;
+        let mut a_p = s_p;
 
         // Iterate over this cell's faces
         for face_number in &cell.face_numbers {
@@ -366,74 +353,40 @@ pub fn build_discretized_momentum_matrices(
                     panic!("BC not supported");
                 }
             }; // end BC match
-            let a_nb: Vector = Vector::ones()
-                * (d_i
-                    + match momentum_scheme {
-                        MomentumDiscretization::UD => {
-                            // If upwinding, neighbor only affects this cell if flux is into this
-                            // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
-                            Float::min(f_i, 0.)
-                        }
-                        MomentumDiscretization::CD => f_i / 2.,
-                        _ => panic!("unsupported momentum scheme"),
-                    });
+            let a_nb: Float = (d_i
+                + match momentum_scheme {
+                    MomentumDiscretization::UD => {
+                        // If upwinding, neighbor only affects this cell if flux is into this
+                        // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
+                        Float::min(f_i, 0.)
+                    }
+                    MomentumDiscretization::CD => f_i / 2.,
+                    _ => panic!("unsupported momentum scheme"),
+                });
             a_p += -a_nb + f_i + s_p; // sign of f_i?
             s_u += source_term;
 
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
-                u_matrix.add_triplet(
+                a.add_triplet(
                     (*cell_number - 1) as usize,
                     (neighbor_cell_number - 1) as usize,
-                    a_nb.x,
-                );
-                v_matrix.add_triplet(
-                    (*cell_number - 1) as usize,
-                    (neighbor_cell_number - 1) as usize,
-                    a_nb.y,
-                );
-                w_matrix.add_triplet(
-                    (*cell_number - 1) as usize,
-                    (neighbor_cell_number - 1) as usize,
-                    a_nb.z,
+                    a_nb,
                 );
             }
         } // end face loop
-        u_source.push(s_u.x + s_u_dc.x + s_d_cross.x);
-        v_source.push(s_u.y + s_u_dc.y + s_d_cross.y);
-        w_source.push(s_u.z + s_u_dc.z + s_d_cross.z);
+        let source_total = s_u + s_u_dc + s_d_cross;
+        u_source.push(source_total.x);
+        v_source.push(source_total.y);
+        w_source.push(source_total.z);
 
-        u_matrix.add_triplet(
+        a.add_triplet(
             (*cell_number - 1).try_into().unwrap(),
             (*cell_number - 1).try_into().unwrap(),
-            a_p.x + s_p.x,
-        );
-        v_matrix.add_triplet(
-            (*cell_number - 1).try_into().unwrap(),
-            (*cell_number - 1).try_into().unwrap(),
-            a_p.y + s_p.y,
-        );
-        w_matrix.add_triplet(
-            (*cell_number - 1).try_into().unwrap(),
-            (*cell_number - 1).try_into().unwrap(),
-            a_p.z + s_p.z,
+            a_p + s_p,
         );
     } // end cell loop
-
-    MomentumMatrices {
-        u: LinearSystem {
-            a: u_matrix.to_csr(),
-            b: u_source,
-        },
-        v: LinearSystem {
-            a: v_matrix.to_csr(),
-            b: v_source,
-        },
-        w: LinearSystem {
-            a: w_matrix.to_csr(),
-            b: w_source,
-        },
-    }
+    (a.to_csr(), u_source, v_source, w_source)
 }
 
 fn initialize_pressure_field(mesh: &mut Mesh) {
