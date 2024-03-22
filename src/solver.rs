@@ -4,6 +4,11 @@ use sprs::{CsMat, CsVec, TriMat};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
+pub enum SolutionMethod {
+    GaussSeidel,
+}
+
+#[derive(Copy, Clone)]
 pub enum PressureVelocityCoupling {
     SIMPLE,
 }
@@ -32,10 +37,16 @@ pub struct LinearSystem {
     b: Vec<Float>,
 }
 
-pub struct SolutionMatrices {
+pub struct MomentumMatrices {
     u: LinearSystem,
     v: LinearSystem,
     w: LinearSystem,
+}
+
+pub struct MomentumSolutionVectors {
+    u: Vec<Float>,
+    v: Vec<Float>,
+    w: Vec<Float>,
 }
 
 fn get_velocity_source_term(location: Vector) -> Vector {
@@ -125,11 +136,21 @@ pub fn solve_steady(
                 let pressure_correction_matrices = 0;
             }
         }
-        _ => panic!("unsupported pressure-velocity coupling")
+        _ => panic!("unsupported pressure-velocity coupling"),
     }
 }
 
-pub fn build_pressure_correction_matrices(mesh: &Mesh) -> SolutionMatrices {
+pub fn solve_momentum_equations(
+    system: &MomentumMatrices,
+    method: SolutionMethod,
+) -> MomentumSolutionVectors {
+    let u: Vec<Float> = vec![0.];
+    let v: Vec<Float> = vec![0.];
+    let w: Vec<Float> = vec![0.];
+    MomentumSolutionVectors { u, v, w }
+}
+
+pub fn build_pressure_correction_matrices(mesh: &Mesh) -> MomentumMatrices {
     // TODO: ignore boundary cells
     let cell_count = mesh.cells.len();
     let mut u_matrix = TriMat::new((cell_count, cell_count));
@@ -139,7 +160,7 @@ pub fn build_pressure_correction_matrices(mesh: &Mesh) -> SolutionMatrices {
     let mut v_source: Vec<Float> = vec![0.; cell_count];
     let mut w_source: Vec<Float> = vec![0.; cell_count];
 
-    SolutionMatrices {
+    MomentumMatrices {
         u: LinearSystem {
             a: u_matrix.to_csr(),
             b: u_source,
@@ -162,7 +183,7 @@ pub fn build_discretized_momentum_matrices(
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
     mu: Float,
-) -> SolutionMatrices {
+) -> MomentumMatrices {
     use std::collections::HashSet;
 
     // TODO: Ignore boundary cells
@@ -332,7 +353,7 @@ pub fn build_discretized_momentum_matrices(
         );
     } // end cell loop
 
-    SolutionMatrices {
+    MomentumMatrices {
         u: LinearSystem {
             a: u_matrix.to_csr(),
             b: u_source,
