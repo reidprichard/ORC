@@ -219,12 +219,14 @@ pub fn build_solution_matrices(
                 * (d_i
                     + match momentum_scheme {
                         MomentumDiscretization::UD => {
-                            Float::max(f_i, 0.)
+                            // If upwinding, neighbor only affects this cell if flux is into this
+                            // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
+                            Float::min(f_i, 0.)
                         }
                         MomentumDiscretization::CD => f_i / 2.,
                         _ => panic!("unsupported momentum scheme"),
                     });
-            a_p = a_p - a_nb - f_i + s_p;
+            a_p = a_p - a_nb + f_i + s_p; // sign of f_i?
 
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
