@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::mesh::*;
 use sprs::{CsMat, CsVec, TriMat};
-use std::collections::HashMap;
+// use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -144,36 +144,31 @@ pub fn solve_momentum_equations(
     system: &MomentumMatrices,
     method: SolutionMethod,
 ) -> MomentumSolutionVectors {
+    // TODO: implement
     let u: Vec<Float> = vec![0.];
     let v: Vec<Float> = vec![0.];
     let w: Vec<Float> = vec![0.];
     MomentumSolutionVectors { u, v, w }
 }
 
-pub fn build_pressure_correction_matrices(mesh: &Mesh) -> MomentumMatrices {
+pub fn build_pressure_correction_matrices(
+    mesh: &Mesh,
+    momentum_matrices: &MomentumMatrices,
+    rho: Float,
+) -> LinearSystem {
     // TODO: ignore boundary cells
     let cell_count = mesh.cells.len();
-    let mut u_matrix = TriMat::new((cell_count, cell_count));
-    let mut v_matrix = TriMat::new((cell_count, cell_count));
-    let mut w_matrix = TriMat::new((cell_count, cell_count));
-    let mut u_source: Vec<Float> = vec![0.; cell_count];
-    let mut v_source: Vec<Float> = vec![0.; cell_count];
-    let mut w_source: Vec<Float> = vec![0.; cell_count];
+    let a = TriMat::new((cell_count, cell_count));
+    let b: Vec<Float> = vec![0.; cell_count];
 
-    MomentumMatrices {
-        u: LinearSystem {
-            a: u_matrix.to_csr(),
-            b: u_source,
-        },
-        v: LinearSystem {
-            a: v_matrix.to_csr(),
-            b: v_source,
-        },
-        w: LinearSystem {
-            a: w_matrix.to_csr(),
-            b: w_source,
-        },
+    for (cell_number, cell) in mesh.cells {
+        let a_p: Float = 0.;
+        for face_number in cell.face_numbers {
+            let a_nb: Float = 0.;
+        }
     }
+
+    LinearSystem { a: a.to_csr(), b }
 }
 
 pub fn build_discretized_momentum_matrices(
@@ -184,8 +179,6 @@ pub fn build_discretized_momentum_matrices(
     rho: Float,
     mu: Float,
 ) -> MomentumMatrices {
-    use std::collections::HashSet;
-
     // TODO: Ignore boundary cells
     let cell_count = mesh.cells.len();
     let mut u_matrix = TriMat::new((cell_count, cell_count));
@@ -310,7 +303,7 @@ pub fn build_discretized_momentum_matrices(
                         MomentumDiscretization::CD => f_i / 2.,
                         _ => panic!("unsupported momentum scheme"),
                     });
-            a_p += (-a_nb + f_i + s_p); // sign of f_i?
+            a_p += -a_nb + f_i + s_p; // sign of f_i?
             s_u += source_term;
 
             // If it's zero, that means it's a boundary face

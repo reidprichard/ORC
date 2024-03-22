@@ -12,7 +12,6 @@ pub mod solver;
 pub mod common {
     use std::{
         fmt,
-        iter::Sum,
         ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
     };
 
