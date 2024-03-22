@@ -5,7 +5,7 @@ use orc::io::read_mesh;
 use orc::mesh::*;
 use orc::solver::*;
 
-fn test_2d() -> Mesh {
+fn test_2d() {
     let domain_height = 1.;
     let domain_length = 2.;
     let cell_height = domain_height / 3.;
@@ -45,10 +45,19 @@ fn test_2d() -> Mesh {
         }
     }
 
-    mesh
+    solve_steady(
+        &mut mesh,
+        PressureVelocityCoupling::SIMPLE,
+        MomentumDiscretization::UD,
+        PressureInterpolation::Linear,
+        VelocityInterpolation::Linear,
+        1000.,
+        0.001,
+        100,
+    )
 }
 
-fn test_3d() -> Mesh {
+fn test_3d() {
     let cell_size = 1. / 3.;
     let face_area = cell_size * cell_size;
     let cell_volume = face_area * cell_size;
@@ -59,8 +68,10 @@ fn test_3d() -> Mesh {
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Wall;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Wall;
 
-    let (face_min_actual, face_max_actual) =
-        mesh.faces.iter().fold((face_area, face_area), |acc, (i, f)| {
+    let (face_min_actual, face_max_actual) = mesh
+        .faces
+        .iter()
+        .fold((face_area, face_area), |acc, (i, f)| {
             (f32::min(acc.0, f.area), f32::max(acc.1, f.area))
         });
     let area_tolerance = 0.001;
@@ -79,7 +90,16 @@ fn test_3d() -> Mesh {
         }
     }
 
-    mesh
+    solve_steady(
+        &mut mesh,
+        PressureVelocityCoupling::SIMPLE,
+        MomentumDiscretization::UD,
+        PressureInterpolation::Linear,
+        VelocityInterpolation::Linear,
+        1000.,
+        0.001,
+        100,
+    )
 }
 
 fn main() {
@@ -88,16 +108,8 @@ fn main() {
     // 1. Read mesh
     println!("Starting.");
     println!("Reading mesh.");
-    let mut mesh = test_2d();
+    test_2d();
     println!("Building solution matrices.");
-    let linear_system = build_discretized_momentum_matrices(
-        &mut mesh,
-        MomentumDiscretization::UD,
-        PressureInterpolation::Linear,
-        VelocityInterpolation::Linear,
-        1000.,
-        0.001,
-    );
     // 2. Read data
     // 3. Read settings
     // 4. Write mesh
