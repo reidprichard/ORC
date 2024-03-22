@@ -148,6 +148,32 @@ pub fn build_solution_matrices(
 
             let face_bc = &mesh.face_zones[&face.zone];
             let (f_i, d_i, neighbor_cell_number): (Float, Float, Uint) = match face_bc.zone_type {
+                BoundaryConditionTypes::Wall => {
+                    // Do I need to do anything here?
+                    // The advective and diffusive fluxes through this face are zero, and there's
+                    // no source here, so I think not.
+                    (0., 0., 0)
+                }
+                BoundaryConditionTypes::VelocityInlet => {
+                    // By default, face normals point to cell 0.
+                    // If a face only has one neighbor, that neighbor will be cell 0.
+                    // Therefore, if we reverse this normal, it will be facing outward.
+                    let outward_face_normal = -face.normal;
+                    // Advection (flux) coefficient
+                    let f_i: Float =
+                        face_bc.vector_value.dot(&outward_face_normal) * face.area * rho;
+                    // Diffusion coefficient
+                    let d_i: Float = mu * face.area;
+
+                    (f_i, d_i, 0)
+                }
+                BoundaryConditionTypes::PressureInlet | BoundaryConditionTypes::PressureOutlet => {
+                    (0., 0., 0)
+                }
+                _ => {
+                    println!("*** {} ***", face_bc.zone_type);
+                    panic!("BC not supported");
+                }
                 BoundaryConditionTypes::Interior => {
                     let face_velocity = interpolate_face_velocity(
                         &mesh,
@@ -187,32 +213,6 @@ pub fn build_solution_matrices(
                     // let s_cross_diffusion = -mu *
 
                     (f_i, d_i, neighbor_cell_number)
-                }
-                BoundaryConditionTypes::Wall => {
-                    // Do I need to do anything here?
-                    // The advective and diffusive fluxes through this face are zero, and there's
-                    // no source here, so I think not.
-                    (0., 0., 0)
-                }
-                BoundaryConditionTypes::VelocityInlet => {
-                    // By default, face normals point to cell 0.
-                    // If a face only has one neighbor, that neighbor will be cell 0.
-                    // Therefore, if we reverse this normal, it will be facing outward.
-                    let outward_face_normal = -face.normal;
-                    // Advection (flux) coefficient
-                    let f_i: Float =
-                        face_bc.vector_value.dot(&outward_face_normal) * face.area * rho;
-                    // Diffusion coefficient
-                    let d_i: Float = mu * face.area;
-
-                    (f_i, d_i, 0)
-                }
-                BoundaryConditionTypes::PressureInlet | BoundaryConditionTypes::PressureOutlet => {
-                    (0., 0., 0)
-                }
-                _ => {
-                    println!("*** {} ***", face_bc.zone_type);
-                    panic!("BC not supported");
                 }
             }; // end BC match
             let a_nb: Vector = Vector::ones()
