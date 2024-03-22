@@ -158,14 +158,19 @@ pub fn build_pressure_correction_matrices(
 ) -> LinearSystem {
     // TODO: ignore boundary cells
     let cell_count = mesh.cells.len();
-    let a = TriMat::new((cell_count, cell_count));
-    let b: Vec<Float> = vec![0.; cell_count];
+    let mut a = TriMat::new((cell_count, cell_count));
+    let mut b: Vec<Float> = vec![0.; cell_count];
 
     for (cell_number, cell) in mesh.cells {
         let a_p: Float = 0.;
+        let b_p: Float = 0.;
         for face_number in cell.face_numbers {
             let a_nb: Float = 0.;
+            // do stuff
+            a.add_triplet((cell_number - 1) as usize, (face_number - 1) as usize, a_nb);
         }
+        a.add_triplet((cell_number - 1) as usize, (cell_number - 1) as usize, a_p);
+        b.push(b_p);
     }
 
     LinearSystem { a: a.to_csr(), b }
