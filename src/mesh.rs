@@ -41,26 +41,26 @@ pub enum FaceConditionTypes {
 
 macro_rules! bc_types_from {
     ($T: ty) => {
-        impl TryFrom<$T> for BoundaryConditionTypes {
+        impl TryFrom<$T> for FaceConditionTypes {
             type Error = &'static str;
 
             fn try_from(value: $T) -> Result<Self, Self::Error> {
                 match value {
-                    2 => Ok(BoundaryConditionTypes::Interior),
-                    3 => Ok(BoundaryConditionTypes::Wall),
-                    4 => Ok(BoundaryConditionTypes::PressureInlet),
-                    5 => Ok(BoundaryConditionTypes::PressureOutlet),
-                    7 => Ok(BoundaryConditionTypes::Symmetry),
-                    8 => Ok(BoundaryConditionTypes::PeriodicShadow),
-                    9 => Ok(BoundaryConditionTypes::PressureFarField),
-                    10 => Ok(BoundaryConditionTypes::VelocityInlet),
-                    12 => Ok(BoundaryConditionTypes::Periodic),
-                    14 => Ok(BoundaryConditionTypes::PorousJump),
-                    20 => Ok(BoundaryConditionTypes::MassFlowInlet),
-                    24 => Ok(BoundaryConditionTypes::Interface),
-                    31 => Ok(BoundaryConditionTypes::Parent),
-                    36 => Ok(BoundaryConditionTypes::Outflow),
-                    37 => Ok(BoundaryConditionTypes::Axis),
+                    2 => Ok(FaceConditionTypes::Interior),
+                    3 => Ok(FaceConditionTypes::Wall),
+                    4 => Ok(FaceConditionTypes::PressureInlet),
+                    5 => Ok(FaceConditionTypes::PressureOutlet),
+                    7 => Ok(FaceConditionTypes::Symmetry),
+                    8 => Ok(FaceConditionTypes::PeriodicShadow),
+                    9 => Ok(FaceConditionTypes::PressureFarField),
+                    10 => Ok(FaceConditionTypes::VelocityInlet),
+                    12 => Ok(FaceConditionTypes::Periodic),
+                    14 => Ok(FaceConditionTypes::PorousJump),
+                    20 => Ok(FaceConditionTypes::MassFlowInlet),
+                    24 => Ok(FaceConditionTypes::Interface),
+                    31 => Ok(FaceConditionTypes::Parent),
+                    36 => Ok(FaceConditionTypes::Outflow),
+                    37 => Ok(FaceConditionTypes::Axis),
                     _ => Err("Invalid boundary condition value."),
                 }
             }

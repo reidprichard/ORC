@@ -161,10 +161,10 @@ pub fn build_pressure_correction_matrices(
     let mut a = TriMat::new((cell_count, cell_count));
     let mut b: Vec<Float> = vec![0.; cell_count];
 
-    for (cell_number, cell) in mesh.cells {
+    for (cell_number, cell) in &mesh.cells {
         let a_p: Float = 0.;
         let b_p: Float = 0.;
-        for face_number in cell.face_numbers {
+        for face_number in &cell.face_numbers {
             let a_nb: Float = 0.;
             // do stuff
             a.add_triplet((cell_number - 1) as usize, (face_number - 1) as usize, a_nb);
@@ -218,14 +218,14 @@ pub fn build_discretized_momentum_matrices(
 
             let face_bc = &mesh.face_zones[&face.zone];
             let (f_i, d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
-                BoundaryConditionTypes::Wall => {
+                FaceConditionTypes::Wall => {
                     // Do I need to do anything here?
                     // The advective and diffusive fluxes through this face are zero, and there's
                     // no source here (right?), so I think not.
                     // NOTE: Assumes zero wall-normal pressure gradient
                     (0., 0., face.normal * (-cell.pressure), 0)
                 }
-                BoundaryConditionTypes::VelocityInlet => {
+                FaceConditionTypes::VelocityInlet => {
                     // By default, face normals point to cell 0.
                     // If a face only has one neighbor, that neighbor will be cell 0.
                     // Therefore, if we reverse this normal, it will be facing outward.
@@ -240,14 +240,10 @@ pub fn build_discretized_momentum_matrices(
                     // NOTE: Assumes zero streamwise pressure gradient
                     (f_i, d_i, outward_face_normal * cell.pressure, 0)
                 }
-                BoundaryConditionTypes::PressureInlet | BoundaryConditionTypes::PressureOutlet => {
+                FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                     (0., 0., face.normal * (-face_bc.scalar_value), 0)
                 }
-                _ => {
-                    println!("*** {} ***", face_bc.zone_type);
-                    panic!("BC not supported");
-                }
-                BoundaryConditionTypes::Interior => {
+                FaceConditionTypes::Interior => {
                     let face_velocity = interpolate_face_velocity(
                         &mesh,
                         *face_number,
@@ -295,6 +291,10 @@ pub fn build_discretized_momentum_matrices(
                         outward_face_normal * face_pressure,
                         neighbor_cell_number,
                     )
+                }
+                _ => {
+                    println!("*** {} ***", face_bc.zone_type);
+                    panic!("BC not supported");
                 }
             }; // end BC match
             let a_nb: Vector = Vector::ones()
