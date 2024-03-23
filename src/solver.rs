@@ -82,7 +82,6 @@ pub fn solve_steady(
                     mu,
                 );
                 print_linear_system(&a, &b_u);
-                print!("\n\n");
                 solve_linear_system(
                     &a,
                     &b_u,
@@ -105,6 +104,8 @@ pub fn solve_steady(
                     SolutionMethod::GaussSeidel,
                 );
 
+                println!("\n{u:?}, {v:?}, {w:?}");
+                print!("\n\n");
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
                         .get_mut(&(i + 1).try_into().unwrap())
@@ -144,6 +145,35 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
     // - Wall: d/dn (psi) = 0
     // - Inlet: d/dn (psi) = V
     // - Outlet: psi = 0
+    for _ in 0..100 {
+        for cell_number in 1..=(mesh.cells.len() as Uint) {
+            let mut p = 0.;
+            let cell = &mesh.cells[&cell_number];
+            for face_number in &cell.face_numbers {
+                let face_zone = &mesh.faces[&face_number].zone;
+                p += match &mesh.face_zones[face_zone].zone_type {
+                    FaceConditionTypes::Wall => cell.pressure,
+                    FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+                        mesh.face_zones[face_zone].scalar_value
+                    }
+                    FaceConditionTypes::Interior => mesh.faces[&face_number]
+                        .cell_numbers
+                        .iter()
+                        .fold(0., |acc, neighbor_cell_number| {
+                            acc + mesh.cells[neighbor_cell_number].pressure / 2.
+                        }),
+                    _ => panic!("unsupported face zone type for initialization"),
+                }
+            }
+            let mut cell = mesh.cells.get_mut(&cell_number).unwrap();
+            cell.pressure = p / (cell.face_numbers.len() as Float);
+        }
+    }
+    // print!("\n\n");
+    // for (_, cell) in &mesh.cells {
+    //     println!("{}, {}", cell.centroid, cell.pressure);
+    // }
+    // print!("\n\n");
 }
 
 fn get_velocity_source_term(location: Vector) -> Vector {
