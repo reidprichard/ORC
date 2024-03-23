@@ -273,11 +273,6 @@ pub fn build_discretized_momentum_matrices(
     let mut v_source: Vec<Float> = vec![0.; cell_count];
     let mut w_source: Vec<Float> = vec![0.; cell_count];
 
-    match momentum_scheme {
-        MomentumDiscretization::UD => {}
-        _ => panic!("Invalid momentum scheme."),
-    }
-
     // Iterate over all cells in the mesh
     for (cell_number, cell) in &mesh.cells {
         // Diffusion of scalar phi from neighbor into this cell
