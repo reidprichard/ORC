@@ -146,7 +146,7 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
     // - Inlet: d/dn (psi) = V
     // - Outlet: psi = 0
     for _ in 0..100 {
-        for cell_number in 1..=(mesh.cells.len() as Uint) {
+        for cell_number in 1..=mesh.cells.len() {
             let mut p = 0.;
             let cell = &mesh.cells[&cell_number];
             for face_number in &cell.face_numbers {
@@ -169,11 +169,11 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
             cell.pressure = p / (cell.face_numbers.len() as Float);
         }
     }
-    // print!("\n\n");
-    // for (_, cell) in &mesh.cells {
-    //     println!("{}, {}", cell.centroid, cell.pressure);
-    // }
-    // print!("\n\n");
+    print!("\n\n");
+    for (_, cell) in &mesh.cells {
+        println!("{}, {}", cell.centroid, cell.pressure);
+    }
+    print!("\n\n");
 }
 
 fn get_velocity_source_term(location: Vector) -> Vector {
@@ -182,7 +182,7 @@ fn get_velocity_source_term(location: Vector) -> Vector {
 
 fn interpolate_face_velocity(
     mesh: &Mesh,
-    face_number: Uint,
+    face_number: usize,
     interpolation_scheme: VelocityInterpolation,
 ) -> Vector {
     // ****** TODO: Add skewness corrections!!! ********
@@ -213,7 +213,7 @@ fn interpolate_face_velocity(
 
 fn interpolate_face_pressure(
     mesh: &Mesh,
-    face_number: Uint,
+    face_number: usize,
     interpolation_scheme: PressureInterpolation,
 ) -> Float {
     let face = &mesh.faces[&face_number];
@@ -342,7 +342,7 @@ fn build_discretized_momentum_matrices(
                         velocity_interpolation_scheme,
                     );
 
-                    let mut neighbor_cell_number: Uint = 0;
+                    let mut neighbor_cell_number: usize = 0;
                     let outward_face_normal: Vector = get_outward_face_normal(&face, *cell_number);
                     if face.cell_numbers[0] == *cell_number {
                         // face normal points to cell 0 by default, so we need to flip it
@@ -406,16 +406,16 @@ fn build_discretized_momentum_matrices(
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
                 a.add_triplet(
-                    (*cell_number - 1) as usize,
-                    (neighbor_cell_number - 1) as usize,
+                    *cell_number - 1,
+                    neighbor_cell_number - 1,
                     -a_nb,
                 );
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
-        u_source[(cell_number - 1) as usize] = source_total.x;
-        v_source[(cell_number - 1) as usize] = source_total.y;
-        w_source[(cell_number - 1) as usize] = source_total.z;
+        u_source[cell_number - 1] = source_total.x;
+        v_source[cell_number - 1] = source_total.y;
+        w_source[cell_number - 1] = source_total.z;
 
         a.add_triplet(
             (*cell_number - 1).try_into().unwrap(),
@@ -451,7 +451,7 @@ fn build_pressure_correction_matrices(
             let outward_face_normal = get_outward_face_normal(&face, *cell_number);
             b_p += -rho * face_velocity.dot(&outward_face_normal) * face.area;
 
-            let neighbor_cell_number: Uint = if face.cell_numbers[0] != *cell_number {
+            let neighbor_cell_number: usize = if face.cell_numbers[0] != *cell_number {
                 face.cell_numbers[0]
             } else {
                 face.cell_numbers[1]
@@ -460,19 +460,19 @@ fn build_pressure_correction_matrices(
             let a_nb = rho * Float::powi(face.area, 2)
                 / momentum_matrices
                     .get(
-                        (*cell_number - 1) as usize,
-                        (neighbor_cell_number - 1) as usize,
+                        *cell_number - 1,
+                        neighbor_cell_number - 1,
                     )
                     .unwrap();
 
             a.add_triplet(
-                (cell_number - 1) as usize,
-                (neighbor_cell_number - 1) as usize,
+                cell_number - 1,
+                neighbor_cell_number - 1,
                 -a_nb,
             );
             a_p += a_nb;
         }
-        a.add_triplet((cell_number - 1) as usize, (cell_number - 1) as usize, a_p);
+        a.add_triplet(cell_number - 1, cell_number - 1, a_p);
         b.push(b_p);
     }
 
@@ -500,12 +500,12 @@ fn apply_pressure_correction(
                     };
                     let outward_face_normal = get_outward_face_normal(&face, *cell_number);
                     acc + outward_face_normal
-                        * (p_prime[(*cell_number-1) as usize] - p_prime[(neighbor_cell_number-1) as usize])
+                        * (p_prime[*cell_number-1] - p_prime[neighbor_cell_number-1])
                         * face.area
-                        / *momentum_matrices.get((*cell_number-1) as usize, (neighbor_cell_number-1) as usize)
+                        / *momentum_matrices.get(*cell_number-1, neighbor_cell_number-1)
                             .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
                 }
             });
-        cell.pressure += p_prime[(*cell_number - 1) as usize];
+        cell.pressure += p_prime[*cell_number - 1];
     }
 }

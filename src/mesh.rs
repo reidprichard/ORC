@@ -133,7 +133,7 @@ pub enum GradientReconstructionMethods {
 
 pub struct Cell {
     pub zone_number: Uint,
-    pub face_numbers: Vec<Uint>,
+    pub face_numbers: Vec<usize>,
     pub volume: Float,
     pub centroid: Vector,
     pub velocity: Vector,
@@ -154,7 +154,7 @@ impl Default for Cell {
 
 // #[derive(Copy, Clone)]
 pub struct Node {
-    pub cell_numbers: Vec<Uint>,
+    pub cell_numbers: Vec<usize>,
     pub position: Vector,
     pub velocity: Vector,
     pub pressure: Float,
@@ -182,8 +182,8 @@ impl Default for Node {
 pub struct Face {
     pub zone: Uint,
     // TODO: Make this an array
-    pub cell_numbers: Vec<Uint>,
-    pub node_numbers: Vec<Uint>,
+    pub cell_numbers: Vec<usize>,
+    pub node_numbers: Vec<usize>,
     pub area: Float,
     pub centroid: Vector,
     pub normal: Vector,
@@ -207,9 +207,9 @@ impl Default for Face {
 }
 
 pub struct Mesh {
-    pub nodes: HashMap<Uint, Node>,
-    pub faces: HashMap<Uint, Face>,
-    pub cells: HashMap<Uint, Cell>,
+    pub nodes: HashMap<usize, Node>,
+    pub faces: HashMap<usize, Face>,
+    pub cells: HashMap<usize, Cell>,
     pub face_zones: HashMap<Uint, FaceZone>,
     pub cell_zones: HashMap<Uint, CellZone>,
 }
@@ -222,7 +222,7 @@ impl Mesh {
             .next()
             .expect(&format!("face zone '{zone_name}' exists in mesh"))
     }
-    pub fn calculate_velocity_gradient(&self, cell_number: Uint) -> Tensor {
+    pub fn calculate_velocity_gradient(&self, cell_number: usize) -> Tensor {
         let cell = self.cells.get(&cell_number).expect("valid cell number");
         cell.face_numbers
             .iter()
@@ -242,7 +242,7 @@ impl Mesh {
     }
 }
 
-pub fn get_outward_face_normal(face: &Face, cell_number: Uint) -> Vector {
+pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector {
     if cell_number == face.cell_numbers[0] {
         face.normal
     } else {

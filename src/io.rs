@@ -38,27 +38,27 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         Ok(io::BufReader::new(file).lines())
     }
 
-    fn read_section_header_common(header_line: &str) -> Vec<Uint> {
+    fn read_section_header_common(header_line: &str) -> Vec<usize> {
         let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
         // let re = Regex::new(r"\(\d+ \(([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+)")
         //     .expect("valid regex");
 
-        let mut items: Vec<Uint> = Vec::new();
+        let mut items: Vec<usize> = Vec::new();
         for (_, [s]) in re.captures_iter(header_line).map(|c| c.extract()) {
-            items.push(Uint::from_str_radix(s, 16).expect("valid hex"));
+            items.push(usize::from_str_radix(s, 16).expect("valid hex"));
         }
         items
     }
 
-    let mut nodes: HashMap<Uint, Node> = HashMap::new();
-    let mut faces: HashMap<Uint, Face> = HashMap::new();
-    let mut cells: HashMap<Uint, Cell> = HashMap::new();
+    let mut nodes: HashMap<usize, Node> = HashMap::new();
+    let mut faces: HashMap<usize, Face> = HashMap::new();
+    let mut cells: HashMap<usize, Cell> = HashMap::new();
     let mut face_zones: HashMap<Uint, FaceZone> = HashMap::new();
     let mut cell_zones: HashMap<Uint, CellZone> = HashMap::new();
 
-    let mut node_indices: Vec<Uint> = Vec::new();
-    let mut face_indices: Vec<Uint> = Vec::new();
-    let mut cell_indices: Vec<Uint> = Vec::new();
+    let mut node_indices: Vec<usize> = Vec::new();
+    let mut face_indices: Vec<usize> = Vec::new();
+    let mut cell_indices: Vec<usize> = Vec::new();
 
     let mut dimensions: u8 = 0;
 
@@ -190,8 +190,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .map(|n| *n)
                         .collect_tuple()
                         .expect("cell section has 6 entries");
-                    cell_zones.entry(zone_id).or_insert(CellZone {
-                        zone_type,
+                    cell_zones.entry(zone_id as Uint).or_insert(CellZone {
+                        zone_type: (zone_type as Uint),
                         // name: zone_name.clone(), // Fluent doesn't seem to set comments for zone
                         // name
                     });
@@ -204,8 +204,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .map(|n| *n)
                         .collect_tuple()
                         .expect("face section has 6 entries");
-                    face_zones.entry(zone_id).or_insert(FaceZone {
-                        zone_type: FaceConditionTypes::try_from(boundary_type)
+                    face_zones.entry(zone_id as Uint).or_insert(FaceZone {
+                        zone_type: FaceConditionTypes::try_from(boundary_type as Uint)
                             .expect("valid BC type"),
                         name: zone_name.clone(),
                         scalar_value: 0.,
@@ -244,15 +244,15 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         faces.insert(
                             face_index,
                             Face {
-                                zone: zone_id,
+                                zone: zone_id as Uint,
                                 cell_numbers: line_blocks[node_count..]
                                     .into_iter()
-                                    .map(|cell_id| Uint::from_str_radix(cell_id, 16))
+                                    .map(|cell_id| usize::from_str_radix(cell_id, 16))
                                     .flatten()
                                     .collect(),
                                 node_numbers: line_blocks[..node_count]
                                     .into_iter()
-                                    .map(|node_id| Uint::from_str_radix(node_id, 16))
+                                    .map(|node_id| usize::from_str_radix(node_id, 16))
                                     .flatten()
                                     .collect(),
                                 ..Face::default()
