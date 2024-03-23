@@ -22,6 +22,7 @@ macro_rules! skip_zone_zero {
     };
 }
 
+// TODO: Subtract one from element numbers so they start at 0
 pub fn read_mesh(mesh_path: &str) -> Mesh {
     println!("Beginning reading mesh from {mesh_path}");
 

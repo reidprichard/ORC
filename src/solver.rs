@@ -5,6 +5,9 @@ use itertools::izip;
 use sprs::{CsMat, CsVec, TriMat};
 // use std::collections::HashMap;
 
+// TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
+// TODO: Change cell/face/node numbers to `usize`
+
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
     GaussSeidel,
@@ -61,6 +64,7 @@ pub fn solve_steady(
     mu: Float,
     iteration_count: Uint,
 ) {
+    const GAUSS_SEIDEL_ITERS: Uint = 100;
     initialize_pressure_field(mesh);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
@@ -79,9 +83,27 @@ pub fn solve_steady(
                 );
                 print_linear_system(&a, &b_u);
                 print!("\n\n");
-                solve_linear_system(&a, &b_u, &mut u, 20, SolutionMethod::GaussSeidel);
-                solve_linear_system(&a, &b_v, &mut v, 20, SolutionMethod::GaussSeidel);
-                solve_linear_system(&a, &b_w, &mut w, 20, SolutionMethod::GaussSeidel);
+                solve_linear_system(
+                    &a,
+                    &b_u,
+                    &mut u,
+                    GAUSS_SEIDEL_ITERS,
+                    SolutionMethod::GaussSeidel,
+                );
+                solve_linear_system(
+                    &a,
+                    &b_v,
+                    &mut v,
+                    GAUSS_SEIDEL_ITERS,
+                    SolutionMethod::GaussSeidel,
+                );
+                solve_linear_system(
+                    &a,
+                    &b_w,
+                    &mut w,
+                    GAUSS_SEIDEL_ITERS,
+                    SolutionMethod::GaussSeidel,
+                );
 
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
@@ -105,9 +127,11 @@ pub fn solve_steady(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    20,
+                    GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
                 );
+
+                apply_pressure_correction(mesh, &a, &p_prime);
             }
         }
         _ => panic!("unsupported pressure-velocity coupling"),
@@ -213,7 +237,7 @@ pub fn solve_linear_system(
     }
 }
 
-pub fn build_discretized_momentum_matrices(
+fn build_discretized_momentum_matrices(
     mesh: &Mesh,
     momentum_scheme: MomentumDiscretization,
     pressure_interpolation_scheme: PressureInterpolation,
@@ -289,8 +313,7 @@ pub fn build_discretized_momentum_matrices(
                     );
 
                     let mut neighbor_cell_number: Uint = 0;
-                    let outward_face_normal: Vector =
-                        mesh.get_outward_face_normal(*face_number, *cell_number);
+                    let outward_face_normal: Vector = get_outward_face_normal(&face, *cell_number);
                     if face.cell_numbers[0] == *cell_number {
                         // face normal points to cell 0 by default, so we need to flip it
                         neighbor_cell_number = *face
@@ -373,7 +396,7 @@ pub fn build_discretized_momentum_matrices(
     (a.to_csr(), u_source, v_source, w_source)
 }
 
-pub fn build_pressure_correction_matrices(
+fn build_pressure_correction_matrices(
     mesh: &Mesh,
     momentum_matrices: &CsMat<Float>,
     velocity_interpolation_scheme: VelocityInterpolation,
@@ -395,7 +418,7 @@ pub fn build_pressure_correction_matrices(
 
             let face_velocity =
                 interpolate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
-            let outward_face_normal = mesh.get_outward_face_normal(*face_number, *cell_number);
+            let outward_face_normal = get_outward_face_normal(&face, *cell_number);
             b_p += -rho * face_velocity.dot(&outward_face_normal) * face.area;
 
             let neighbor_cell_number: Uint = if face.cell_numbers[0] != *cell_number {
@@ -424,4 +447,35 @@ pub fn build_pressure_correction_matrices(
     }
 
     LinearSystem { a: a.to_csr(), b }
+}
+
+fn apply_pressure_correction(
+    mesh: &mut Mesh,
+    momentum_matrices: &CsMat<Float>,
+    p_prime: &Vec<Float>,
+) {
+    for (cell_number, cell) in &mut mesh.cells {
+        cell.velocity += cell
+            .face_numbers
+            .iter()
+            .fold(Vector::zero(), |acc, face_number| {
+                let face = &mesh.faces[face_number];
+                if face.cell_numbers.len() == 1 {
+                    acc
+                } else {
+                    let neighbor_cell_number = if face.cell_numbers[0] == *cell_number {
+                        face.cell_numbers[1]
+                    } else {
+                        face.cell_numbers[0]
+                    };
+                    let outward_face_normal = get_outward_face_normal(&face, *cell_number);
+                    acc + outward_face_normal
+                        * (p_prime[(*cell_number-1) as usize] - p_prime[(neighbor_cell_number-1) as usize])
+                        * face.area
+                        / *momentum_matrices.get((*cell_number-1) as usize, (neighbor_cell_number-1) as usize)
+                            .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
+                }
+            });
+        cell.pressure += p_prime[(*cell_number - 1) as usize];
+    }
 }
