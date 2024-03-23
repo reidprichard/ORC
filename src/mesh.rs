@@ -224,17 +224,28 @@ impl Mesh {
     }
     pub fn calculate_velocity_gradient(&self, cell_number: Uint) -> Tensor {
         let cell = self.cells.get(&cell_number).expect("valid cell number");
-        cell.face_numbers.iter().map(|face_number| {
-            let face = &self.faces[face_number];
-            let mut neighbor_count = 0;
-            face
-                .cell_numbers
-                .iter()
-                .filter(|c| **c != 0)
-                .inspect(|_| neighbor_count += 1)
-                .map(|c| self.cells[c].velocity)
-                .fold(Vector::zero(), |acc, v| acc + v)
-                .outer(&face.centroid) / neighbor_count
-        }).fold(Tensor::zero(), |acc, t| acc + t)
+        cell.face_numbers
+            .iter()
+            .map(|face_number| {
+                let face = &self.faces[face_number];
+                let mut neighbor_count = 0;
+                face.cell_numbers
+                    .iter()
+                    .filter(|c| **c != 0)
+                    .inspect(|_| neighbor_count += 1)
+                    .map(|c| self.cells[c].velocity)
+                    .fold(Vector::zero(), |acc, v| acc + v)
+                    .outer(&face.centroid)
+                    / neighbor_count
+            })
+            .fold(Tensor::zero(), |acc, t| acc + t)
+    }
+    pub fn get_outward_face_normal(mesh: &Mesh, face_number: Uint, cell_number: Uint) -> Vector {
+        let face = &mesh.faces[&face_number];
+        if cell_number == face.cell_numbers[0] {
+            face.normal
+        } else {
+            -face.normal
+        }
     }
 }
