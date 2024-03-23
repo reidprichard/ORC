@@ -139,7 +139,8 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
-                // print_linear_system(&a, &b_u);
+                print_linear_system(&a, &b_u);
+                print!("\n\n");
                 solve_linear_system(&a, &b_u, &mut u, 20, SolutionMethod::GaussSeidel);
                 solve_linear_system(&a, &b_v, &mut v, 20, SolutionMethod::GaussSeidel);
                 solve_linear_system(&a, &b_w, &mut w, 20, SolutionMethod::GaussSeidel);
@@ -187,11 +188,16 @@ pub fn solve_linear_system(
         SolutionMethod::GaussSeidel => {
             'iter_loop: for _ in 0..iteration_count {
                 'row_loop: for i in 0..solution_vector.len() {
-                    solution_vector[i] = (b[i]
-                        - solution_vector.iter().enumerate().fold(0., |acc, (j, x)| {
-                            a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
-                        }))
-                        / a.get(i, i).expect("matrix A should have a (nonzero) diagonal element for each element of solution vector")
+                    solution_vector[i] = (
+                        b[i]
+                        - solution_vector
+                            .iter()
+                            .enumerate()
+                            .fold(0., |acc, (j, x)| {
+                                acc + a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
+                            })
+                    ) / a.get(i, i)
+                        .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector")
                 }
             }
         }
@@ -404,9 +410,9 @@ pub fn build_discretized_momentum_matrices(
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
-        u_source.push(source_total.x);
-        v_source.push(source_total.y);
-        w_source.push(source_total.z);
+        u_source[(cell_number - 1) as usize] = source_total.x;
+        v_source[(cell_number - 1) as usize] = source_total.y;
+        w_source[(cell_number - 1) as usize] = source_total.z;
 
         a.add_triplet(
             (*cell_number - 1).try_into().unwrap(),

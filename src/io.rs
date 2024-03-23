@@ -514,7 +514,8 @@ pub fn write_settings() {}
 pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     for i in 0..a.rows() {
         for j in 0..a.rows() {
-            print!("{:<2}, ", Float::round(*a.get(i, j).unwrap_or(&0.)));
+            // print!("{:<2}, ", Float::round(*a.get(i, j).unwrap_or(&0.)));
+            print!("{}, ", a.get(i, j).unwrap_or(&0.));
         }
         println!("\t{}", b[i]);
     }

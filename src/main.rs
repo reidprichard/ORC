@@ -1,9 +1,55 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use orc::common::Float;
 use orc::io::read_mesh;
+use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
+use sprs::{CsMat, TriMat};
+
+fn test_gauss_seidel() {
+    println!("Testing Gauss-Seidel for correctness.");
+    const TOL: Float = 1e-6;
+    // | 2 0 1 |   | 3 |
+    // | 0 3 2 | = | 2 |
+    // | 2 0 4 |   | 1 |
+    //
+    // | 1 0 0 |   | 11/6 |   | 1.833 |
+    // | 0 1 0 |   | 10/9 |   | 1.111 |
+    // | 0 0 1 | = | -2/3 | = | -0.67 |
+    let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
+    a_tri.add_triplet(0, 0, 2.);
+    a_tri.add_triplet(0, 2, 1.);
+
+    a_tri.add_triplet(1, 1, 3.);
+    a_tri.add_triplet(1, 2, 2.);
+
+    a_tri.add_triplet(2, 0, 2.);
+    a_tri.add_triplet(2, 2, 4.);
+
+    let mut a = a_tri.to_csr();
+    // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
+    let b = vec![3., 2., 1.];
+
+    let mut x = vec![0., 0., 0.];
+
+    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel);
+
+    for row_num in 0..a.rows() {
+        assert!(
+            Float::abs(
+                a.get(row_num, 0).unwrap_or(&0.) * x[0]
+                    + a.get(row_num, 1).unwrap_or(&0.) * x[1]
+                    + a.get(row_num, 2).unwrap_or(&0.) * x[2]
+                    - b[row_num]
+            ) < TOL
+        );
+    }
+
+    println!("x = {x:?}");
+    println!("*** Gauss-Seidel test passed. ***");
+}
 
 fn test_2d() {
     let domain_height = 1.;
@@ -53,8 +99,9 @@ fn test_2d() {
         VelocityInterpolation::Linear,
         1000.,
         0.001,
-        100,
-    )
+        10,
+    );
+    write_data(&mesh, "2d_test_case.csv".into());
 }
 
 fn test_3d() {
@@ -104,6 +151,8 @@ fn test_3d() {
 
 fn main() {
     env_logger::init();
+    test_gauss_seidel();
+    return;
     // Interface: allow user to choose from
     // 1. Read mesh
     println!("Starting.");
