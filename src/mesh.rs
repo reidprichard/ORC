@@ -240,8 +240,8 @@ impl Mesh {
             })
             .fold(Tensor::zero(), |acc, t| acc + t)
     }
-    pub fn get_outward_face_normal(mesh: &Mesh, face_number: Uint, cell_number: Uint) -> Vector {
-        let face = &mesh.faces[&face_number];
+    pub fn get_outward_face_normal(&self, face_number: Uint, cell_number: Uint) -> Vector {
+        let face = &self.faces[&face_number];
         if cell_number == face.cell_numbers[0] {
             face.normal
         } else {

@@ -155,8 +155,12 @@ pub fn solve_steady(
                     };
                 }
 
-                let pressure_correction_matrices =
-                    build_pressure_correction_matrices(mesh, &a, rho);
+                let pressure_correction_matrices = build_pressure_correction_matrices(
+                    mesh,
+                    &a,
+                    velocity_interpolation_scheme,
+                    rho,
+                );
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 solve_linear_system(
                     &pressure_correction_matrices.a,
@@ -198,6 +202,7 @@ pub fn solve_linear_system(
 pub fn build_pressure_correction_matrices(
     mesh: &Mesh,
     momentum_matrices: &CsMat<Float>,
+    velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
 ) -> LinearSystem {
     // TODO: ignore boundary cells
@@ -213,6 +218,11 @@ pub fn build_pressure_correction_matrices(
             if face.cell_numbers.len() == 1 {
                 continue;
             }
+
+            let face_velocity =
+                interpolate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
+            let outward_face_normal = mesh.get_outward_face_normal(*face_number, *cell_number);
+            b_p += -rho * face_velocity.dot(&outward_face_normal) * face.area;
 
             let neighbor_cell_number: Uint = if face.cell_numbers[0] != *cell_number {
                 face.cell_numbers[0]
@@ -323,10 +333,10 @@ pub fn build_discretized_momentum_matrices(
                     );
 
                     let mut neighbor_cell_number: Uint = 0;
-                    let mut outward_face_normal: Vector = face.normal;
+                    let outward_face_normal: Vector =
+                        mesh.get_outward_face_normal(*face_number, *cell_number);
                     if face.cell_numbers[0] == *cell_number {
                         // face normal points to cell 0 by default, so we need to flip it
-                        outward_face_normal *= -1;
                         neighbor_cell_number = *face
                             .cell_numbers
                             .get(1)
