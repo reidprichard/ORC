@@ -108,6 +108,7 @@ fn main() {
     // 1. Read mesh
     println!("Starting.");
     test_2d();
+    // test_3d();
     // 2. Read data
     // 3. Read settings
     // 4. Write mesh

@@ -3,6 +3,7 @@ use crate::mesh::*;
 use itertools::Itertools;
 use log::{debug, info};
 use regex::Regex;
+use sprs::CsMat;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -503,3 +504,12 @@ pub fn write_mesh() {}
 pub fn write_data() {}
 
 pub fn write_settings() {}
+
+pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
+    for i in 0..a.rows() {
+        for j in 0..a.rows() {
+            print!("{:<2}, ", Float::round(*a.get(i,j).unwrap_or(&0.)));
+        }
+        println!("\t{}", b[i]);
+    }
+}

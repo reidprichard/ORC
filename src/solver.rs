@@ -1,4 +1,5 @@
 use crate::common::*;
+use crate::io::print_linear_system;
 use crate::mesh::*;
 use itertools::izip;
 use sprs::{CsMat, CsVec, TriMat};
@@ -138,6 +139,7 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
+                // print_linear_system(&a, &b_u);
                 solve_linear_system(&a, &b_u, &mut u, 20, SolutionMethod::GaussSeidel);
                 solve_linear_system(&a, &b_v, &mut v, 20, SolutionMethod::GaussSeidel);
                 solve_linear_system(&a, &b_w, &mut w, 20, SolutionMethod::GaussSeidel);
@@ -156,12 +158,13 @@ pub fn solve_steady(
                 let pressure_correction_matrices =
                     build_pressure_correction_matrices(mesh, &a, rho);
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
-                // solve_linear_system(
-                //     &pressure_correction_matrices,
-                //     &mut p_prime,
-                //     20,
-                //     SolutionMethod::GaussSeidel,
-                // );
+                solve_linear_system(
+                    &pressure_correction_matrices.a,
+                    &pressure_correction_matrices.b,
+                    &mut p_prime,
+                    20,
+                    SolutionMethod::GaussSeidel,
+                );
             }
         }
         _ => panic!("unsupported pressure-velocity coupling"),
@@ -203,8 +206,8 @@ pub fn build_pressure_correction_matrices(
     let mut b: Vec<Float> = vec![0.; cell_count];
 
     for (cell_number, cell) in &mesh.cells {
-        let a_p: Float = 0.;
-        let b_p: Float = 0.;
+        let mut a_p: Float = 0.;
+        let mut b_p: Float = 0.;
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
             if face.cell_numbers.len() == 1 {
@@ -219,14 +222,18 @@ pub fn build_pressure_correction_matrices(
 
             let a_nb = rho * Float::powi(face.area, 2)
                 / momentum_matrices
-                    .get(*cell_number as usize, neighbor_cell_number as usize)
+                    .get(
+                        (*cell_number - 1) as usize,
+                        (neighbor_cell_number - 1) as usize,
+                    )
                     .unwrap();
 
             a.add_triplet(
                 (cell_number - 1) as usize,
                 (neighbor_cell_number - 1) as usize,
-                a_nb,
+                -a_nb,
             );
+            a_p += a_nb;
         }
         a.add_triplet((cell_number - 1) as usize, (cell_number - 1) as usize, a_p);
         b.push(b_p);
@@ -257,8 +264,16 @@ pub fn build_discretized_momentum_matrices(
 
     // Iterate over all cells in the mesh
     for (cell_number, cell) in &mesh.cells {
-        // Diffusion from neighbor into this cell = D_i * (phi_nb - phi_P)
-        // Flux from neighbor into this cell = F_i *
+        // Diffusion of scalar phi from neighbor into this cell
+        // = <face area> * <diffusivity> * <face-normal gradient of phi>
+        // = A * nu * d/dn(phi)
+        // = A * nu * (phi_nb - phi_c) / |n|
+        // = -D_i * (phi_c - phi_nb)
+        // Advection of scalar phi from neighbor into this cell
+        // = <face velocity> dot <face inward normal> * <face area> * <face value of phi>
+        // = ~F_i * (phi_c + phi_nb) / 2 (central differencing)
+        //
+        // <sum of convection/diffusion of momentum into cell> = <momentum source>
 
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         let mut s_p = 0.; // proportional source term TODO
@@ -278,26 +293,27 @@ pub fn build_discretized_momentum_matrices(
                     // Do I need to do anything here?
                     // The advective and diffusive fluxes through this face are zero, and there's
                     // no source here (right?), so I think not.
+                    // The normal points to cell 0 (this cell), which is the direction the pressure
+                    // force acts
                     // NOTE: Assumes zero wall-normal pressure gradient
-                    (0., 0., face.normal * (-cell.pressure), 0)
+                    (0., 0., face.normal * face.area * cell.pressure, 0)
                 }
                 FaceConditionTypes::VelocityInlet => {
                     // By default, face normals point to cell 0.
                     // If a face only has one neighbor, that neighbor will be cell 0.
                     // Therefore, if we reverse this normal, it will be facing outward.
                     // TODO: Consider flipping convention of face normal direction
-                    let outward_face_normal = -face.normal;
                     // Advection (flux) coefficient
-                    let f_i: Float =
-                        face_bc.vector_value.dot(&outward_face_normal) * face.area * rho;
+                    let f_i: Float = -face_bc.vector_value.dot(&face.normal) * face.area * rho;
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area;
 
+                    // Again, face normal points toward this cell which is what we want
                     // NOTE: Assumes zero streamwise pressure gradient
-                    (f_i, d_i, outward_face_normal * cell.pressure, 0)
+                    (f_i, d_i, face.normal * face.area * cell.pressure, 0)
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-                    (0., 0., face.normal * (-face_bc.scalar_value), 0)
+                    (0., 0., face.normal * face.area * face_bc.scalar_value, 0)
                 }
                 FaceConditionTypes::Interior => {
                     let face_velocity = interpolate_face_velocity(
@@ -320,8 +336,10 @@ pub fn build_discretized_momentum_matrices(
                         neighbor_cell_number = face.cell_numbers[0];
                     }
 
-                    // Advection (flux) coefficient = advective mass flow rate out this face
-                    let f_i: Float = face_velocity.dot(&outward_face_normal) * face.area * rho;
+                    // TODO: Consider changing face unit normal to face area vector
+                    // Potentially inward area vector?
+                    // Advection (flux) coefficient = advective mass flow rate into this face
+                    let f_i: Float = -face_velocity.dot(&outward_face_normal) * face.area * rho;
                     // Cell centroids vector
                     let e_xi: Vector = mesh.cells[&neighbor_cell_number].centroid - cell.centroid;
                     // Diffusion coefficient
@@ -344,7 +362,7 @@ pub fn build_discretized_momentum_matrices(
                     (
                         f_i,
                         d_i,
-                        outward_face_normal * face_pressure,
+                        -outward_face_normal * face_pressure,
                         neighbor_cell_number,
                     )
                 }
@@ -356,14 +374,14 @@ pub fn build_discretized_momentum_matrices(
             let a_nb: Float = (d_i
                 + match momentum_scheme {
                     MomentumDiscretization::UD => {
-                        // If upwinding, neighbor only affects this cell if flux is into this
+                        // Neighbor only affects this cell if flux is into this
                         // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
                         Float::min(f_i, 0.)
                     }
                     MomentumDiscretization::CD => f_i / 2.,
                     _ => panic!("unsupported momentum scheme"),
                 });
-            a_p += -a_nb + f_i + s_p; // sign of f_i?
+            a_p += a_nb - f_i + s_p; // sign of f_i?
             s_u += source_term;
 
             // If it's zero, that means it's a boundary face
@@ -371,7 +389,7 @@ pub fn build_discretized_momentum_matrices(
                 a.add_triplet(
                     (*cell_number - 1) as usize,
                     (neighbor_cell_number - 1) as usize,
-                    a_nb,
+                    -a_nb,
                 );
             }
         } // end face loop
