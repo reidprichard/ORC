@@ -51,68 +51,6 @@ pub struct MomentumSolutionVectors {
     w: Vec<Float>,
 }
 
-fn get_velocity_source_term(location: Vector) -> Vector {
-    Vector::zero()
-}
-
-fn interpolate_face_velocity(
-    mesh: &Mesh,
-    face_number: Uint,
-    interpolation_scheme: VelocityInterpolation,
-) -> Vector {
-    // ****** TODO: Add skewness corrections!!! ********
-    let face = &mesh.faces[&face_number];
-    match interpolation_scheme {
-        VelocityInterpolation::Linear => {
-            let mut divisor: Float = 0.;
-            face.cell_numbers
-                .iter()
-                .map(|c| {
-                    (
-                        &mesh.cells[c].velocity,
-                        (face.centroid - mesh.cells[c].centroid).norm(),
-                    )
-                })
-                .fold(Vector::zero(), |acc, (v, x)| {
-                    divisor += x;
-                    acc + (*v) * x
-                })
-                / divisor
-        }
-        VelocityInterpolation::RhieChow2 => {
-            // see Versteeg & Malalasekara p340-341
-            panic!("unsupported");
-        }
-    }
-}
-
-fn interpolate_face_pressure(
-    mesh: &Mesh,
-    face_number: Uint,
-    interpolation_scheme: PressureInterpolation,
-) -> Float {
-    let face = &mesh.faces[&face_number];
-    match interpolation_scheme {
-        PressureInterpolation::Linear => {
-            let mut divisor: Float = 0.;
-            face.cell_numbers
-                .iter()
-                .map(|c| {
-                    (
-                        mesh.cells[c].pressure,
-                        (face.centroid - mesh.cells[c].centroid).norm(),
-                    )
-                })
-                .fold(0., |acc, (p, x)| {
-                    divisor += x;
-                    acc + p / x
-                })
-                / divisor
-        }
-        _ => panic!("not supported"),
-    }
-}
-
 pub fn solve_steady(
     mesh: &mut Mesh,
     pressure_velocity_coupling: PressureVelocityCoupling,
@@ -176,6 +114,76 @@ pub fn solve_steady(
     }
 }
 
+fn initialize_pressure_field(mesh: &mut Mesh) {
+    // TODO
+    // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
+    // - Wall: d/dn (psi) = 0
+    // - Inlet: d/dn (psi) = V
+    // - Outlet: psi = 0
+}
+
+fn get_velocity_source_term(location: Vector) -> Vector {
+    Vector::zero()
+}
+
+fn interpolate_face_velocity(
+    mesh: &Mesh,
+    face_number: Uint,
+    interpolation_scheme: VelocityInterpolation,
+) -> Vector {
+    // ****** TODO: Add skewness corrections!!! ********
+    let face = &mesh.faces[&face_number];
+    match interpolation_scheme {
+        VelocityInterpolation::Linear => {
+            let mut divisor: Float = 0.;
+            face.cell_numbers
+                .iter()
+                .map(|c| {
+                    (
+                        &mesh.cells[c].velocity,
+                        (face.centroid - mesh.cells[c].centroid).norm(),
+                    )
+                })
+                .fold(Vector::zero(), |acc, (v, x)| {
+                    divisor += x;
+                    acc + (*v) * x
+                })
+                / divisor
+        }
+        VelocityInterpolation::RhieChow2 => {
+            // see Versteeg & Malalasekara p340-341
+            panic!("unsupported");
+        }
+    }
+}
+
+fn interpolate_face_pressure(
+    mesh: &Mesh,
+    face_number: Uint,
+    interpolation_scheme: PressureInterpolation,
+) -> Float {
+    let face = &mesh.faces[&face_number];
+    match interpolation_scheme {
+        PressureInterpolation::Linear => {
+            let mut divisor: Float = 0.;
+            face.cell_numbers
+                .iter()
+                .map(|c| {
+                    (
+                        mesh.cells[c].pressure,
+                        (face.centroid - mesh.cells[c].centroid).norm(),
+                    )
+                })
+                .fold(0., |acc, (p, x)| {
+                    divisor += x;
+                    acc + p / x
+                })
+                / divisor
+        }
+        _ => panic!("not supported"),
+    }
+}
+
 pub fn solve_linear_system(
     a: &CsMat<Float>,
     b: &Vec<Float>,
@@ -203,59 +211,6 @@ pub fn solve_linear_system(
         }
         _ => panic!("unsupported solution method"),
     }
-}
-
-pub fn build_pressure_correction_matrices(
-    mesh: &Mesh,
-    momentum_matrices: &CsMat<Float>,
-    velocity_interpolation_scheme: VelocityInterpolation,
-    rho: Float,
-) -> LinearSystem {
-    // TODO: ignore boundary cells
-    let cell_count = mesh.cells.len();
-    let mut a = TriMat::new((cell_count, cell_count));
-    let mut b: Vec<Float> = vec![0.; cell_count];
-
-    for (cell_number, cell) in &mesh.cells {
-        let mut a_p: Float = 0.;
-        let mut b_p: Float = 0.;
-        for face_number in &cell.face_numbers {
-            let face = &mesh.faces[face_number];
-            if face.cell_numbers.len() == 1 {
-                continue;
-            }
-
-            let face_velocity =
-                interpolate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
-            let outward_face_normal = mesh.get_outward_face_normal(*face_number, *cell_number);
-            b_p += -rho * face_velocity.dot(&outward_face_normal) * face.area;
-
-            let neighbor_cell_number: Uint = if face.cell_numbers[0] != *cell_number {
-                face.cell_numbers[0]
-            } else {
-                face.cell_numbers[1]
-            };
-
-            let a_nb = rho * Float::powi(face.area, 2)
-                / momentum_matrices
-                    .get(
-                        (*cell_number - 1) as usize,
-                        (neighbor_cell_number - 1) as usize,
-                    )
-                    .unwrap();
-
-            a.add_triplet(
-                (cell_number - 1) as usize,
-                (neighbor_cell_number - 1) as usize,
-                -a_nb,
-            );
-            a_p += a_nb;
-        }
-        a.add_triplet((cell_number - 1) as usize, (cell_number - 1) as usize, a_p);
-        b.push(b_p);
-    }
-
-    LinearSystem { a: a.to_csr(), b }
 }
 
 pub fn build_discretized_momentum_matrices(
@@ -418,14 +373,55 @@ pub fn build_discretized_momentum_matrices(
     (a.to_csr(), u_source, v_source, w_source)
 }
 
-fn initialize_pressure_field(mesh: &mut Mesh) {
-    // TODO
-    // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
-    // - Wall: d/dn (psi) = 0
-    // - Inlet: d/dn (psi) = V
-    // - Outlet: psi = 0
-}
+pub fn build_pressure_correction_matrices(
+    mesh: &Mesh,
+    momentum_matrices: &CsMat<Float>,
+    velocity_interpolation_scheme: VelocityInterpolation,
+    rho: Float,
+) -> LinearSystem {
+    // TODO: ignore boundary cells
+    let cell_count = mesh.cells.len();
+    let mut a = TriMat::new((cell_count, cell_count));
+    let mut b: Vec<Float> = vec![0.; cell_count];
 
-fn iterate_steady(iteration_count: u32) {
-    // 1. Guess the
+    for (cell_number, cell) in &mesh.cells {
+        let mut a_p: Float = 0.;
+        let mut b_p: Float = 0.;
+        for face_number in &cell.face_numbers {
+            let face = &mesh.faces[face_number];
+            if face.cell_numbers.len() == 1 {
+                continue;
+            }
+
+            let face_velocity =
+                interpolate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
+            let outward_face_normal = mesh.get_outward_face_normal(*face_number, *cell_number);
+            b_p += -rho * face_velocity.dot(&outward_face_normal) * face.area;
+
+            let neighbor_cell_number: Uint = if face.cell_numbers[0] != *cell_number {
+                face.cell_numbers[0]
+            } else {
+                face.cell_numbers[1]
+            };
+
+            let a_nb = rho * Float::powi(face.area, 2)
+                / momentum_matrices
+                    .get(
+                        (*cell_number - 1) as usize,
+                        (neighbor_cell_number - 1) as usize,
+                    )
+                    .unwrap();
+
+            a.add_triplet(
+                (cell_number - 1) as usize,
+                (neighbor_cell_number - 1) as usize,
+                -a_nb,
+            );
+            a_p += a_nb;
+        }
+        a.add_triplet((cell_number - 1) as usize, (cell_number - 1) as usize, a_p);
+        b.push(b_p);
+    }
+
+    LinearSystem { a: a.to_csr(), b }
 }
