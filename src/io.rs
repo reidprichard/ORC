@@ -6,6 +6,7 @@ use regex::Regex;
 use sprs::CsMat;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Write;
 use std::io::{self, BufRead};
 
 // cells: (12 (zone-id first-index last-index type      element-type))
@@ -501,14 +502,19 @@ pub fn read_settings() {}
 
 pub fn write_mesh() {}
 
-pub fn write_data() {}
+pub fn write_data(mesh: &Mesh, output_file_name: String) {
+    let mut file = File::create(output_file_name).unwrap();
+    for (cell_number, cell) in &mesh.cells {
+        write!(file, "{},\t{},\t{}\n", cell.centroid, cell.velocity, cell.pressure);
+    }
+}
 
 pub fn write_settings() {}
 
 pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     for i in 0..a.rows() {
         for j in 0..a.rows() {
-            print!("{:<2}, ", Float::round(*a.get(i,j).unwrap_or(&0.)));
+            print!("{:<2}, ", Float::round(*a.get(i, j).unwrap_or(&0.)));
         }
         println!("\t{}", b[i]);
     }
