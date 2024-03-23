@@ -19,7 +19,7 @@ pub mod common {
     pub type Float = f32;
     pub type Uint = u32;
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     pub struct Vector {
         pub x: Float,
         pub y: Float,

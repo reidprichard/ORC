@@ -506,9 +506,13 @@ pub fn write_settings() {}
 
 pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     for i in 0..a.rows() {
+        print!("{}: ", i+1);
         for j in 0..a.rows() {
             // print!("{:<2}, ", Float::round(*a.get(i, j).unwrap_or(&0.)));
-            print!("{}: {}, ", i+1, a.get(i, j).unwrap_or(&0.));
+            let coeff = a.get(i, j).unwrap_or(&0.);
+            let exponent: Uint = Float::floor(Float::log10(Float::abs(*coeff))) as Uint;
+            let mantissa = coeff / (Uint::pow(10, exponent) as Float);
+            print!("{: >7}, ", format!("{mantissa:.2}e{exponent}"));
         }
         println!("\t{}", b[i]);
     }

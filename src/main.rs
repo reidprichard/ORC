@@ -111,7 +111,7 @@ fn test_3d_1x3() {
     let mut mesh = orc::io::read_mesh("./examples/3d_1x3.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 100.;
+    mesh.get_face_zone("INLET").scalar_value = 3e2; // 100 Pa/m = 100 Pa/cell
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -149,14 +149,14 @@ fn test_3d_1x3() {
         VelocityInterpolation::Linear,
         1000.,
         0.001,
-        1,
+        2,
     )
 }
 
 fn test_3d_3x3() {
     let cell_length = 1. / 3.;
-    let face_area = cell_length * cell_length;
-    let cell_volume = face_area * cell_length;
+    let face_area = Float::powi(cell_length, 2);
+    let cell_volume = Float::powi(cell_length, 3);
     let mut mesh = orc::io::read_mesh("./examples/3x3_cube.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;

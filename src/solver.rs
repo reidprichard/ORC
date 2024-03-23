@@ -3,6 +3,7 @@ use crate::io::print_linear_system;
 use crate::mesh::*;
 use itertools::izip;
 use sprs::{CsMat, CsVec, TriMat};
+use log::info;
 // use std::collections::HashMap;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
@@ -73,7 +74,7 @@ pub fn solve_steady(
                 let mut v: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.y).collect();
                 let mut w: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.z).collect();
                 let mut p: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.pressure).collect();
-                let (a, b_u, b_v, b_w) = build_discretized_momentum_matrices(
+                let (a, b_u, b_v, b_w) = build_momentum_matrices(
                     mesh,
                     momentum_scheme,
                     pressure_interpolation_scheme,
@@ -105,7 +106,7 @@ pub fn solve_steady(
                     SolutionMethod::GaussSeidel,
                 );
 
-                println!("\n{u:?}, {v:?}, {w:?}");
+                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
                 print!("\n\n");
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
@@ -269,7 +270,7 @@ pub fn solve_linear_system(
     }
 }
 
-fn build_discretized_momentum_matrices(
+fn build_momentum_matrices(
     mesh: &Mesh,
     momentum_scheme: MomentumDiscretization,
     pressure_interpolation_scheme: PressureInterpolation,
@@ -312,32 +313,33 @@ fn build_discretized_momentum_matrices(
             let face_bc = &mesh.face_zones[&face.zone];
             let (f_i, d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
-                    // Do I need to do anything here?
-                    // The advective and diffusive fluxes through this face are zero, and there's
-                    // no source here (right?), so I think not.
                     // The normal points to cell 0 (this cell), which is the direction the pressure
                     // force acts
                     // NOTE: Assumes zero wall-normal pressure gradient
-                    (0., 0., Vector::zero(), 0)
+                    (0., mu * face.area * (face.centroid - cell.centroid).norm(), face.normal * face.area * cell.pressure, 0)
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                     // println!("Pressure BC values: ({}), {}, {}", -face.normal, face.area, face_bc.scalar_value);
-                    (0., 0., -face.normal * face.area * face_bc.scalar_value, 0)
+                    // TODO: Not sure how to handle diffusive term here
+                    // NOTE: Assumes zero boundary-normal velocity gradient
+                    (face.normal.dot(&cell.velocity) * face.area * rho, 0., -face.normal * face.area * face_bc.scalar_value, 0)
                 }
-                // FaceConditionTypes::VelocityInlet => {
-                //     // By default, face normals point to cell 0.
-                //     // If a face only has one neighbor, that neighbor will be cell 0.
-                //     // Therefore, if we reverse this normal, it will be facing outward.
-                //     // TODO: Consider flipping convention of face normal direction
-                //     // Advection (flux) coefficient
-                //     let f_i: Float = -face_bc.vector_value.dot(&face.normal) * face.area * rho;
-                //     // Diffusion coefficient
-                //     let d_i: Float = mu * face.area;
-                //
-                //     // Again, face normal points toward this cell which is what we want
-                //     // NOTE: Assumes zero streamwise pressure gradient
-                //     (f_i, d_i, face.normal * face.area * cell.pressure, 0)
-                // }
+                FaceConditionTypes::VelocityInlet => {
+                    // By default, face normals point to cell 0.
+                    // If a face only has one neighbor, that neighbor will be cell 0.
+                    // Therefore, if we reverse this normal, it will be facing outward.
+                    // TODO: Consider flipping convention of face normal direction
+                    // Advection (flux) coefficient
+                    let f_i: Float = -face_bc.vector_value.dot(&face.normal) * face.area * rho;
+                    // Diffusion coefficient
+                    // NOTE: I think a source term addition is needed to include face's
+                    // contribution since there's no cell on the other side?
+                    let d_i: Float = mu * face.area;
+
+                    // Again, face normal points toward this cell which is what we want
+                    // NOTE: Assumes zero streamwise pressure gradient
+                    (f_i, d_i, face.normal * face.area * cell.pressure, 0)
+                }
                 FaceConditionTypes::Interior => {
                     let face_velocity = interpolate_face_velocity(
                         &mesh,
@@ -358,8 +360,8 @@ fn build_discretized_momentum_matrices(
                         neighbor_cell_number = face.cell_numbers[0];
                     }
 
-                    // TODO: Consider changing face unit normal to face area vector
-                    // Potentially inward area vector?
+                    // TODO: Consider changing face unit normal to face area vector or potentially
+                    // inward area vector?
                     // Advection (flux) coefficient = advective mass flow rate into this face
                     let f_i: Float = -face_velocity.dot(&outward_face_normal) * face.area * rho;
                     // Cell centroids vector
@@ -367,7 +369,7 @@ fn build_discretized_momentum_matrices(
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area * e_xi.norm();
 
-                    // Skipping cross diffusion for now
+                    // Skipping cross diffusion for now TODO
                     // let d_i: Float = mu
                     //     * (outward_face_normal.dot(&outward_face_normal)
                     //         / outward_face_normal.dot(&e_xi))
@@ -393,7 +395,7 @@ fn build_discretized_momentum_matrices(
                     panic!("BC not supported");
                 }
             }; // end BC match
-            println!("{}, {}: {}", cell_number, face_number, source_term.x);
+            info!("{}, {}: {}", cell_number, face_number, f_i);
             let a_nb: Float = (d_i
                 + match momentum_scheme {
                     MomentumDiscretization::UD => {
@@ -404,7 +406,7 @@ fn build_discretized_momentum_matrices(
                     MomentumDiscretization::CD => f_i / 2.,
                     _ => panic!("unsupported momentum scheme"),
                 });
-            a_p += a_nb - f_i + s_p; // sign of f_i?
+            a_p += a_nb + f_i + s_p; // sign of f_i?
             s_u += source_term;
 
             // If it's zero, that means it's a boundary face
@@ -423,6 +425,8 @@ fn build_discretized_momentum_matrices(
             a_p + s_p,
         );
     } // end cell loop
+    // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
+    // negative. It may be worth adding assertions to validate this.
     (a.to_csr(), u_source, v_source, w_source)
 }
 
