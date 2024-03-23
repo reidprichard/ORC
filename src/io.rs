@@ -417,14 +417,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         // 1/2 * b * h (area of triangle) for 2D
         // 1/3 * b * h (area of pyramid) for 3D
         cell.volume = cell_faces.iter().fold(0. as Float, |acc, f| {
-            println!("{}, {}, {}", f.centroid, cell.centroid, f.normal);
-            // println!(
-            //     "{}: {} * {} = {}",
-            //     cell_index,
-            //     f.area,
-            //     Float::abs((f.centroid - cell.centroid).dot(&f.normal)),
-            //     f.area * Float::abs((f.centroid - cell.centroid).dot(&f.normal))
-            // );
             acc + f.area * Float::abs((f.centroid - cell.centroid).dot(&f.normal))
                 / (dimensions as Float)
         });
@@ -516,7 +508,7 @@ pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     for i in 0..a.rows() {
         for j in 0..a.rows() {
             // print!("{:<2}, ", Float::round(*a.get(i, j).unwrap_or(&0.)));
-            print!("{}, ", a.get(i, j).unwrap_or(&0.));
+            print!("{}: {}, ", i+1, a.get(i, j).unwrap_or(&0.));
         }
         println!("\t{}", b[i]);
     }

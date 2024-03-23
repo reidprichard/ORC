@@ -9,7 +9,7 @@ use orc::solver::*;
 use sprs::{CsMat, TriMat};
 
 fn test_gauss_seidel() {
-    println!("Testing Gauss-Seidel for correctness.");
+    println!("*** Testing Gauss-Seidel for correctness. ***");
     const TOL: Float = 1e-6;
     // | 2 0 1 |   | 3 |
     // | 0 3 2 | = | 2 |
@@ -149,7 +149,7 @@ fn test_3d_1x3() {
         VelocityInterpolation::Linear,
         1000.,
         0.001,
-        3,
+        1,
     )
 }
 

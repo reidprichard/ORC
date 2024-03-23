@@ -81,6 +81,7 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
+                print!("\n");
                 print_linear_system(&a, &b_u);
                 solve_linear_system(
                     &a,
@@ -170,7 +171,8 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
         }
     }
     print!("\n\n");
-    for (_, cell) in &mesh.cells {
+    for cell_number in 1..=mesh.cells.len() {
+        let cell = &mesh.cells[&cell_number];
         println!("{}, {}", cell.centroid, cell.pressure);
     }
     print!("\n\n");
@@ -230,7 +232,7 @@ fn interpolate_face_pressure(
                 })
                 .fold(0., |acc, (p, x)| {
                     divisor += x;
-                    acc + p / x
+                    acc + p * x
                 })
                 / divisor
         }
@@ -316,25 +318,26 @@ fn build_discretized_momentum_matrices(
                     // The normal points to cell 0 (this cell), which is the direction the pressure
                     // force acts
                     // NOTE: Assumes zero wall-normal pressure gradient
-                    (0., 0., face.normal * face.area * cell.pressure, 0)
-                }
-                FaceConditionTypes::VelocityInlet => {
-                    // By default, face normals point to cell 0.
-                    // If a face only has one neighbor, that neighbor will be cell 0.
-                    // Therefore, if we reverse this normal, it will be facing outward.
-                    // TODO: Consider flipping convention of face normal direction
-                    // Advection (flux) coefficient
-                    let f_i: Float = -face_bc.vector_value.dot(&face.normal) * face.area * rho;
-                    // Diffusion coefficient
-                    let d_i: Float = mu * face.area;
-
-                    // Again, face normal points toward this cell which is what we want
-                    // NOTE: Assumes zero streamwise pressure gradient
-                    (f_i, d_i, face.normal * face.area * cell.pressure, 0)
+                    (0., 0., Vector::zero(), 0)
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-                    (0., 0., face.normal * face.area * face_bc.scalar_value, 0)
+                    // println!("Pressure BC values: ({}), {}, {}", -face.normal, face.area, face_bc.scalar_value);
+                    (0., 0., -face.normal * face.area * face_bc.scalar_value, 0)
                 }
+                // FaceConditionTypes::VelocityInlet => {
+                //     // By default, face normals point to cell 0.
+                //     // If a face only has one neighbor, that neighbor will be cell 0.
+                //     // Therefore, if we reverse this normal, it will be facing outward.
+                //     // TODO: Consider flipping convention of face normal direction
+                //     // Advection (flux) coefficient
+                //     let f_i: Float = -face_bc.vector_value.dot(&face.normal) * face.area * rho;
+                //     // Diffusion coefficient
+                //     let d_i: Float = mu * face.area;
+                //
+                //     // Again, face normal points toward this cell which is what we want
+                //     // NOTE: Assumes zero streamwise pressure gradient
+                //     (f_i, d_i, face.normal * face.area * cell.pressure, 0)
+                // }
                 FaceConditionTypes::Interior => {
                     let face_velocity = interpolate_face_velocity(
                         &mesh,
@@ -390,6 +393,7 @@ fn build_discretized_momentum_matrices(
                     panic!("BC not supported");
                 }
             }; // end BC match
+            println!("{}, {}: {}", cell_number, face_number, source_term.x);
             let a_nb: Float = (d_i
                 + match momentum_scheme {
                     MomentumDiscretization::UD => {
@@ -405,11 +409,7 @@ fn build_discretized_momentum_matrices(
 
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
-                a.add_triplet(
-                    *cell_number - 1,
-                    neighbor_cell_number - 1,
-                    -a_nb,
-                );
+                a.add_triplet(*cell_number - 1, neighbor_cell_number - 1, -a_nb);
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
@@ -459,17 +459,10 @@ fn build_pressure_correction_matrices(
 
             let a_nb = rho * Float::powi(face.area, 2)
                 / momentum_matrices
-                    .get(
-                        *cell_number - 1,
-                        neighbor_cell_number - 1,
-                    )
+                    .get(*cell_number - 1, neighbor_cell_number - 1)
                     .unwrap();
 
-            a.add_triplet(
-                cell_number - 1,
-                neighbor_cell_number - 1,
-                -a_nb,
-            );
+            a.add_triplet(cell_number - 1, neighbor_cell_number - 1, -a_nb);
             a_p += a_nb;
         }
         a.add_triplet(cell_number - 1, cell_number - 1, a_p);
