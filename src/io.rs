@@ -510,7 +510,7 @@ pub fn write_settings() {}
 
 pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     for i in 0..a.rows() {
-        print!("\n{}: ", i + 1);
+        print!("{}: ", i + 1);
         for j in 0..a.rows() {
             let coeff = a.get(i, j).unwrap_or(&0.);
             let formatted_number = if coeff.eq(&0.) {
@@ -522,7 +522,6 @@ pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
             };
             print!("{: >9}, ", formatted_number);
         }
-        print!(" | {}", b[i]);
+        println!(" | {}", b[i]);
     }
-    println!("");
 }

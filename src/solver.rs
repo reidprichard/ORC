@@ -52,6 +52,8 @@ pub fn solve_steady(
     rho: Float,
     mu: Float,
     iteration_count: Uint,
+    momentum_relaxation_factor: Float,
+    pressure_relaxation_factor: Float,
 ) {
     const GAUSS_SEIDEL_ITERS: Uint = 100;
     initialize_pressure_field(mesh);
@@ -78,6 +80,7 @@ pub fn solve_steady(
                     &mut u,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
+                    momentum_relaxation_factor,
                 );
                 solve_linear_system(
                     &a,
@@ -85,6 +88,7 @@ pub fn solve_steady(
                     &mut v,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
+                    momentum_relaxation_factor,
                 );
                 solve_linear_system(
                     &a,
@@ -92,9 +96,11 @@ pub fn solve_steady(
                     &mut w,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
+                    momentum_relaxation_factor,
                 );
 
-                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
+                let p: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.pressure).collect();
+                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}\np: {p:?}");
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
                         .get_mut(&(i + 1).try_into().unwrap())
@@ -123,6 +129,7 @@ pub fn solve_steady(
                     &mut p_prime,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
+                    pressure_relaxation_factor,
                 );
 
                 println!("p' = {:?}", &p_prime);
@@ -273,13 +280,13 @@ pub fn solve_linear_system(
     solution_vector: &mut Vec<Float>,
     iteration_count: Uint,
     method: SolutionMethod,
+    relaxation_factor: Float,
 ) {
-    // TODO: implement
     match method {
         SolutionMethod::GaussSeidel => {
             'iter_loop: for _ in 0..iteration_count {
                 'row_loop: for i in 0..solution_vector.len() {
-                    solution_vector[i] = (
+                    solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
                         b[i]
                         - solution_vector
                             .iter()
@@ -471,7 +478,7 @@ fn build_pressure_correction_matrices(
                 face.cell_numbers[1]
             };
 
-            let a_nb = rho * Float::powi(face.area, 2)
+            let a_nb = -rho * Float::powi(face.area, 2)
                 / momentum_matrices
                     .get(*cell_number - 1, neighbor_cell_number - 1)
                     .unwrap();

@@ -10,6 +10,9 @@ use orc::solver::*;
 use sprs::{CsMat, TriMat};
 use std::env;
 
+const PRESSURE_RELAXATION: Float = 0.25;
+const MOMENTUM_RELAXATION: Float = 0.25;
+
 fn test_gauss_seidel() {
     println!("*** Testing Gauss-Seidel for correctness. ***");
     const TOL: Float = 1e-6;
@@ -36,7 +39,7 @@ fn test_gauss_seidel() {
 
     let mut x = vec![0., 0., 0.];
 
-    solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel);
+    solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
 
     for row_num in 0..a.rows() {
         assert!(
@@ -102,6 +105,8 @@ fn test_2d(iteration_count: Uint) {
         1000.,
         0.001,
         iteration_count,
+        MOMENTUM_RELAXATION,
+        PRESSURE_RELAXATION,
     );
     write_data(&mesh, "2d_test_case.csv".into());
 }
@@ -154,6 +159,8 @@ fn test_3d_1x3(iteration_count: Uint) {
         1000.,
         10.,
         iteration_count,
+        MOMENTUM_RELAXATION,
+        PRESSURE_RELAXATION,
     )
 }
 
@@ -203,6 +210,8 @@ fn test_3d_3x3(iteration_count: Uint) {
         1000.,
         100.,
         iteration_count,
+        MOMENTUM_RELAXATION,
+        PRESSURE_RELAXATION,
     )
 }
 
