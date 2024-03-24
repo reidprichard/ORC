@@ -274,21 +274,6 @@ pub mod common {
             }
         }
     }
-    const X: Vector = Vector {
-        x: 1.,
-        y: 0.,
-        z: 0.,
-    };
-    const Y: Vector = Vector {
-        x: 0.,
-        y: 1.,
-        z: 0.,
-    };
-    const Z: Vector = Vector {
-        x: 0.,
-        y: 0.,
-        z: 1.,
-    };
 
     pub struct Tensor {
         pub x: Vector,
