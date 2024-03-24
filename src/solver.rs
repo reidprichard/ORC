@@ -238,30 +238,40 @@ fn calculate_face_velocity(
     }
 }
 
-fn interpolate_face_pressure(
+fn calculate_face_pressure(
     mesh: &Mesh,
     face_number: usize,
     interpolation_scheme: PressureInterpolation,
 ) -> Float {
     let face = &mesh.faces[&face_number];
-    match interpolation_scheme {
-        PressureInterpolation::Linear => {
-            let mut divisor: Float = 0.;
-            face.cell_numbers
-                .iter()
-                .map(|c| {
-                    (
-                        mesh.cells[c].pressure,
-                        (face.centroid - mesh.cells[c].centroid).norm(),
-                    )
-                })
-                .fold(0., |acc, (p, x)| {
-                    divisor += x;
-                    acc + p * x
-                })
-                / divisor
+    let face_zone = &mesh.face_zones[&face.zone];
+    match face_zone.zone_type {
+        FaceConditionTypes::Wall => mesh.cells[&face.cell_numbers[0]].pressure,
+        FaceConditionTypes::VelocityInlet => mesh.cells[&face.cell_numbers[0]].pressure,
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+            face_zone.scalar_value
         }
-        _ => panic!("not supported"),
+        FaceConditionTypes::Interior => match interpolation_scheme {
+            PressureInterpolation::Linear => {
+                // NOTE: If this is a boundary cell, the face velocity will be the cell velocity
+                let mut divisor: Float = 0.;
+                face.cell_numbers
+                    .iter()
+                    .map(|c| {
+                        (
+                            &mesh.cells[c].pressure,
+                            (face.centroid - mesh.cells[c].centroid).norm(),
+                        )
+                    })
+                    .fold(0., |acc, (v, x)| {
+                        divisor += x;
+                        acc + (*v) * x
+                    })
+                    / divisor
+            }
+            _ => panic!("unsupported pressure interpolation method"),
+        },
+        _ => panic!("unsupported face zone type"),
     }
 }
 
@@ -339,16 +349,15 @@ fn build_momentum_matrices(
                 calculate_face_velocity(&mesh, *face_number, velocity_interpolation_scheme);
             let outward_face_normal = get_outward_face_normal(&face, *cell_number);
             let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
-            let (d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
+            let source_term = (-outward_face_normal)
+                * calculate_face_pressure(mesh, *face_number, pressure_interpolation_scheme)
+                * face.area;
+            let (d_i, neighbor_cell_number) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
                     // The normal points to cell 0 (this cell), which is the direction the pressure
                     // force acts
                     // NOTE: Assumes zero wall-normal pressure gradient
-                    (
-                        mu * face.area * (face.centroid - cell.centroid).norm(),
-                        get_inward_face_normal(&face, *cell_number) * face.area * cell.pressure,
-                        0,
-                    )
+                    (mu * face.area * (face.centroid - cell.centroid).norm(), 0)
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                     // println!("Pressure BC values: ({}), {}, {}", -face.normal, face.area, face_bc.scalar_value);
@@ -357,7 +366,6 @@ fn build_momentum_matrices(
                     let inward_face_normal = get_inward_face_normal(&face, *cell_number);
                     (
                         0., // no diffusion since face velocity == cell velocity
-                        inward_face_normal * face.area * face_bc.scalar_value,
                         0,
                     )
                 }
@@ -374,7 +382,7 @@ fn build_momentum_matrices(
 
                     // Again, face normal points toward this cell which is what we want
                     // NOTE: Assumes zero streamwise pressure gradient
-                    (d_i, face.normal * face.area * cell.pressure, 0)
+                    (d_i, 0)
                 }
                 FaceConditionTypes::Interior => {
                     let face_velocity =
@@ -409,17 +417,7 @@ fn build_momentum_matrices(
                     // let e_nu: Vector = outward_face_normal.cross(&e_xi.cross(&outward_face_normal)).unit();
                     // Cross diffusion source term
                     // let s_cross_diffusion = -mu *
-                    let inward_face_normal = get_inward_face_normal(face, *cell_number);
-                    let face_pressure = interpolate_face_pressure(
-                        &mesh,
-                        *face_number,
-                        pressure_interpolation_scheme,
-                    );
-                    (
-                        d_i,
-                        inward_face_normal * face_pressure,
-                        neighbor_cell_number,
-                    )
+                    (d_i, neighbor_cell_number)
                 }
                 _ => {
                     println!("*** {} ***", face_bc.zone_type);
