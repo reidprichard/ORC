@@ -6,6 +6,7 @@ use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
+use orc::common::Vector;
 use sprs::{CsMat, TriMat};
 
 fn test_gauss_seidel() {
@@ -110,6 +111,8 @@ fn test_3d_1x3() {
     let cell_volume = Float::powi(cell_length, 3);
     let mut mesh = orc::io::read_mesh("./examples/3d_1x3.msh");
 
+    // mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
+    // mesh.get_face_zone("INLET").vector_value = Vector {x: 0.1, y: 0., z: 0.};
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
     mesh.get_face_zone("INLET").scalar_value = 3.; // 1 Pa/m = 1 Pa/cell
 
@@ -144,11 +147,11 @@ fn test_3d_1x3() {
     solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::UD,
+        MomentumDiscretization::CD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        100.,
+        10.,
         20,
     )
 }

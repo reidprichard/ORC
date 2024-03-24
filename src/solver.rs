@@ -123,6 +123,7 @@ pub fn solve_steady(
                     velocity_interpolation_scheme,
                     rho,
                 );
+                print_linear_system(&pressure_correction_matrices.a, &pressure_correction_matrices.b);
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 solve_linear_system(
                     &pressure_correction_matrices.a,
@@ -132,6 +133,7 @@ pub fn solve_steady(
                     SolutionMethod::GaussSeidel,
                 );
 
+                println!("p' = {:?}", &p_prime);
                 apply_pressure_correction(mesh, &a, &p_prime);
                 println!(
                     "Iteration {}: avg velocity = {}",
