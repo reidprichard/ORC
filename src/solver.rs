@@ -66,7 +66,7 @@ pub fn solve_steady(
     iteration_count: Uint,
 ) {
     const GAUSS_SEIDEL_ITERS: Uint = 100;
-    // initialize_pressure_field(mesh);
+    initialize_pressure_field(mesh);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
@@ -125,7 +125,10 @@ pub fn solve_steady(
                     rho,
                 );
                 println!("Pressure:");
-                print_linear_system(&pressure_correction_matrices.a, &pressure_correction_matrices.b);
+                print_linear_system(
+                    &pressure_correction_matrices.a,
+                    &pressure_correction_matrices.b,
+                );
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 solve_linear_system(
                     &pressure_correction_matrices.a,
@@ -143,7 +146,8 @@ pub fn solve_steady(
                     mesh.cells
                         .iter()
                         .fold(Vector::zero(), |acc, (cell_number, cell)| acc
-                            + cell.velocity) / mesh.cells.len()
+                            + cell.velocity)
+                        / mesh.cells.len()
                 );
             }
         }
@@ -193,35 +197,44 @@ fn get_velocity_source_term(location: Vector) -> Vector {
     Vector::zero()
 }
 
-fn interpolate_face_velocity(
+fn calculate_face_velocity(
     mesh: &Mesh,
     face_number: usize,
     interpolation_scheme: VelocityInterpolation,
 ) -> Vector {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_number];
-    match interpolation_scheme {
-        VelocityInterpolation::Linear => {
-            // NOTE: If this is a boundary cell, the face velocity will be the cell velocity
-            let mut divisor: Float = 0.;
-            face.cell_numbers
-                .iter()
-                .map(|c| {
-                    (
-                        &mesh.cells[c].velocity,
-                        (face.centroid - mesh.cells[c].centroid).norm(),
-                    )
-                })
-                .fold(Vector::zero(), |acc, (v, x)| {
-                    divisor += x;
-                    acc + (*v) * x
-                })
-                / divisor
+    let face_zone = &mesh.face_zones[&face.zone];
+    match face_zone.zone_type {
+        FaceConditionTypes::Wall => Vector::zero(),
+        FaceConditionTypes::VelocityInlet => face_zone.vector_value,
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+            mesh.cells[&face.cell_numbers[0]].velocity
         }
-        VelocityInterpolation::RhieChow2 => {
-            // see Versteeg & Malalasekara p340-341
-            panic!("unsupported");
-        }
+        FaceConditionTypes::Interior => match interpolation_scheme {
+            VelocityInterpolation::Linear => {
+                // NOTE: If this is a boundary cell, the face velocity will be the cell velocity
+                let mut divisor: Float = 0.;
+                face.cell_numbers
+                    .iter()
+                    .map(|c| {
+                        (
+                            &mesh.cells[c].velocity,
+                            (face.centroid - mesh.cells[c].centroid).norm(),
+                        )
+                    })
+                    .fold(Vector::zero(), |acc, (v, x)| {
+                        divisor += x;
+                        acc + (*v) * x
+                    })
+                    / divisor
+            }
+            VelocityInterpolation::RhieChow2 => {
+                // see Versteeg & Malalasekara p340-341
+                panic!("unsupported");
+            }
+        },
+        _ => panic!("unsupported face zone type"),
     }
 }
 
@@ -322,13 +335,16 @@ fn build_momentum_matrices(
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
             let face_bc = &mesh.face_zones[&face.zone];
-            let (f_i, d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
+            let face_velocity =
+                calculate_face_velocity(&mesh, *face_number, velocity_interpolation_scheme);
+            let outward_face_normal = get_outward_face_normal(&face, *cell_number);
+            let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
+            let (d_i, source_term, neighbor_cell_number) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
                     // The normal points to cell 0 (this cell), which is the direction the pressure
                     // force acts
                     // NOTE: Assumes zero wall-normal pressure gradient
                     (
-                        0.,
                         mu * face.area * (face.centroid - cell.centroid).norm(),
                         get_inward_face_normal(&face, *cell_number) * face.area * cell.pressure,
                         0,
@@ -339,9 +355,7 @@ fn build_momentum_matrices(
                     // TODO: Not sure how to handle diffusive term here
                     // NOTE: Assumes zero boundary-normal velocity gradient
                     let inward_face_normal = get_inward_face_normal(&face, *cell_number);
-                    let outward_face_normal = get_outward_face_normal(&face, *cell_number);
                     (
-                        outward_face_normal.dot(&cell.velocity) * face.area * rho,
                         0., // no diffusion since face velocity == cell velocity
                         inward_face_normal * face.area * face_bc.scalar_value,
                         0,
@@ -353,9 +367,6 @@ fn build_momentum_matrices(
                     // Therefore, if we reverse this normal, it will be facing outward.
                     // TODO: Consider flipping convention of face normal direction
                     let outward_face_normal = get_outward_face_normal(&face, *cell_number);
-                    // Advection (flux) coefficient
-                    let f_i: Float =
-                        face_bc.vector_value.dot(&outward_face_normal) * face.area * rho;
                     // Diffusion coefficient
                     // NOTE: I think a source term addition is needed to include face's
                     // contribution since there's no cell on the other side?
@@ -363,14 +374,11 @@ fn build_momentum_matrices(
 
                     // Again, face normal points toward this cell which is what we want
                     // NOTE: Assumes zero streamwise pressure gradient
-                    (f_i, d_i, face.normal * face.area * cell.pressure, 0)
+                    (d_i, face.normal * face.area * cell.pressure, 0)
                 }
                 FaceConditionTypes::Interior => {
-                    let face_velocity = interpolate_face_velocity(
-                        &mesh,
-                        *face_number,
-                        velocity_interpolation_scheme,
-                    );
+                    let face_velocity =
+                        calculate_face_velocity(&mesh, *face_number, velocity_interpolation_scheme);
 
                     let mut neighbor_cell_number: usize = 0;
                     let outward_face_normal: Vector = get_outward_face_normal(&face, *cell_number);
@@ -387,8 +395,6 @@ fn build_momentum_matrices(
 
                     // TODO: Consider changing face unit normal to face area vector or potentially
                     // inward area vector?
-                    // Advection (flux) coefficient = advective mass flow rate out of this face
-                    let f_i: Float = face_velocity.dot(&outward_face_normal) * face.area * rho;
                     // Cell centroids vector
                     let e_xi: Vector = mesh.cells[&neighbor_cell_number].centroid - cell.centroid;
                     // Diffusion coefficient
@@ -410,7 +416,6 @@ fn build_momentum_matrices(
                         pressure_interpolation_scheme,
                     );
                     (
-                        f_i,
                         d_i,
                         inward_face_normal * face_pressure,
                         neighbor_cell_number,
@@ -481,7 +486,7 @@ fn build_pressure_correction_matrices(
             }
 
             let face_velocity =
-                interpolate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
+                calculate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
             let inward_face_normal = get_inward_face_normal(&face, *cell_number);
             b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
 

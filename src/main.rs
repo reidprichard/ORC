@@ -152,7 +152,7 @@ fn test_3d_1x3() {
         VelocityInterpolation::Linear,
         1000.,
         10.,
-        1,
+        10,
     )
 }
 
