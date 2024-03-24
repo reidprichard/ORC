@@ -111,7 +111,7 @@ fn test_3d_1x3() {
     let mut mesh = orc::io::read_mesh("./examples/3d_1x3.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 3e2; // 100 Pa/m = 100 Pa/cell
+    mesh.get_face_zone("INLET").scalar_value = 3.; // 1 Pa/m = 1 Pa/cell
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -144,12 +144,12 @@ fn test_3d_1x3() {
     solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::CD,
+        MomentumDiscretization::UD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        0.001,
-        2,
+        100.,
+        20,
     )
 }
 
@@ -160,7 +160,11 @@ fn test_3d_3x3() {
     let mut mesh = orc::io::read_mesh("./examples/3x3_cube.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    mesh.get_face_zone("INLET").scalar_value = 1.;
+
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+    mesh.get_face_zone("OUTLET").scalar_value = 0.;
+
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Wall;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Wall;
 
@@ -189,11 +193,11 @@ fn test_3d_3x3() {
     solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::UD,
+        MomentumDiscretization::CD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        0.001,
+        100.,
         100,
     )
 }
@@ -205,6 +209,7 @@ fn main() {
     // 1. Read mesh
     // test_2d();
     test_3d_1x3();
+    // test_3d_3x3();
     // test_3d();
     // 2. Read data
     // 3. Read settings

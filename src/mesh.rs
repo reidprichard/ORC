@@ -249,3 +249,7 @@ pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector {
         -face.normal
     }
 }
+
+pub fn get_inward_face_normal(face: &Face, cell_number: usize) -> Vector {
+    get_outward_face_normal(face, cell_number) * -1.
+}

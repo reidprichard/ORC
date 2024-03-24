@@ -498,7 +498,11 @@ pub fn write_mesh() {}
 pub fn write_data(mesh: &Mesh, output_file_name: String) {
     let mut file = File::create(output_file_name).unwrap();
     for (cell_number, cell) in &mesh.cells {
-        write!(file, "{},\t{},\t{}\n", cell.centroid, cell.velocity, cell.pressure);
+        write!(
+            file,
+            "{},\t{},\t{}\n",
+            cell.centroid, cell.velocity, cell.pressure
+        );
     }
 }
 
@@ -506,14 +510,19 @@ pub fn write_settings() {}
 
 pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     for i in 0..a.rows() {
-        print!("{}: ", i+1);
+        print!("\n{}: ", i + 1);
         for j in 0..a.rows() {
-            // print!("{:<2}, ", Float::round(*a.get(i, j).unwrap_or(&0.)));
             let coeff = a.get(i, j).unwrap_or(&0.);
-            let exponent: Uint = Float::floor(Float::log10(Float::abs(*coeff))) as Uint;
-            let mantissa = coeff / (Uint::pow(10, exponent) as Float);
-            print!("{: >7}, ", format!("{mantissa:.2}e{exponent}"));
+            let formatted_number = if coeff.eq(&0.) {
+                String::from("0e0")
+            } else {
+                let exponent = Float::floor(Float::log10(Float::abs(*coeff))) as i32;
+                let mantissa: Float = coeff / Float::powi(10., exponent);
+                format!("{mantissa:.2}e{exponent}")
+            };
+            print!("{: >9}, ", formatted_number);
         }
-        println!("\t{}", b[i]);
+        print!(" | {}", b[i]);
     }
+    println!("");
 }

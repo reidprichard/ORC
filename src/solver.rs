@@ -2,8 +2,8 @@ use crate::common::*;
 use crate::io::print_linear_system;
 use crate::mesh::*;
 use itertools::izip;
-use sprs::{CsMat, CsVec, TriMat};
 use log::info;
+use sprs::{CsMat, CsVec, TriMat};
 // use std::collections::HashMap;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
@@ -69,7 +69,7 @@ pub fn solve_steady(
     initialize_pressure_field(mesh);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
-            for _ in 0..iteration_count {
+            for iter_number in 1..=iteration_count {
                 let mut u: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.x).collect();
                 let mut v: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.y).collect();
                 let mut w: Vec<Float> = mesh.cells.iter().map(|(i, c)| c.velocity.z).collect();
@@ -82,8 +82,7 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
-                print!("\n");
-                print_linear_system(&a, &b_u);
+                // print_linear_system(&a, &b_u);
                 solve_linear_system(
                     &a,
                     &b_u,
@@ -106,8 +105,7 @@ pub fn solve_steady(
                     SolutionMethod::GaussSeidel,
                 );
 
-                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
-                print!("\n\n");
+                info!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
                         .get_mut(&(i + 1).try_into().unwrap())
@@ -135,6 +133,14 @@ pub fn solve_steady(
                 );
 
                 apply_pressure_correction(mesh, &a, &p_prime);
+                println!(
+                    "Iteration {}: avg velocity = {}",
+                    iter_number,
+                    mesh.cells
+                        .iter()
+                        .fold(Vector::zero(), |acc, (cell_number, cell)| acc
+                            + cell.velocity) / mesh.cells.len()
+                );
             }
         }
         _ => panic!("unsupported pressure-velocity coupling"),
@@ -316,25 +322,39 @@ fn build_momentum_matrices(
                     // The normal points to cell 0 (this cell), which is the direction the pressure
                     // force acts
                     // NOTE: Assumes zero wall-normal pressure gradient
-                    (0., mu * face.area * (face.centroid - cell.centroid).norm(), face.normal * face.area * cell.pressure, 0)
+                    (
+                        0.,
+                        mu * face.area * (face.centroid - cell.centroid).norm(),
+                        get_inward_face_normal(&face, *cell_number) * face.area * cell.pressure,
+                        0,
+                    )
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                     // println!("Pressure BC values: ({}), {}, {}", -face.normal, face.area, face_bc.scalar_value);
                     // TODO: Not sure how to handle diffusive term here
                     // NOTE: Assumes zero boundary-normal velocity gradient
-                    (face.normal.dot(&cell.velocity) * face.area * rho, 0., -face.normal * face.area * face_bc.scalar_value, 0)
+                    let inward_face_normal = get_inward_face_normal(&face, *cell_number);
+                    let outward_face_normal = get_outward_face_normal(&face, *cell_number);
+                    (
+                        outward_face_normal.dot(&cell.velocity) * face.area * rho,
+                        0., // no diffusion since face velocity == cell velocity
+                        inward_face_normal * face.area * face_bc.scalar_value,
+                        0,
+                    )
                 }
                 FaceConditionTypes::VelocityInlet => {
                     // By default, face normals point to cell 0.
                     // If a face only has one neighbor, that neighbor will be cell 0.
                     // Therefore, if we reverse this normal, it will be facing outward.
                     // TODO: Consider flipping convention of face normal direction
+                    let outward_face_normal = get_outward_face_normal(&face, *cell_number);
                     // Advection (flux) coefficient
-                    let f_i: Float = -face_bc.vector_value.dot(&face.normal) * face.area * rho;
+                    let f_i: Float =
+                        face_bc.vector_value.dot(&outward_face_normal) * face.area * rho;
                     // Diffusion coefficient
                     // NOTE: I think a source term addition is needed to include face's
                     // contribution since there's no cell on the other side?
-                    let d_i: Float = mu * face.area;
+                    let d_i: Float = mu * face.area * (face.centroid - cell.centroid).norm();
 
                     // Again, face normal points toward this cell which is what we want
                     // NOTE: Assumes zero streamwise pressure gradient
@@ -362,12 +382,12 @@ fn build_momentum_matrices(
 
                     // TODO: Consider changing face unit normal to face area vector or potentially
                     // inward area vector?
-                    // Advection (flux) coefficient = advective mass flow rate into this face
-                    let f_i: Float = -face_velocity.dot(&outward_face_normal) * face.area * rho;
+                    // Advection (flux) coefficient = advective mass flow rate out of this face
+                    let f_i: Float = face_velocity.dot(&outward_face_normal) * face.area * rho;
                     // Cell centroids vector
                     let e_xi: Vector = mesh.cells[&neighbor_cell_number].centroid - cell.centroid;
                     // Diffusion coefficient
-                    let d_i: Float = mu * face.area * e_xi.norm();
+                    let d_i: Float = mu * face.area / e_xi.norm();
 
                     // Skipping cross diffusion for now TODO
                     // let d_i: Float = mu
@@ -378,6 +398,7 @@ fn build_momentum_matrices(
                     // let e_nu: Vector = outward_face_normal.cross(&e_xi.cross(&outward_face_normal)).unit();
                     // Cross diffusion source term
                     // let s_cross_diffusion = -mu *
+                    let inward_face_normal = get_inward_face_normal(face, *cell_number);
                     let face_pressure = interpolate_face_pressure(
                         &mesh,
                         *face_number,
@@ -386,7 +407,7 @@ fn build_momentum_matrices(
                     (
                         f_i,
                         d_i,
-                        -outward_face_normal * face_pressure,
+                        inward_face_normal * face_pressure,
                         neighbor_cell_number,
                     )
                 }
@@ -395,23 +416,27 @@ fn build_momentum_matrices(
                     panic!("BC not supported");
                 }
             }; // end BC match
-            info!("{}, {}: {}", cell_number, face_number, f_i);
-            let a_nb: Float = (d_i
+            info!(
+                "cell {: >3}, face {: >3}: F_i = {: >9}, D_i = {: >9}",
+                cell_number, face_number, f_i, d_i
+            );
+            let a_nb: Float = (-d_i
                 + match momentum_scheme {
                     MomentumDiscretization::UD => {
                         // Neighbor only affects this cell if flux is into this
-                        // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
-                        Float::min(f_i, 0.)
+                        // cell => f_i < 0. Therefore, if f_i < 0, we set it to 0.
+                        Float::max(f_i, 0.)
                     }
                     MomentumDiscretization::CD => f_i / 2.,
                     _ => panic!("unsupported momentum scheme"),
                 });
-            a_p += a_nb + f_i + s_p; // sign of f_i?
+            a_p += -a_nb + f_i + s_p; // sign of f_i?
             s_u += source_term;
 
             // If it's zero, that means it's a boundary face
             if neighbor_cell_number > 0 {
-                a.add_triplet(*cell_number - 1, neighbor_cell_number - 1, -a_nb);
+                // negate a_nb to move to LHS of equation
+                a.add_triplet(*cell_number - 1, neighbor_cell_number - 1, a_nb);
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
@@ -425,8 +450,8 @@ fn build_momentum_matrices(
             a_p + s_p,
         );
     } // end cell loop
-    // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
-    // negative. It may be worth adding assertions to validate this.
+      // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
+      // negative. It may be worth adding assertions to validate this.
     (a.to_csr(), u_source, v_source, w_source)
 }
 
