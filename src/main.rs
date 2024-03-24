@@ -2,11 +2,11 @@
 #![allow(unused)]
 
 use orc::common::Float;
+use orc::common::{Uint, Vector};
 use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
-use orc::common::{Uint, Vector};
 use sprs::{CsMat, TriMat};
 use std::env;
 
@@ -209,14 +209,19 @@ fn test_3d_3x3(iteration_count: Uint) {
 fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
-    let iteration_count:Uint = args.get(1).unwrap_or(&"10".to_string()).parse().expect("arg 1 should be an integer");
-    test_gauss_seidel();
-    // Interface: allow user to choose from
-    // 1. Read mesh
+    let iteration_count: Uint = args
+        .get(1)
+        .unwrap_or(&"10".to_string())
+        .parse()
+        .expect("arg 1 should be an integer");
+    // test_gauss_seidel();
     // test_2d();
     test_3d_1x3(iteration_count);
     // test_3d_3x3();
     // test_3d();
+
+    // Interface: allow user to choose from
+    // 1. Read mesh
     // 2. Read data
     // 3. Read settings
     // 4. Write mesh
