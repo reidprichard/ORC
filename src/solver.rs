@@ -56,13 +56,22 @@ pub fn solve_steady(
     pressure_relaxation_factor: Float,
 ) {
     const GAUSS_SEIDEL_ITERS: Uint = 100;
-    initialize_pressure_field(mesh);
+    // initialize_pressure_field(mesh);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                let mut u: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.x).collect();
-                let mut v: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.y).collect();
-                let mut w: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.z).collect();
+                let mut u: Vec<Float> = (1..=mesh.cells.len())
+                    .map(|cell_number| mesh.cells[&cell_number].velocity.x)
+                    .collect();
+                let mut v: Vec<Float> = (1..=mesh.cells.len())
+                    .map(|cell_number| mesh.cells[&cell_number].velocity.y)
+                    .collect();
+                let mut w: Vec<Float> = (1..=mesh.cells.len())
+                    .map(|cell_number| mesh.cells[&cell_number].velocity.z)
+                    .collect();
+                // let mut u: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.x).collect();
+                // let mut v: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.y).collect();
+                // let mut w: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.z).collect();
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 let (a, b_u, b_v, b_w) = build_momentum_matrices(
                     mesh,
@@ -99,11 +108,10 @@ pub fn solve_steady(
                     momentum_relaxation_factor,
                 );
 
-                let p: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.pressure).collect();
-                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}\np: {p:?}");
-                for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
+                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
+                for (cell_index, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
-                        .get_mut(&(i + 1).try_into().unwrap())
+                        .get_mut(&(cell_index + 1).try_into().unwrap())
                         .unwrap()
                         .velocity = Vector {
                         x: u_i,
@@ -132,8 +140,12 @@ pub fn solve_steady(
                     pressure_relaxation_factor,
                 );
 
+                let mut p: Vec<Float> = (1..=mesh.cells.len()).map(|cell_number| mesh.cells[&cell_number].pressure).collect();
+                println!("p: {p:?}");
                 println!("p' = {:?}", &p_prime);
                 apply_pressure_correction(mesh, &a, &p_prime);
+                let p: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.pressure).collect();
+                println!("p: {p:?}");
                 println!(
                     "Iteration {}: avg velocity = {}",
                     iter_number,
@@ -297,7 +309,7 @@ pub fn solve_linear_system(
                     ) / a.get(i, i)
                         .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector");
                     if solution_vector[i].is_nan() {
-                        panic!("solution diverged.");
+                        panic!("****** Solution diverged ******");
                     }
                 }
             }
