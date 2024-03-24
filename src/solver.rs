@@ -66,7 +66,7 @@ pub fn solve_steady(
     iteration_count: Uint,
 ) {
     const GAUSS_SEIDEL_ITERS: Uint = 100;
-    initialize_pressure_field(mesh);
+    // initialize_pressure_field(mesh);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
@@ -82,7 +82,8 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
-                // print_linear_system(&a, &b_u);
+                println!("Momentum:");
+                print_linear_system(&a, &b_u);
                 solve_linear_system(
                     &a,
                     &b_u,
@@ -105,7 +106,7 @@ pub fn solve_steady(
                     SolutionMethod::GaussSeidel,
                 );
 
-                info!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
+                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
                 for (i, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
                         .get_mut(&(i + 1).try_into().unwrap())
@@ -123,6 +124,7 @@ pub fn solve_steady(
                     velocity_interpolation_scheme,
                     rho,
                 );
+                println!("Pressure:");
                 print_linear_system(&pressure_correction_matrices.a, &pressure_correction_matrices.b);
                 let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 solve_linear_system(
@@ -200,6 +202,7 @@ fn interpolate_face_velocity(
     let face = &mesh.faces[&face_number];
     match interpolation_scheme {
         VelocityInterpolation::Linear => {
+            // NOTE: If this is a boundary cell, the face velocity will be the cell velocity
             let mut divisor: Float = 0.;
             face.cell_numbers
                 .iter()
@@ -479,8 +482,8 @@ fn build_pressure_correction_matrices(
 
             let face_velocity =
                 interpolate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
-            let outward_face_normal = get_outward_face_normal(&face, *cell_number);
-            b_p += -rho * face_velocity.dot(&outward_face_normal) * face.area;
+            let inward_face_normal = get_inward_face_normal(&face, *cell_number);
+            b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
 
             let neighbor_cell_number: usize = if face.cell_numbers[0] != *cell_number {
                 face.cell_numbers[0]
