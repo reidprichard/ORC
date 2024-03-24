@@ -178,7 +178,7 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
     print!("\n\n");
 }
 
-fn get_velocity_source_term(location: Vector) -> Vector {
+fn get_velocity_source_term(_location: Vector) -> Vector {
     Vector::zero()
 }
 
@@ -288,7 +288,10 @@ pub fn solve_linear_system(
                                 acc + a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
                             })
                     ) / a.get(i, i)
-                        .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector")
+                        .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector");
+                    if solution_vector[i].is_nan() {
+                        panic!("solution diverged.");
+                    }
                 }
             }
         }
@@ -477,7 +480,7 @@ fn build_pressure_correction_matrices(
             a_p += a_nb;
         }
         a.add_triplet(cell_number - 1, cell_number - 1, a_p);
-        b.push(b_p);
+        b[*cell_number - 1] = b_p;
     }
 
     LinearSystem { a: a.to_csr(), b }
