@@ -258,6 +258,17 @@ pub mod common {
         }
     }
 
+    impl Mul<Vector> for Float {
+        type Output = Vector;
+        fn mul(self, rhs: Vector) -> Vector {
+            Vector {
+                x: rhs.x * self,
+                y: rhs.y * self,
+                z: rhs.y * self,
+            }
+        }
+    }
+
     impl fmt::Display for Vector {
         // TODO: Switch between regular and scientific fmt based on magnitude
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

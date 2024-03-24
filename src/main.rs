@@ -210,8 +210,6 @@ fn test_3d_3x3(iteration_count: Uint) {
         1000.,
         100.,
         iteration_count,
-        MOMENTUM_RELAXATION,
-        PRESSURE_RELAXATION,
     )
 }
 

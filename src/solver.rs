@@ -9,6 +9,8 @@ use sprs::{CsMat, TriMat};
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
 
+const GAUSS_SEIDEL_RELAXATION: Float = 0.5;
+
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
     GaussSeidel,
@@ -69,10 +71,10 @@ pub fn solve_steady(
                 let mut w: Vec<Float> = (1..=mesh.cells.len())
                     .map(|cell_number| mesh.cells[&cell_number].velocity.z)
                     .collect();
+                let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 // let mut u: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.x).collect();
                 // let mut v: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.y).collect();
                 // let mut w: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.z).collect();
-                let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
                 let (a, b_u, b_v, b_w) = build_momentum_matrices(
                     mesh,
                     momentum_scheme,
@@ -89,7 +91,7 @@ pub fn solve_steady(
                     &mut u,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
-                    momentum_relaxation_factor,
+                    GAUSS_SEIDEL_RELAXATION,
                 );
                 solve_linear_system(
                     &a,
@@ -97,7 +99,7 @@ pub fn solve_steady(
                     &mut v,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
-                    momentum_relaxation_factor,
+                    GAUSS_SEIDEL_RELAXATION,
                 );
                 solve_linear_system(
                     &a,
@@ -105,7 +107,7 @@ pub fn solve_steady(
                     &mut w,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
-                    momentum_relaxation_factor,
+                    GAUSS_SEIDEL_RELAXATION,
                 );
 
                 println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
@@ -137,15 +139,25 @@ pub fn solve_steady(
                     &mut p_prime,
                     GAUSS_SEIDEL_ITERS,
                     SolutionMethod::GaussSeidel,
-                    pressure_relaxation_factor,
+                    GAUSS_SEIDEL_RELAXATION,
                 );
 
-                let mut p: Vec<Float> = (1..=mesh.cells.len()).map(|cell_number| mesh.cells[&cell_number].pressure).collect();
-                println!("p: {p:?}");
-                println!("p' = {:?}", &p_prime);
-                apply_pressure_correction(mesh, &a, &p_prime);
-                let p: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.pressure).collect();
-                println!("p: {p:?}");
+                let mut p: Vec<Float> = (1..=mesh.cells.len())
+                    .map(|cell_number| mesh.cells[&cell_number].pressure)
+                    .collect();
+                println!("p : {p:?}");
+                println!("p': {p_prime:?}");
+                apply_pressure_correction(
+                    mesh,
+                    &a,
+                    &p_prime,
+                    pressure_relaxation_factor,
+                    momentum_relaxation_factor,
+                );
+                p = (1..=mesh.cells.len())
+                    .map(|cell_number| mesh.cells[&cell_number].pressure)
+                    .collect();
+                println!("p : {p:?}");
                 println!(
                     "Iteration {}: avg velocity = {}",
                     iter_number,
@@ -217,21 +229,13 @@ fn calculate_face_velocity(
         }
         FaceConditionTypes::Interior => match interpolation_scheme {
             VelocityInterpolation::Linear => {
-                // NOTE: If this is a boundary cell, the face velocity will be the cell velocity
-                let mut divisor: Float = 0.;
-                face.cell_numbers
-                    .iter()
-                    .map(|c| {
-                        (
-                            &mesh.cells[c].velocity,
-                            (face.centroid - mesh.cells[c].centroid).norm(),
-                        )
-                    })
-                    .fold(Vector::zero(), |acc, (v, x)| {
-                        divisor += x;
-                        acc + (*v) * x
-                    })
-                    / divisor
+                let c0 = &mesh.cells[&face.cell_numbers[0]];
+                let c1 = &mesh.cells[&face.cell_numbers[1]];
+                let y0 = c0.velocity;
+                let y1 = c1.velocity;
+                let x0 = (c0.centroid - face.centroid).norm();
+                let x1 = (c1.centroid - face.centroid).norm();
+                y0 + (y1 - y0) * x0 / (x0 + x1)
             }
             VelocityInterpolation::RhieChow2 => {
                 // see Versteeg & Malalasekara p340-341
@@ -265,20 +269,13 @@ fn calculate_face_pressure(
         }
         FaceConditionTypes::Interior => match interpolation_scheme {
             PressureInterpolation::Linear => {
-                let mut divisor: Float = 0.;
-                face.cell_numbers
-                    .iter()
-                    .map(|c| {
-                        (
-                            &mesh.cells[c].pressure,
-                            (face.centroid - mesh.cells[c].centroid).norm(),
-                        )
-                    })
-                    .fold(0., |acc, (v, x)| {
-                        divisor += x;
-                        acc + (*v) * x
-                    })
-                    / divisor
+                let c0 = &mesh.cells[&face.cell_numbers[0]];
+                let c1 = &mesh.cells[&face.cell_numbers[1]];
+                let y0 = c0.pressure;
+                let y1 = c1.pressure;
+                let x0 = (c0.centroid - face.centroid).norm();
+                let x1 = (c1.centroid - face.centroid).norm();
+                y0 + (y1 - y0) * x0 / (x0 + x1)
             }
             _ => panic!("unsupported pressure interpolation method"),
         },
@@ -361,16 +358,21 @@ fn build_momentum_matrices(
             let face_bc = &mesh.face_zones[&face.zone];
             let face_velocity =
                 calculate_face_velocity(&mesh, *face_number, velocity_interpolation_scheme);
+            // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
             let outward_face_normal = get_outward_face_normal(&face, *cell_number);
             let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
+            let face_pressure =
+                calculate_face_pressure(mesh, *face_number, pressure_interpolation_scheme);
+            // println!("cell {cell_number}, face {face_number}: pressure = {face_pressure}");
             let source_term = (-outward_face_normal)
                 * calculate_face_pressure(mesh, *face_number, pressure_interpolation_scheme)
                 * face.area;
             let (d_i, neighbor_cell_number) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
-                    (mu * face.area * (face.centroid - cell.centroid).norm(), 0)
+                    let d_i = mu * face.area * (face.centroid - cell.centroid).norm();
+                    (d_i, 0)
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                     // NOTE: Assumes zero boundary-normal velocity gradient
@@ -509,9 +511,13 @@ fn apply_pressure_correction(
     mesh: &mut Mesh,
     momentum_matrices: &CsMat<Float>,
     p_prime: &Vec<Float>,
+    pressure_relaxation_factor: Float,
+    momentum_relaxation_factor: Float,
 ) {
     for (cell_number, cell) in &mut mesh.cells {
-        cell.velocity += cell
+        cell.pressure = (1. - pressure_relaxation_factor) * cell.pressure
+            + pressure_relaxation_factor * p_prime[*cell_number - 1];
+        cell.velocity = cell.velocity * (1. - momentum_relaxation_factor) + momentum_relaxation_factor * cell
             .face_numbers
             .iter()
             .fold(Vector::zero(), |acc, face_number| {
@@ -532,6 +538,5 @@ fn apply_pressure_correction(
                             .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
                 }
             });
-        cell.pressure += p_prime[*cell_number - 1];
     }
 }
