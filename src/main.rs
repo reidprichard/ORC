@@ -6,8 +6,9 @@ use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
-use orc::common::Vector;
+use orc::common::{Uint, Vector};
 use sprs::{CsMat, TriMat};
+use std::env;
 
 fn test_gauss_seidel() {
     println!("*** Testing Gauss-Seidel for correctness. ***");
@@ -52,7 +53,7 @@ fn test_gauss_seidel() {
     println!("*** Gauss-Seidel test passed. ***");
 }
 
-fn test_2d() {
+fn test_2d(iteration_count: Uint) {
     let domain_height = 1.;
     let domain_length = 2.;
     let cell_height = domain_height / 3.;
@@ -100,12 +101,12 @@ fn test_2d() {
         VelocityInterpolation::Linear,
         1000.,
         0.001,
-        10,
+        iteration_count,
     );
     write_data(&mesh, "2d_test_case.csv".into());
 }
 
-fn test_3d_1x3() {
+fn test_3d_1x3(iteration_count: Uint) {
     let cell_length = 1.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -152,11 +153,11 @@ fn test_3d_1x3() {
         VelocityInterpolation::Linear,
         1000.,
         10.,
-        10,
+        iteration_count,
     )
 }
 
-fn test_3d_3x3() {
+fn test_3d_3x3(iteration_count: Uint) {
     let cell_length = 1. / 3.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -201,17 +202,19 @@ fn test_3d_3x3() {
         VelocityInterpolation::Linear,
         1000.,
         100.,
-        100,
+        iteration_count,
     )
 }
 
 fn main() {
     env_logger::init();
+    let args: Vec<String> = env::args().collect();
+    let iteration_count:Uint = args.get(1).unwrap_or(&"10".to_string()).parse().expect("arg 1 should be an integer");
     test_gauss_seidel();
     // Interface: allow user to choose from
     // 1. Read mesh
     // test_2d();
-    test_3d_1x3();
+    test_3d_1x3(iteration_count);
     // test_3d_3x3();
     // test_3d();
     // 2. Read data
