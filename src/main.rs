@@ -11,7 +11,7 @@ use sprs::{CsMat, TriMat};
 use std::env;
 
 const PRESSURE_RELAXATION: Float = 0.4;
-const MOMENTUM_RELAXATION: Float = 0.5;
+const MOMENTUM_RELAXATION: Float = 1.0;
 
 fn test_gauss_seidel() {
     println!("*** Testing Gauss-Seidel for correctness. ***");
@@ -111,7 +111,7 @@ fn test_2d(iteration_count: Uint) {
     write_data(&mesh, "2d_test_case.csv".into());
 }
 
-fn test_3d_1x3(iteration_count: Uint) {
+fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
     let cell_length = 1.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -160,19 +160,19 @@ fn test_3d_1x3(iteration_count: Uint) {
         1000.,
         100.,
         iteration_count,
-        MOMENTUM_RELAXATION,
-        PRESSURE_RELAXATION,
+        momentum_relaxation,
+        pressure_relaxation,
     );
 
     for (_, cell) in mesh.cells {
-        // assert!(cell.velocity.approx_equals(
-        //     &Vector {
-        //         x: 0.0025,
-        //         y: 0.,
-        //         z: 0.
-        //     },
-        //     1e-6
-        // ));
+        assert!(cell.velocity.approx_equals(
+            &Vector {
+                x: 0.005,
+                y: 0.,
+                z: 0.
+            },
+            1e-6
+        ));
     }
 }
 
@@ -237,7 +237,7 @@ fn main() {
         .expect("arg 1 should be an integer");
     // test_gauss_seidel();
     // test_2d();
-    test_3d_1x3(iteration_count);
+    test_3d_1x3(1000, 1.0, 0.4);
     // test_3d_3x3();
     // test_3d();
 
