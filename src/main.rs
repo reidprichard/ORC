@@ -176,7 +176,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     }
 }
 
-fn test_3d_3x3(iteration_count: Uint) {
+fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
     let cell_length = 1. / 3.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -220,11 +220,26 @@ fn test_3d_3x3(iteration_count: Uint) {
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        100.,
+        20.,
         iteration_count,
-        MOMENTUM_RELAXATION,
-        PRESSURE_RELAXATION,
-    )
+        momentum_relaxation,
+        pressure_relaxation,
+    );
+
+    let mut avg_velocity = Vector::zero();
+    for (_, cell) in &mesh.cells {
+        assert!(cell.velocity.approx_equals(
+            &Vector {
+                x: -7.54e-2,
+                y: 0.,
+                z: 0.
+            },
+            1e-2
+        ));
+        avg_velocity += cell.velocity;
+    }
+    avg_velocity /= mesh.cells.len();
+    assert!(avg_velocity.approx_equals(&Vector { x: -7.54e-2, y: 0., z: 0. }, 1e-3));
 }
 
 fn main() {
@@ -237,8 +252,8 @@ fn main() {
         .expect("arg 1 should be an integer");
     // test_gauss_seidel();
     // test_2d();
-    test_3d_1x3(1000, 1.0, 0.4);
-    // test_3d_3x3();
+    // test_3d_1x3(1000, 1.0, 0.4);
+    test_3d_3x3(iteration_count, 1.0, 0.4);
     // test_3d();
 
     // Interface: allow user to choose from

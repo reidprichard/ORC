@@ -55,10 +55,10 @@ pub fn solve_steady(
     mu: Float,
     iteration_count: Uint,
     momentum_relaxation_factor: Float,
-    pressure_relaxation_factor: Float,
+    pressure_relaxation_factor: Float, // 0.4 seems to be the upper limit for stability
 ) {
     const GAUSS_SEIDEL_ITERS: Uint = 100;
-    // initialize_pressure_field(mesh);
+    initialize_pressure_field(mesh);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
