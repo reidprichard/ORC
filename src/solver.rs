@@ -9,7 +9,7 @@ use sprs::{CsMat, TriMat};
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
 
-const GAUSS_SEIDEL_RELAXATION: Float = 0.5;
+const GAUSS_SEIDEL_RELAXATION: Float = 0.25;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -112,17 +112,14 @@ pub fn solve_steady(
                     GAUSS_SEIDEL_RELAXATION,
                 );
 
-                if log_enabled!(log::Level::Info) {
-                    println!("u: {u:?}\nv: {v:?}\nw: {w:?}");
-                }
-                for (cell_index, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
+                for (cell_index, (u_i, v_i, w_i)) in izip!(&u, &v, &w).enumerate() {
                     mesh.cells
                         .get_mut(&(cell_index + 1).try_into().unwrap())
                         .unwrap()
                         .velocity = Vector {
-                        x: u_i,
-                        y: v_i,
-                        z: w_i,
+                        x: *u_i,
+                        y: *v_i,
+                        z: *w_i,
                     };
                 }
 
@@ -151,10 +148,6 @@ pub fn solve_steady(
                 let mut p: Vec<Float> = (1..=mesh.cells.len())
                     .map(|cell_number| mesh.cells[&cell_number].pressure)
                     .collect();
-                if log_enabled!(log::Level::Info) {
-                    println!("p : {p:?}");
-                    println!("p': {p_prime:?}");
-                }
                 apply_pressure_correction(
                     mesh,
                     &a,
@@ -162,11 +155,26 @@ pub fn solve_steady(
                     pressure_relaxation_factor,
                     momentum_relaxation_factor,
                 );
-                p = (1..=mesh.cells.len())
-                    .map(|cell_number| mesh.cells[&cell_number].pressure)
-                    .collect();
+                for (cell_index, (u_i, v_i, w_i)) in izip!(&u, &v, &w).enumerate() {
+                    mesh.cells
+                        .get_mut(&(cell_index + 1).try_into().unwrap())
+                        .unwrap()
+                        .velocity = Vector {
+                        x: *u_i,
+                        y: *v_i,
+                        z: *w_i,
+                    };
+                }
+
+                if log_enabled!(log::Level::Info) {
+                    println!("u: {u:?}\nv: {v:?}\nw: {w:?}");
+                }
+                if log_enabled!(log::Level::Info) {
+                    println!("p : {p:?}");
+                    println!("p': {p_prime:?}");
+                }
                 println!(
-                    "Iteration {}: avg velocity = {}\n",
+                    "Iteration {}: avg velocity = {}",
                     iter_number,
                     mesh.cells
                         .iter()
@@ -427,15 +435,17 @@ fn build_momentum_matrices(
                     // let s_cross_diffusion = -mu *
                     (d_i, neighbor_cell_number)
                 }
-                _ => {
-                    println!("*** {} ***", face_bc.zone_type);
+                unsupported_zone_type => {
+                    println!("*** {} ***", unsupported_zone_type);
                     panic!("BC not supported");
                 }
             }; // end BC match
-            info!(
-                "cell {: >3}, face {: >3}: F_i = {: >9}, D_i = {: >9}",
-                cell_number, face_number, f_i, d_i
-            );
+            if log_enabled!(log::Level::Trace) {
+                println!(
+                    "cell {: >3}, face {: >3}: F_i = {: >9}, D_i = {: >9}",
+                    cell_number, face_number, f_i, d_i
+                );
+            }
             let a_nb: Float = -d_i
                 + match momentum_scheme {
                     MomentumDiscretization::UD => {
@@ -528,7 +538,7 @@ fn build_pressure_correction_matrices(
 
 fn apply_pressure_correction(
     mesh: &mut Mesh,
-    momentum_matrices: &CsMat<Float>,
+    momentum_matrices: &CsMat<Float>, // NOTE: I really only need the diagonal
     p_prime: &Vec<Float>,
     pressure_relaxation_factor: Float,
     momentum_relaxation_factor: Float,
@@ -540,21 +550,36 @@ fn apply_pressure_correction(
             .iter()
             .fold(Vector::zero(), |acc, face_number| {
                 let face = &mesh.faces[face_number];
-                if face.cell_numbers.len() == 1 {
-                    acc
-                } else {
-                    let neighbor_cell_number = if face.cell_numbers[0] == *cell_number {
-                        face.cell_numbers[1]
-                    } else {
-                        face.cell_numbers[0]
-                    };
-                    let outward_face_normal = get_outward_face_normal(&face, *cell_number);
-                    acc + outward_face_normal
-                        * (p_prime[*cell_number-1] - p_prime[neighbor_cell_number-1])
-                        * face.area
-                        / *momentum_matrices.get(*cell_number-1, neighbor_cell_number-1)
-                            .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
-                }
+                let face_zone = &mesh.face_zones[&face.zone];
+                let outward_face_normal = get_outward_face_normal(&face, *cell_number);
+                let p_prime_neighbor = match face_zone.zone_type {
+                    FaceConditionTypes::Wall => {
+                        p_prime[*cell_number-1]
+                    }
+                    FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+                        0.
+                    }
+                    FaceConditionTypes::VelocityInlet => {
+                        p_prime[*cell_number-1]
+                    }
+                    FaceConditionTypes::Interior => {
+                        let neighbor_cell_number = if face.cell_numbers[0] == *cell_number {
+                            face.cell_numbers[1]
+                        } else {
+                            face.cell_numbers[0]
+                        };
+                        p_prime[neighbor_cell_number-1]
+                    }
+                    unsupported_zone_type => {
+                        println!("*** {} ***", unsupported_zone_type);
+                        panic!("BC not supported");
+                    }
+                };
+                acc + outward_face_normal
+                    * (p_prime[*cell_number-1] - p_prime_neighbor)
+                    * face.area
+                    / *momentum_matrices.get(*cell_number-1, cell_number-1)
+                        .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
             });
     }
 }

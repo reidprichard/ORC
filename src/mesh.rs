@@ -20,7 +20,7 @@ pub struct CellZone {
 }
 
 // TODO: Move BCs somewhere more suitable
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum FaceConditionTypes {
     Interior,
     Wall,

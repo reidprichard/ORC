@@ -10,8 +10,8 @@ use orc::solver::*;
 use sprs::{CsMat, TriMat};
 use std::env;
 
-const PRESSURE_RELAXATION: Float = 0.1;
-const MOMENTUM_RELAXATION: Float = 0.1;
+const PRESSURE_RELAXATION: Float = 0.4;
+const MOMENTUM_RELAXATION: Float = 0.5;
 
 fn test_gauss_seidel() {
     println!("*** Testing Gauss-Seidel for correctness. ***");
@@ -162,7 +162,18 @@ fn test_3d_1x3(iteration_count: Uint) {
         iteration_count,
         MOMENTUM_RELAXATION,
         PRESSURE_RELAXATION,
-    )
+    );
+
+    for (_, cell) in mesh.cells {
+        // assert!(cell.velocity.approx_equals(
+        //     &Vector {
+        //         x: 0.0025,
+        //         y: 0.,
+        //         z: 0.
+        //     },
+        //     1e-6
+        // ));
+    }
 }
 
 fn test_3d_3x3(iteration_count: Uint) {

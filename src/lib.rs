@@ -87,6 +87,18 @@ pub mod common {
                 },
             }
         }
+
+        pub fn infinity_norm(&self) -> Float {
+            // this is gross, must be a better way
+            Float::max(
+                Float::abs(self.x),
+                Float::max(Float::abs(self.y), Float::abs(self.z)),
+            )
+        }
+
+        pub fn approx_equals(&self, other: &Self, tol:Float) -> bool {
+            (*self - *other).infinity_norm() < tol
+        }
     }
 
     impl Add<Float> for Vector {

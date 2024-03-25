@@ -513,13 +513,7 @@ pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
         print!("{}: ", i + 1);
         for j in 0..a.rows() {
             let coeff = a.get(i, j).unwrap_or(&0.);
-            let formatted_number = if coeff.eq(&0.) {
-                String::from("0e0")
-            } else {
-                let exponent = Float::floor(Float::log10(Float::abs(*coeff))) as i32;
-                let mantissa: Float = coeff / Float::powi(10., exponent);
-                format!("{mantissa:.2}e{exponent}")
-            };
+            let formatted_number = format!("{coeff:.2e}");
             print!("{: >9}, ", formatted_number);
         }
         println!(" | {}", b[i]);
