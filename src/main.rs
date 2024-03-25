@@ -250,8 +250,8 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
 
-    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Wall;
-    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Wall;
+    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
+    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
     solve_steady(
         &mut mesh,

@@ -200,7 +200,7 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
                 // TODO: rewrite face_zone nonsense
                 let face_zone = &mesh.faces[&face_number].zone;
                 p += match &mesh.face_zones[face_zone].zone_type {
-                    FaceConditionTypes::Wall => cell.pressure,
+                    FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => cell.pressure,
                     FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                         mesh.face_zones[face_zone].scalar_value
                     }
@@ -239,6 +239,11 @@ fn calculate_face_velocity(
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
         FaceConditionTypes::Wall => Vector::zero(),
+        FaceConditionTypes::Symmetry => {
+            // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
+            let cell_velocity = mesh.cells[&face.cell_numbers[0]].velocity;
+            cell_velocity - cell_velocity.dot(&face.normal)
+        }
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
             mesh.cells[&face.cell_numbers[0]].velocity
@@ -270,13 +275,10 @@ fn calculate_face_pressure(
     let face = &mesh.faces[&face_number];
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
-        FaceConditionTypes::Wall => {
+        FaceConditionTypes::Wall
+        | FaceConditionTypes::VelocityInlet
+        | FaceConditionTypes::Symmetry => {
             // NOTE: assumes zero wall-normal pressure gradient
-            // Technically the `Interior` branch would handle this correctly
-            mesh.cells[&face.cell_numbers[0]].pressure
-        }
-        FaceConditionTypes::VelocityInlet => {
-            // NOTE: assumes zero boundary-normal pressure gradient
             // Technically the `Interior` branch would handle this correctly
             mesh.cells[&face.cell_numbers[0]].pressure
         }
@@ -392,7 +394,9 @@ fn build_momentum_matrices(
                     let d_i = mu * face.area * (face.centroid - cell.centroid).norm();
                     (d_i, 0)
                 }
-                FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+                FaceConditionTypes::PressureInlet
+                | FaceConditionTypes::PressureOutlet
+                | FaceConditionTypes::Symmetry => {
                     // NOTE: Assumes zero boundary-normal velocity gradient
                     (
                         0., // no diffusion since face velocity == cell velocity
@@ -553,7 +557,7 @@ fn apply_pressure_correction(
                 let face_zone = &mesh.face_zones[&face.zone];
                 let outward_face_normal = get_outward_face_normal(&face, *cell_number);
                 let p_prime_neighbor = match face_zone.zone_type {
-                    FaceConditionTypes::Wall => {
+                    FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => {
                         p_prime[*cell_number-1]
                     }
                     FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
