@@ -182,6 +182,7 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
             let mut p = 0.;
             let cell = &mesh.cells[&cell_number];
             for face_number in &cell.face_numbers {
+                // TODO: rewrite face_zone nonsense
                 let face_zone = &mesh.faces[&face_number].zone;
                 p += match &mesh.face_zones[face_zone].zone_type {
                     FaceConditionTypes::Wall => cell.pressure,
@@ -490,29 +491,25 @@ fn build_pressure_correction_matrices(
         let mut b_p: Float = 0.;
         for face_number in &cell.face_numbers {
             let face = &mesh.faces[face_number];
-            if face.cell_numbers.len() == 1 {
-                continue;
-            }
-
             let face_velocity =
                 calculate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
             let inward_face_normal = get_inward_face_normal(&face, *cell_number);
             // The net mass flow rate through this face into this cell
             b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
 
-            let neighbor_cell_number: usize = if face.cell_numbers[0] != *cell_number {
-                face.cell_numbers[0]
-            } else {
-                face.cell_numbers[1]
-            };
-
-            let a_nb = rho * Float::powi(face.area, 2)
-                / momentum_matrices
+            if face.cell_numbers.len() > 1 {
+                let neighbor_cell_number: usize = if face.cell_numbers[0] != *cell_number {
+                    face.cell_numbers[0]
+                } else {
+                    face.cell_numbers[1]
+                };
+                // NOTE: I'm not confident on why this is negative, but it works.
+                let a_nb = -rho * Float::powi(face.area, 2) / momentum_matrices
                     .get(*cell_number - 1, neighbor_cell_number - 1)
                     .unwrap();
-
-            a.add_triplet(cell_number - 1, neighbor_cell_number - 1, -a_nb);
-            a_p += a_nb;
+                a.add_triplet(cell_number - 1, neighbor_cell_number - 1, -a_nb);
+                a_p += a_nb;
+            }
         }
         a.add_triplet(cell_number - 1, cell_number - 1, a_p);
         b[*cell_number - 1] = b_p;
