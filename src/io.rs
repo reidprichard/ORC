@@ -278,7 +278,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             }
         }
     } else {
-        panic!("Unable to read mesh.");
+        panic!("Unable to open mesh file for reading.");
     }
 
     for (face_index, mut face) in &mut faces {

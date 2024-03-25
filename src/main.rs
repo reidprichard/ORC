@@ -108,7 +108,6 @@ fn test_2d(iteration_count: Uint) {
         MOMENTUM_RELAXATION,
         PRESSURE_RELAXATION,
     );
-    write_data(&mesh, "2d_test_case.csv".into());
 }
 
 fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
@@ -242,6 +241,34 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     assert!(avg_velocity.approx_equals(&Vector { x: -7.54e-2, y: 0., z: 0. }, 1e-3));
 }
 
+fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
+    let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
+
+    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    mesh.get_face_zone("INLET").scalar_value = 0.001;
+
+    mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+    mesh.get_face_zone("OUTLET").scalar_value = 0.;
+
+    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Wall;
+    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Wall;
+
+    solve_steady(
+        &mut mesh,
+        PressureVelocityCoupling::SIMPLE,
+        MomentumDiscretization::CD,
+        PressureInterpolation::Linear,
+        VelocityInterpolation::Linear,
+        1000.,
+        0.001,
+        iteration_count,
+        momentum_relaxation,
+        pressure_relaxation,
+    );
+
+    write_data(&mesh, "couette.csv".into());
+}
+
 fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
@@ -253,8 +280,9 @@ fn main() {
     // test_gauss_seidel();
     // test_2d();
     // test_3d_1x3(1000, 1.0, 0.4);
-    test_3d_3x3(iteration_count, 1.0, 0.4);
+    // test_3d_3x3(250, 1.0, 0.4);
     // test_3d();
+    couette(iteration_count, 0.5, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh

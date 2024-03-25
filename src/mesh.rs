@@ -220,7 +220,7 @@ impl Mesh {
             .map(|(zone_num, fz)| fz)
             .filter(|fz| fz.name == zone_name)
             .next()
-            .expect(&format!("face zone '{zone_name}' exists in mesh"))
+            .expect(&format!("face zone '{zone_name}' should exist in mesh"))
     }
     pub fn calculate_velocity_gradient(&self, cell_number: usize) -> Tensor {
         let cell = self.cells.get(&cell_number).expect("valid cell number");

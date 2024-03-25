@@ -217,12 +217,12 @@ fn initialize_pressure_field(mesh: &mut Mesh) {
             cell.pressure = p / (cell.face_numbers.len() as Float);
         }
     }
-    print!("\n\n");
-    for cell_number in 1..=mesh.cells.len() {
-        let cell = &mesh.cells[&cell_number];
-        println!("{}, {}", cell.centroid, cell.pressure);
-    }
-    print!("\n\n");
+    // print!("\n\n");
+    // for cell_number in 1..=mesh.cells.len() {
+    //     let cell = &mesh.cells[&cell_number];
+    //     println!("{}, {}", cell.centroid, cell.pressure);
+    // }
+    // print!("\n\n");
 }
 
 fn get_velocity_source_term(_location: Vector) -> Vector {
