@@ -10,8 +10,8 @@ use orc::solver::*;
 use sprs::{CsMat, TriMat};
 use std::env;
 
-const PRESSURE_RELAXATION: Float = 0.25;
-const MOMENTUM_RELAXATION: Float = 0.25;
+const PRESSURE_RELAXATION: Float = 0.1;
+const MOMENTUM_RELAXATION: Float = 0.1;
 
 fn test_gauss_seidel() {
     println!("*** Testing Gauss-Seidel for correctness. ***");
@@ -150,6 +150,7 @@ fn test_3d_1x3(iteration_count: Uint) {
         }
     }
 
+    // High viscosity needed to keep Peclet under control
     solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
@@ -157,7 +158,7 @@ fn test_3d_1x3(iteration_count: Uint) {
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        10.,
+        100.,
         iteration_count,
         MOMENTUM_RELAXATION,
         PRESSURE_RELAXATION,
@@ -210,6 +211,8 @@ fn test_3d_3x3(iteration_count: Uint) {
         1000.,
         100.,
         iteration_count,
+        MOMENTUM_RELAXATION,
+        PRESSURE_RELAXATION,
     )
 }
 

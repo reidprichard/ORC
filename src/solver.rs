@@ -110,7 +110,7 @@ pub fn solve_steady(
                     GAUSS_SEIDEL_RELAXATION,
                 );
 
-                println!("\nu: {u:?}\nv: {v:?}\nw: {w:?}");
+                println!("u: {u:?}\nv: {v:?}\nw: {w:?}");
                 for (cell_index, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
                         .get_mut(&(cell_index + 1).try_into().unwrap())
@@ -128,7 +128,7 @@ pub fn solve_steady(
                     velocity_interpolation_scheme,
                     rho,
                 );
-                println!("Pressure:");
+                println!("\nPressure:");
                 print_linear_system(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
@@ -159,7 +159,7 @@ pub fn solve_steady(
                     .collect();
                 println!("p : {p:?}");
                 println!(
-                    "Iteration {}: avg velocity = {}",
+                    "Iteration {}: avg velocity = {}\n",
                     iter_number,
                     mesh.cells
                         .iter()
@@ -330,6 +330,8 @@ fn build_momentum_matrices(
     let mut v_source: Vec<Float> = vec![0.; cell_count];
     let mut w_source: Vec<Float> = vec![0.; cell_count];
 
+    let mut max_peclet_number: Float = 0.;
+
     // Iterate over all cells in the mesh
     for (cell_number, cell) in &mesh.cells {
         // Diffusion of scalar phi from neighbor into this cell
@@ -429,6 +431,7 @@ fn build_momentum_matrices(
             let a_nb: Float = -d_i
                 + match momentum_scheme {
                     MomentumDiscretization::UD => {
+                        panic!("untested");
                         // Neighbor only affects this cell if flux is into this
                         // cell => f_i < 0. Therefore, if f_i < 0, we set it to 0.
                         Float::max(f_i, 0.)
@@ -436,6 +439,11 @@ fn build_momentum_matrices(
                     MomentumDiscretization::CD => f_i / 2.,
                     _ => panic!("unsupported momentum scheme"),
                 };
+
+            if d_i.ne(&0.) {
+                max_peclet_number = Float::max(Float::abs(f_i / d_i), max_peclet_number);
+            }
+
             a_p += -a_nb + f_i + s_p; // sign of f_i?
             s_u += source_term;
 
@@ -458,6 +466,9 @@ fn build_momentum_matrices(
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
+    if max_peclet_number > 2. {
+        println!("Warning: High Peclet number may be unstable. Pe = {max_peclet_number:.2}");
+    }
     (a.to_csr(), u_source, v_source, w_source)
 }
 
@@ -469,7 +480,9 @@ fn build_pressure_correction_matrices(
 ) -> LinearSystem {
     // TODO: ignore boundary cells
     let cell_count = mesh.cells.len();
+    // The coefficients of the pressure correction matrix
     let mut a = TriMat::new((cell_count, cell_count));
+    // This is the net mass flow rate into each cell
     let mut b: Vec<Float> = vec![0.; cell_count];
 
     for (cell_number, cell) in &mesh.cells {
@@ -484,6 +497,7 @@ fn build_pressure_correction_matrices(
             let face_velocity =
                 calculate_face_velocity(mesh, *face_number, velocity_interpolation_scheme);
             let inward_face_normal = get_inward_face_normal(&face, *cell_number);
+            // The net mass flow rate through this face into this cell
             b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
 
             let neighbor_cell_number: usize = if face.cell_numbers[0] != *cell_number {
@@ -492,7 +506,7 @@ fn build_pressure_correction_matrices(
                 face.cell_numbers[1]
             };
 
-            let a_nb = -rho * Float::powi(face.area, 2)
+            let a_nb = rho * Float::powi(face.area, 2)
                 / momentum_matrices
                     .get(*cell_number - 1, neighbor_cell_number - 1)
                     .unwrap();
@@ -515,8 +529,7 @@ fn apply_pressure_correction(
     momentum_relaxation_factor: Float,
 ) {
     for (cell_number, cell) in &mut mesh.cells {
-        cell.pressure = (1. - pressure_relaxation_factor) * cell.pressure
-            + pressure_relaxation_factor * p_prime[*cell_number - 1];
+        cell.pressure = cell.pressure + pressure_relaxation_factor * p_prime[*cell_number - 1];
         cell.velocity = cell.velocity * (1. - momentum_relaxation_factor) + momentum_relaxation_factor * cell
             .face_numbers
             .iter()
