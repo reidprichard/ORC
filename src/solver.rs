@@ -2,7 +2,7 @@ use crate::common::*;
 use crate::io::print_linear_system;
 use crate::mesh::*;
 use itertools::izip;
-use log::info;
+use log::{info, log_enabled};
 use sprs::{CsMat, TriMat};
 // use std::collections::HashMap;
 
@@ -83,8 +83,10 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
-                println!("Momentum:");
-                print_linear_system(&a, &b_u);
+                if log_enabled!(log::Level::Debug) {
+                    println!("Momentum:");
+                    print_linear_system(&a, &b_u);
+                }
                 solve_linear_system(
                     &a,
                     &b_u,
@@ -110,7 +112,9 @@ pub fn solve_steady(
                     GAUSS_SEIDEL_RELAXATION,
                 );
 
-                println!("u: {u:?}\nv: {v:?}\nw: {w:?}");
+                if log_enabled!(log::Level::Info) {
+                    println!("u: {u:?}\nv: {v:?}\nw: {w:?}");
+                }
                 for (cell_index, (u_i, v_i, w_i)) in izip!(u, v, w).enumerate() {
                     mesh.cells
                         .get_mut(&(cell_index + 1).try_into().unwrap())
@@ -128,11 +132,13 @@ pub fn solve_steady(
                     velocity_interpolation_scheme,
                     rho,
                 );
-                println!("\nPressure:");
-                print_linear_system(
-                    &pressure_correction_matrices.a,
-                    &pressure_correction_matrices.b,
-                );
+                if log_enabled!(log::Level::Debug) {
+                    println!("\nPressure:");
+                    print_linear_system(
+                        &pressure_correction_matrices.a,
+                        &pressure_correction_matrices.b,
+                    );
+                }
                 solve_linear_system(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
@@ -145,8 +151,10 @@ pub fn solve_steady(
                 let mut p: Vec<Float> = (1..=mesh.cells.len())
                     .map(|cell_number| mesh.cells[&cell_number].pressure)
                     .collect();
-                println!("p : {p:?}");
-                println!("p': {p_prime:?}");
+                if log_enabled!(log::Level::Info) {
+                    println!("p : {p:?}");
+                    println!("p': {p_prime:?}");
+                }
                 apply_pressure_correction(
                     mesh,
                     &a,
@@ -157,7 +165,6 @@ pub fn solve_steady(
                 p = (1..=mesh.cells.len())
                     .map(|cell_number| mesh.cells[&cell_number].pressure)
                     .collect();
-                println!("p : {p:?}");
                 println!(
                     "Iteration {}: avg velocity = {}\n",
                     iter_number,
@@ -504,9 +511,10 @@ fn build_pressure_correction_matrices(
                     face.cell_numbers[1]
                 };
                 // NOTE: I'm not confident on why this is negative, but it works.
-                let a_nb = -rho * Float::powi(face.area, 2) / momentum_matrices
-                    .get(*cell_number - 1, neighbor_cell_number - 1)
-                    .unwrap();
+                let a_nb = -rho * Float::powi(face.area, 2)
+                    / momentum_matrices
+                        .get(*cell_number - 1, neighbor_cell_number - 1)
+                        .unwrap();
                 a.add_triplet(cell_number - 1, neighbor_cell_number - 1, -a_nb);
                 a_p += a_nb;
             }
