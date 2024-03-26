@@ -4,7 +4,7 @@ use crate::{common::*, io::print_vec_scientific};
 use itertools::izip;
 use log::{info, log_enabled};
 use rayon::prelude::*;
-use sprs::{CsMat, TriMat};
+use sprs::{CsMat, CsVec, TriMat};
 use std::thread;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
@@ -43,7 +43,13 @@ pub enum VelocityInterpolation {
 
 pub struct LinearSystem {
     a: CsMat<Float>,
-    b: Vec<Float>,
+    b: CsVec<Float>,
+}
+
+macro_rules! initialize_CsVec {
+    ($n:expr) => {
+        CsVec::new($n, (0..$n).collect(), vec![0.; $n])
+    };
 }
 
 pub fn solve_steady(
@@ -57,13 +63,19 @@ pub fn solve_steady(
     iteration_count: Uint,
     momentum_relaxation_factor: Float,
     pressure_relaxation_factor: Float, // 0.4 seems to be the upper limit for stability
-) -> (Vec<Float>, Vec<Float>, Vec<Float>, Vec<Float>) {
+) -> (CsVec<Float>, CsVec<Float>, CsVec<Float>, CsVec<Float>) {
     const GAUSS_SEIDEL_ITERS: Uint = 50;
-    let mut u: Vec<Float> = vec![0.; mesh.cells.len()];
-    let mut v: Vec<Float> = vec![0.; mesh.cells.len()];
-    let mut w: Vec<Float> = vec![0.; mesh.cells.len()];
-    let mut p: Vec<Float> = vec![0.; mesh.cells.len()];
-    let mut p_prime: Vec<Float> = vec![0.; mesh.cells.len()];
+    let cell_count: usize = mesh.cells.len();
+    let mut u = initialize_CsVec!(cell_count);
+    let mut v = initialize_CsVec!(cell_count);
+    let mut w = initialize_CsVec!(cell_count);
+    let mut p = initialize_CsVec!(cell_count);
+    let mut p_prime = CsVec::new(cell_count, (0..cell_count).collect(), vec![0.; cell_count]);
+    // let mut u: Vec<Float> = vec![0.; cell_count];
+    // let mut v: Vec<Float> = vec![0.; cell_count];
+    // let mut w: Vec<Float> = vec![0.; cell_count];
+    // let mut p: Vec<Float> = vec![0.; cell_count];
+    // let mut p_prime: Vec<Float> = vec![0.; cell_count];
     initialize_pressure_field(mesh, &mut p);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
@@ -85,7 +97,7 @@ pub fn solve_steady(
                 );
                 if log_enabled!(log::Level::Debug) {
                     println!("Momentum:");
-                    print_linear_system(&a, &b_u);
+                    // print_linear_system(&a, &b_u);
                 }
 
                 thread::scope(|s| {
@@ -133,10 +145,10 @@ pub fn solve_steady(
                 );
                 if log_enabled!(log::Level::Debug) {
                     println!("\nPressure:");
-                    print_linear_system(
-                        &pressure_correction_matrices.a,
-                        &pressure_correction_matrices.b,
-                    );
+                    // print_linear_system(
+                    //     &pressure_correction_matrices.a,
+                    //     &pressure_correction_matrices.b,
+                    // );
                 }
                 solve_linear_system(
                     &pressure_correction_matrices.a,
@@ -159,24 +171,24 @@ pub fn solve_steady(
                     momentum_relaxation_factor,
                 );
 
-                if log_enabled!(log::Level::Info) {
-                    print!("u: ");
-                    print_vec_scientific(&u);
-                    print!("v: ");
-                    print_vec_scientific(&v);
-                    print!("w: ");
-                    print_vec_scientific(&w);
-                }
-                if log_enabled!(log::Level::Info) {
-                    print!("p: ");
-                    print_vec_scientific(&p);
-                }
+                // if log_enabled!(log::Level::Info) {
+                //     print!("u: ");
+                //     print_vec_scientific(&u);
+                //     print!("v: ");
+                //     print_vec_scientific(&v);
+                //     print!("w: ");
+                //     print_vec_scientific(&w);
+                // }
+                // if log_enabled!(log::Level::Info) {
+                //     print!("p: ");
+                //     print_vec_scientific(&p);
+                // }
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
                     iter_number,
-                    u.iter().sum::<Float>() / (u.len() as Float),
-                    v.iter().sum::<Float>() / (v.len() as Float),
-                    w.iter().sum::<Float>() / (w.len() as Float)
+                    u.iter().map(|(i,x)| x).sum::<Float>() / (cell_count as Float),
+                    v.iter().map(|(i,x)| x).sum::<Float>() / (cell_count as Float),
+                    w.iter().map(|(i,x)| x).sum::<Float>() / (cell_count as Float),
                 );
             }
         } // _ => panic!("unsupported pressure-velocity coupling"),
@@ -184,7 +196,7 @@ pub fn solve_steady(
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(mesh: &mut Mesh, p: &mut Vec<Float>) {
+fn initialize_pressure_field(mesh: &mut Mesh, p: &mut CsVec<Float>) {
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
@@ -231,9 +243,9 @@ fn get_velocity_source_term(_location: Vector) -> Vector {
 
 fn calculate_face_velocity(
     mesh: &Mesh,
-    u: &Vec<Float>,
-    v: &Vec<Float>,
-    w: &Vec<Float>,
+    u: &CsVec<Float>,
+    v: &CsVec<Float>,
+    w: &CsVec<Float>,
     face_index: usize,
     interpolation_scheme: VelocityInterpolation,
 ) -> Vector {
@@ -280,7 +292,7 @@ fn calculate_face_velocity(
 
 fn calculate_face_pressure(
     mesh: &Mesh,
-    p: &Vec<Float>,
+    p: &CsVec<Float>,
     face_index: usize,
     interpolation_scheme: PressureInterpolation,
 ) -> Float {
@@ -313,8 +325,8 @@ fn calculate_face_pressure(
 
 pub fn solve_linear_system(
     a: &CsMat<Float>,
-    b: &Vec<Float>,
-    solution_vector: &mut Vec<Float>,
+    b: &CsVec<Float>,
+    solution_vector: &mut CsVec<Float>,
     iteration_count: Uint,
     method: SolutionMethod,
     relaxation_factor: Float,
@@ -322,12 +334,12 @@ pub fn solve_linear_system(
     match method {
         SolutionMethod::GaussSeidel => {
             'iter_loop: for _ in 0..iteration_count {
-                'row_loop: for i in 0..solution_vector.len() {
+                // solution_vector = solution_vector * (1. - relaxation_factor)
+                'row_loop: for i in 0..a.rows() {
                     solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
                         b[i]
                         - solution_vector
                             .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
-                            .enumerate()
                             .map(|(j, x)| {
                                 if i!=j {
                                     a.get(i, j).unwrap_or(&0.) * x
@@ -349,22 +361,22 @@ pub fn solve_linear_system(
 
 fn build_momentum_matrices(
     mesh: &Mesh,
-    u: &Vec<Float>,
-    v: &Vec<Float>,
-    w: &Vec<Float>,
-    p: &Vec<Float>,
+    u: &CsVec<Float>,
+    v: &CsVec<Float>,
+    w: &CsVec<Float>,
+    p: &CsVec<Float>,
     momentum_scheme: MomentumDiscretization,
     pressure_interpolation_scheme: PressureInterpolation,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
     mu: Float,
-) -> (CsMat<Float>, Vec<Float>, Vec<Float>, Vec<Float>) {
+) -> (CsMat<Float>, CsVec<Float>, CsVec<Float>, CsVec<Float>) {
     // TODO: Ignore boundary cells
     let cell_count = mesh.cells.len();
     let mut a = TriMat::new((cell_count, cell_count));
-    let mut u_source: Vec<Float> = vec![0.; cell_count];
-    let mut v_source: Vec<Float> = vec![0.; cell_count];
-    let mut w_source: Vec<Float> = vec![0.; cell_count];
+    let mut u_source = initialize_CsVec!(cell_count);
+    let mut v_source = initialize_CsVec!(cell_count);
+    let mut w_source = initialize_CsVec!(cell_count);
 
     let mut max_peclet_number: Float = 0.;
 
@@ -518,10 +530,10 @@ fn build_momentum_matrices(
 
 fn build_pressure_correction_matrices(
     mesh: &Mesh,
-    u: &Vec<Float>,
-    v: &Vec<Float>,
-    w: &Vec<Float>,
-    p: &Vec<Float>,
+    u: &CsVec<Float>,
+    v: &CsVec<Float>,
+    w: &CsVec<Float>,
+    p: &CsVec<Float>,
     momentum_matrices: &CsMat<Float>,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
@@ -531,7 +543,7 @@ fn build_pressure_correction_matrices(
     // The coefficients of the pressure correction matrix
     let mut a = TriMat::new((cell_count, cell_count));
     // This is the net mass flow rate into each cell
-    let mut b: Vec<Float> = vec![0.; cell_count];
+    let mut b = initialize_CsVec!(cell_count);
 
     for (cell_index, cell) in &mesh.cells {
         let mut a_p: Float = 0.;
@@ -578,11 +590,11 @@ fn build_pressure_correction_matrices(
 fn apply_pressure_correction(
     mesh: &mut Mesh,
     momentum_matrices: &CsMat<Float>, // NOTE: I really only need the diagonal
-    p_prime: &Vec<Float>,
-    u: &mut Vec<Float>,
-    v: &mut Vec<Float>,
-    w: &mut Vec<Float>,
-    p: &mut Vec<Float>,
+    p_prime: &CsVec<Float>,
+    u: &mut CsVec<Float>,
+    v: &mut CsVec<Float>,
+    w: &mut CsVec<Float>,
+    p: &mut CsVec<Float>,
     pressure_relaxation_factor: Float,
     momentum_relaxation_factor: Float,
 ) {

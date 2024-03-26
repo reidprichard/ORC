@@ -7,7 +7,7 @@ use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
-use sprs::{CsMat, TriMat};
+use sprs::{CsMat, CsVec, TriMat};
 use std::env;
 
 const PRESSURE_RELAXATION: Float = 0.4;
@@ -35,9 +35,9 @@ fn test_gauss_seidel() {
 
     let a = a_tri.to_csr();
     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = vec![3., 2., 1.];
+    let b = CsVec::new(3, vec![0,1,2], vec![3., 2., 1.]);
 
-    let mut x = vec![0., 0., 0.];
+    let mut x = CsVec::new(3, vec![0,1,2], vec![0., 0., 0.]);
 
     solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
 
@@ -256,7 +256,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     //     },
     //     1e-3
     // ));
-    write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
+    // write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
 }
 
 fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -287,7 +287,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     // a = 0.001; dx = 0.01; mu = 0.001; dp = -0.01
     // V = 0.0000833333 = 8.33e-5
 
-    write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
+    // write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
 }
 
 fn main() {
