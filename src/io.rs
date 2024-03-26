@@ -517,15 +517,15 @@ pub fn write_data(
     output_file_name: String,
 ) {
     let mut file = File::create(output_file_name).unwrap();
-    for (cell_number, cell) in &mesh.cells {
+    for (cell_index, cell) in &mesh.cells {
         write!(
             file,
             "{},\t({}, {}, {}),\t{}\n",
             cell.centroid,
-            u[cell_number - 1],
-            v[cell_number - 1],
-            w[cell_number - 1],
-            p[cell_number - 1]
+            u[*cell_index],
+            v[*cell_index],
+            w[*cell_index],
+            p[*cell_index]
         );
     }
 }
