@@ -211,7 +211,9 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut CsVec<Float>) {
                 // TODO: rewrite face_zone nonsense
                 let face_zone = &mesh.faces[&face_index].zone;
                 p_i += match &mesh.face_zones[face_zone].zone_type {
-                    FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => p[cell_index],
+                    FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => {
+                        get_csvec(&p, cell_index)
+                    }
                     FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                         mesh.face_zones[face_zone].scalar_value
                     }
@@ -219,7 +221,7 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut CsVec<Float>) {
                         mesh.faces[&face_index]
                             .cell_indices
                             .iter()
-                            .map(|neighbor_cell_index| p[*neighbor_cell_index])
+                            .map(|neighbor_cell_index| get_csvec(&p, *neighbor_cell_index))
                             .sum::<Float>()
                             / 2.
                     }
@@ -258,17 +260,17 @@ fn calculate_face_velocity(
         FaceConditionTypes::Symmetry => {
             // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
             let cell_velocity = Vector {
-                x: u[face.cell_indices[0]],
-                y: v[face.cell_indices[0]],
-                z: w[face.cell_indices[0]],
+                x: get_csvec(&u, face.cell_indices[0]),
+                y: get_csvec(&v, face.cell_indices[0]),
+                z: get_csvec(&w, face.cell_indices[0]),
             };
             cell_velocity - cell_velocity.dot(&face.normal)
         }
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vector {
-            x: u[face.cell_indices[0]],
-            y: v[face.cell_indices[0]],
-            z: w[face.cell_indices[0]],
+            x: get_csvec(&u, face.cell_indices[0]),
+            y: get_csvec(&v, face.cell_indices[0]),
+            z: get_csvec(&w, face.cell_indices[0]),
         },
         FaceConditionTypes::Interior => match interpolation_scheme {
             VelocityInterpolation::Linear => {
@@ -277,9 +279,12 @@ fn calculate_face_velocity(
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                 let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
                 Vector {
-                    x: u[c0] + (u[c1] - u[c0]) * x0 / (x0 + x1),
-                    y: v[c0] + (v[c1] - v[c0]) * x0 / (x0 + x1),
-                    z: w[c0] + (w[c1] - w[c0]) * x0 / (x0 + x1),
+                    x: get_csvec(&u, c0)
+                        + (get_csvec(&u, c1) - get_csvec(&u, c0)) * x0 / (x0 + x1),
+                    y: get_csvec(&v, c0)
+                        + (get_csvec(&v, c1) - get_csvec(&v, c0)) * x0 / (x0 + x1),
+                    z: get_csvec(&w, c0)
+                        + (get_csvec(&w, c1) - get_csvec(&w, c0)) * x0 / (x0 + x1),
                 }
             }
             VelocityInterpolation::RhieChow2 => {
@@ -304,11 +309,11 @@ fn calculate_face_pressure(
         FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
             // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
             // TODO: Off by one here?
-            p[face.cell_indices[0]]
+            get_csvec(&p, face.cell_indices[0])
         }
         FaceConditionTypes::VelocityInlet => face_zone.scalar_value,
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-            p[face.cell_indices[0]]
+            get_csvec(&p, face.cell_indices[0])
         }
         FaceConditionTypes::Interior => match interpolation_scheme {
             PressureInterpolation::Linear => {
@@ -316,7 +321,8 @@ fn calculate_face_pressure(
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                 let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                p[c0] + (p[c1] - p[c0]) * x0 / (x0 + x1)
+                get_csvec(&p, c0)
+                    + (get_csvec(&p, c1) - get_csvec(&p, c0)) * x0 / (x0 + x1)
             }
             _ => panic!("unsupported pressure interpolation"),
         },
@@ -342,7 +348,7 @@ pub fn solve_linear_system(
             a2 = &a2 - a;
             for _ in 0..iteration_count {
                 let iteration_value = solution_vector.clone();
-                let solution_vector = &a2 * &iteration_value;
+                *solution_vector = &a2 * &iteration_value;
             }
         }
         SolutionMethod::GaussSeidel => {
@@ -611,7 +617,8 @@ fn apply_pressure_correction(
     momentum_relaxation_factor: Float,
 ) {
     for (cell_index, cell) in &mut mesh.cells {
-        p[*cell_index] = p[*cell_index] + pressure_relaxation_factor * p_prime[*cell_index];
+        p[*cell_index] = get_csvec(&p, *cell_index)
+            + pressure_relaxation_factor * (*p_prime.get(*cell_index).unwrap_or(&0.));
         let velocity_correction = cell
             .face_indices
             .iter()
@@ -621,13 +628,13 @@ fn apply_pressure_correction(
                 let outward_face_normal = get_outward_face_normal(&face, *cell_index);
                 let p_prime_neighbor = match face_zone.zone_type {
                     FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => {
-                        p_prime[*cell_index]
+                        get_csvec(&p_prime, *cell_index)
                     }
                     FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                         0.
                     }
                     FaceConditionTypes::VelocityInlet => {
-                        p_prime[*cell_index]
+                        get_csvec(&p_prime, *cell_index)
                     }
                     FaceConditionTypes::Interior => {
                         let neighbor_cell_index = if face.cell_indices[0] == *cell_index {
@@ -635,7 +642,7 @@ fn apply_pressure_correction(
                         } else {
                             face.cell_indices[0]
                         };
-                        p_prime[neighbor_cell_index]
+                        get_csvec(&p_prime, neighbor_cell_index)
                     }
                     unsupported_zone_type => {
                         println!("*** {} ***", unsupported_zone_type);
@@ -643,13 +650,20 @@ fn apply_pressure_correction(
                     }
                 };
                 acc + outward_face_normal
-                    * (p_prime[*cell_index] - p_prime_neighbor)
+                    * (get_csvec(&p_prime, *cell_index) - p_prime_neighbor)
                     * face.area
                     / *momentum_matrices.get(*cell_index, *cell_index)
                         .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
             });
-        u[*cell_index] = u[*cell_index] * (1. - momentum_relaxation_factor) + velocity_correction.x;
-        v[*cell_index] = v[*cell_index] * (1. - momentum_relaxation_factor) + velocity_correction.y;
-        w[*cell_index] = w[*cell_index] * (1. - momentum_relaxation_factor) + velocity_correction.z;
+        u[*cell_index] = get_csvec(&u, *cell_index) * (1. - momentum_relaxation_factor)
+            + velocity_correction.x;
+        v[*cell_index] = get_csvec(&v, *cell_index) * (1. - momentum_relaxation_factor)
+            + velocity_correction.y;
+        w[*cell_index] = get_csvec(&w, *cell_index) * (1. - momentum_relaxation_factor)
+            + velocity_correction.z;
     }
+}
+
+fn get_csvec(v: &CsVec<Float>, n: usize) -> Float {
+    *v.get(n).unwrap_or(&0.)
 }

@@ -300,10 +300,10 @@ fn main() {
         .expect("arg 1 should be an integer");
     // test_gauss_seidel();
     // test_2d();
-    // test_3d_1x3(1000, 1.0, 0.4);
+    test_3d_1x3(1000, 1.0, 0.4);
     // test_3d_3x3(iteration_count, 1.0, 0.4);
     // test_3d();
-    couette(iteration_count, 0.5, 0.2);
+    // couette(iteration_count, 0.5, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh
