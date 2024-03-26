@@ -110,7 +110,7 @@ fn test_2d(iteration_count: Uint) {
     );
 }
 
-fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
+fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
     let cell_length = 1.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -150,7 +150,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     }
 
     // High viscosity needed to keep Peclet under control
-    solve_steady(
+    let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
@@ -163,8 +163,13 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         pressure_relaxation,
     );
 
-    for (_, cell) in mesh.cells {
-        assert!(cell.velocity.approx_equals(
+    for cell_number in 1..=mesh.cells.len() {
+        let cell_velocity = Vector {
+            x: u[cell_number],
+            y: v[cell_number],
+            z: w[cell_number],
+        };
+        assert!(cell_velocity.approx_equals(
             &Vector {
                 x: 0.005,
                 y: 0.,
@@ -175,7 +180,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     }
 }
 
-fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
+fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
     let cell_length = 1. / 3.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -212,7 +217,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         }
     }
 
-    solve_steady(
+    let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
@@ -226,8 +231,13 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     );
 
     let mut avg_velocity = Vector::zero();
-    for (_, cell) in &mesh.cells {
-        assert!(cell.velocity.approx_equals(
+    for cell_number in 1..=mesh.cells.len() {
+        let cell_velocity = Vector {
+            x: u[cell_number],
+            y: v[cell_number],
+            z: w[cell_number],
+        };
+        assert!(cell_velocity.approx_equals(
             &Vector {
                 x: -7.54e-2,
                 y: 0.,
@@ -235,13 +245,20 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
             },
             1e-2
         ));
-        avg_velocity += cell.velocity;
+        avg_velocity += cell_velocity;
     }
     avg_velocity /= mesh.cells.len();
-    assert!(avg_velocity.approx_equals(&Vector { x: -7.54e-2, y: 0., z: 0. }, 1e-3));
+    assert!(avg_velocity.approx_equals(
+        &Vector {
+            x: -7.54e-2,
+            y: 0.,
+            z: 0.
+        },
+        1e-3
+    ));
 }
 
-fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation:Float) {
+fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
     let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
@@ -253,7 +270,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
-    solve_steady(
+    let (u,v,w,p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
@@ -269,7 +286,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     // a = 0.001; dx = 0.01; mu = 0.001; dp = -0.01
     // V = 0.0000833333 = 8.33e-5
 
-    write_data(&mesh, "couette.csv".into());
+    write_data(&mesh, &u, &v, &w, &p, "couette.csv".into());
 }
 
 fn main() {

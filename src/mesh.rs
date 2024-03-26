@@ -133,31 +133,24 @@ pub enum GradientReconstructionMethods {
 
 pub struct Cell {
     pub zone_number: Uint,
-    pub face_numbers: Vec<usize>,
+    pub face_indices: Vec<usize>,
     pub volume: Float,
     pub centroid: Vector,
-    pub velocity: Vector,
-    pub pressure: Float,
 }
 impl Default for Cell {
     fn default() -> Cell {
         Cell {
             zone_number: 0,
-            face_numbers: Vec::new(),
+            face_indices: Vec::new(),
             volume: 0.,
             centroid: Vector::zero(),
-            velocity: Vector::zero(),
-            pressure: 0.,
         }
     }
 }
 
 // #[derive(Copy, Clone)]
 pub struct Node {
-    pub cell_numbers: Vec<usize>,
     pub position: Vector,
-    pub velocity: Vector,
-    pub pressure: Float,
 }
 impl Node {
     fn interpolate_velocity(&mut self) {}
@@ -171,10 +164,7 @@ impl Node {
 impl Default for Node {
     fn default() -> Node {
         Node {
-            cell_numbers: Vec::new(),
             position: Vector::zero(),
-            velocity: Vector::zero(),
-            pressure: 0.,
         }
     }
 }
@@ -182,26 +172,22 @@ impl Default for Node {
 pub struct Face {
     pub zone: Uint,
     // TODO: Make this an array
-    pub cell_numbers: Vec<usize>,
-    pub node_numbers: Vec<usize>,
+    pub cell_indices: Vec<usize>,
+    pub node_indices: Vec<usize>,
     pub area: Float,
     pub centroid: Vector,
     pub normal: Vector,
-    pub velocity: Vector,
-    pub pressure: Float,
 }
 impl Face {}
 impl Default for Face {
     fn default() -> Face {
         Face {
             zone: 0,
-            cell_numbers: Vec::new(),
-            node_numbers: Vec::new(),
+            cell_indices: Vec::new(),
+            node_indices: Vec::new(),
             area: 0.,
             centroid: Vector::zero(),
             normal: Vector::zero(), // points toward cell 0!
-            velocity: Vector::zero(),
-            pressure: 0.,
         }
     }
 }
@@ -222,28 +208,28 @@ impl Mesh {
             .next()
             .expect(&format!("face zone '{zone_name}' should exist in mesh"))
     }
-    pub fn calculate_velocity_gradient(&self, cell_number: usize) -> Tensor {
-        let cell = self.cells.get(&cell_number).expect("valid cell number");
-        cell.face_numbers
-            .iter()
-            .map(|face_number| {
-                let face = &self.faces[face_number];
-                let mut neighbor_count = 0;
-                face.cell_numbers
-                    .iter()
-                    .filter(|c| **c != 0)
-                    .inspect(|_| neighbor_count += 1)
-                    .map(|c| self.cells[c].velocity)
-                    .fold(Vector::zero(), |acc, v| acc + v)
-                    .outer(&face.centroid)
-                    / neighbor_count
-            })
-            .fold(Tensor::zero(), |acc, t| acc + t)
-    }
+    // pub fn calculate_velocity_gradient(&self, cell_number: usize) -> Tensor {
+    //     let cell = self.cells.get(&cell_number).expect("valid cell number");
+    //     cell.face_numbers
+    //         .iter()
+    //         .map(|face_number| {
+    //             let face = &self.faces[face_number];
+    //             let mut neighbor_count = 0;
+    //             face.cell_numbers
+    //                 .iter()
+    //                 .filter(|c| **c != 0)
+    //                 .inspect(|_| neighbor_count += 1)
+    //                 .map(|c| self.cells[c].velocity)
+    //                 .fold(Vector::zero(), |acc, v| acc + v)
+    //                 .outer(&face.centroid)
+    //                 / neighbor_count
+    //         })
+    //         .fold(Tensor::zero(), |acc, t| acc + t)
+    // }
 }
 
 pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector {
-    if cell_number == face.cell_numbers[0] {
+    if cell_number == face.cell_indices[0] {
         face.normal
     } else {
         -face.normal

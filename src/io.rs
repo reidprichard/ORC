@@ -126,7 +126,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     let mut current_line = mesh_file_lines
                         .next()
                         .expect("node section shouldn't be empty");
-                    let mut node_index = start_index;
+                    let mut node_number = start_index;
                     'node_loop: loop {
                         if current_line == "(" {
                             current_line = mesh_file_lines.next().unwrap();
@@ -155,7 +155,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 ));
                             }
                             nodes.insert(
-                                node_index,
+                                node_number - 1,
                                 Node {
                                     position: Vector { x, y, z },
                                     ..Node::default()
@@ -163,7 +163,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             );
                             debug!(
                                 "Node {}: {} {} {}",
-                                node_index,
+                                node_number,
                                 format_pos_padded(x),
                                 format_pos_padded(y),
                                 format_pos_padded(z)
@@ -172,7 +172,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         match mesh_file_lines.next() {
                             Some(line_contents) => {
                                 current_line = line_contents;
-                                node_index += 1;
+                                node_number += 1;
                             }
                             None => break 'node_loop,
                         }
@@ -219,7 +219,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
                     let mut current_line =
                         mesh_file_lines.next().expect("face section has contents");
-                    let mut face_index = start_index;
+                    let mut face_number = start_index;
                     'face_loop: loop {
                         if current_line == "(" {
                             current_line = mesh_file_lines.next().unwrap();
@@ -228,7 +228,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         if current_line.starts_with(")") {
                             break 'face_loop;
                         }
-                        debug!("Face {face_index}: {current_line}");
+                        debug!("Face {face_number}: {current_line}");
                         let line_blocks: Vec<&str> =
                             current_line.split_ascii_whitespace().collect();
                         if line_blocks.len() < 2 {
@@ -242,18 +242,31 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             break 'face_loop;
                         }
                         faces.insert(
-                            face_index,
+                            face_number - 1,
                             Face {
                                 zone: zone_id as Uint,
-                                cell_numbers: line_blocks[node_count..]
-                                    .into_iter()
-                                    .map(|cell_id| usize::from_str_radix(cell_id, 16))
-                                    .flatten()
+                                cell_indices: line_blocks[node_count..]
+                                    .iter()
+                                    .map(|cell_num| {
+                                        let cell_num = usize::from_str_radix(cell_num, 16).unwrap();
+                                        if cell_num > 0 {
+                                            cell_num - 1
+                                        } else {
+                                            usize::MAX
+                                        }
+                                    })
                                     .collect(),
-                                node_numbers: line_blocks[..node_count]
-                                    .into_iter()
-                                    .map(|node_id| usize::from_str_radix(node_id, 16))
-                                    .flatten()
+                                node_indices: line_blocks[..node_count]
+                                    .iter()
+                                    .map(|node_num_str| {
+                                        let node_num =
+                                            usize::from_str_radix(node_num_str, 16).unwrap();
+                                        if node_num > 0 {
+                                            node_num - 1
+                                        } else {
+                                            usize::MAX
+                                        }
+                                    })
                                     .collect(),
                                 ..Face::default()
                             },
@@ -261,7 +274,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         match mesh_file_lines.next() {
                             Some(line_contents) => {
                                 current_line = line_contents;
-                                face_index += 1;
+                                face_number += 1;
                             }
                             None => break 'face_loop,
                         }
@@ -282,12 +295,12 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 
     for (face_index, mut face) in &mut faces {
-        if face.node_numbers.len() < dimensions.into() {
-            println!("dimensions: {}", face.node_numbers.len());
+        if face.node_indices.len() < dimensions.into() {
+            println!("dimensions: {}", face.node_indices.len());
             panic!("face has too few nodes");
         }
         let face_nodes: Vec<&Node> = face
-            .node_numbers
+            .node_indices
             .iter()
             .map(|n| nodes.get(n).expect("nodes should have all been read"))
             .collect();
@@ -319,17 +332,17 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         // TGRID format has face normal as defined here pointing toward cell 0
         // If cell 0 does not exist (e.g. face is on boundary), we need to remove
         // that cell and flip the normal vector
-        if face.cell_numbers[0] == 0 {
+        if face.cell_indices[0] == usize::MAX {
             face.normal = -face.normal;
-            face.cell_numbers.remove(0);
-        } else if face.cell_numbers[1] == 0 {
-            face.cell_numbers.remove(1);
+            face.cell_indices.remove(0);
+        } else if face.cell_indices[1] == usize::MAX {
+            face.cell_indices.remove(1);
         }
         face.centroid = face
-            .node_numbers
+            .node_indices
             .iter()
             .fold(Vector::zero(), |acc, n| acc + nodes[n].position)
-            / (face.node_numbers.len() as Float);
+            / (face.node_indices.len() as Float);
         face.area = match face_nodes.len() {
             0 | 1 => panic!("faces must have 2+ nodes"),
             2 => {
@@ -370,15 +383,15 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 .norm(),
                         ) / 2.
                     };
-                let mut area: Float = face.node_numbers.windows(2).fold(0., |acc, w| {
+                let mut area: Float = face.node_indices.windows(2).fold(0., |acc, w| {
                     acc + calculate_triangle_area(
                         &face.centroid,
                         &nodes[&w[0]].position,
                         &nodes[&w[1]].position,
                     )
                 });
-                let first = face.node_numbers[0];
-                let last = face.node_numbers[face.node_numbers.len() - 1];
+                let first = face.node_indices[0];
+                let last = face.node_indices[face.node_indices.len() - 1];
                 area + calculate_triangle_area(
                     &face.centroid,
                     &nodes[&first].position,
@@ -391,13 +404,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             "Face {}: centroid={}, area={:.2e}",
             face_index, face.centroid, face.area
         );
-        for cell_index in &face.cell_numbers {
+        for cell_index in &face.cell_indices {
             // Could this check be done with a filter or something?
-            if *cell_index == 0 {
+            if *cell_index == usize::MAX {
                 continue;
             }
             let mut cell = cells.entry(*cell_index).or_insert(Cell::default());
-            cell.face_numbers.push(*face_index);
+            cell.face_indices.push(*face_index);
             // TODO: more rigorous centroid calc
             cell.centroid += face.centroid;
             // TODO: Get cell zones
@@ -405,9 +418,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 
     for (cell_index, mut cell) in &mut cells {
-        cell.centroid /= cell.face_numbers.len();
+        cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
-            .face_numbers
+            .face_indices
             .iter()
             .map(|n| faces.get(n).unwrap())
             .collect();
@@ -495,13 +508,24 @@ pub fn read_settings() {}
 
 pub fn write_mesh() {}
 
-pub fn write_data(mesh: &Mesh, output_file_name: String) {
+pub fn write_data(
+    mesh: &Mesh,
+    u: &Vec<Float>,
+    v: &Vec<Float>,
+    w: &Vec<Float>,
+    p: &Vec<Float>,
+    output_file_name: String,
+) {
     let mut file = File::create(output_file_name).unwrap();
     for (cell_number, cell) in &mesh.cells {
         write!(
             file,
-            "{},\t{},\t{}\n",
-            cell.centroid, cell.velocity, cell.pressure
+            "{},\t({}, {}, {}),\t{}\n",
+            cell.centroid,
+            u[cell_number - 1],
+            v[cell_number - 1],
+            w[cell_number - 1],
+            p[cell_number - 1]
         );
     }
 }
