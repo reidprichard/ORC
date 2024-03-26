@@ -15,6 +15,7 @@ const GAUSS_SEIDEL_RELAXATION: Float = 0.25;
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
     GaussSeidel,
+    Jacobi,
 }
 
 #[derive(Copy, Clone)]
@@ -107,7 +108,7 @@ pub fn solve_steady(
                             &b_u,
                             &mut u,
                             GAUSS_SEIDEL_ITERS,
-                            SolutionMethod::GaussSeidel,
+                            SolutionMethod::Jacobi,
                             GAUSS_SEIDEL_RELAXATION,
                         );
                     });
@@ -117,7 +118,7 @@ pub fn solve_steady(
                             &b_v,
                             &mut v,
                             GAUSS_SEIDEL_ITERS,
-                            SolutionMethod::GaussSeidel,
+                            SolutionMethod::Jacobi,
                             GAUSS_SEIDEL_RELAXATION,
                         );
                     });
@@ -127,7 +128,7 @@ pub fn solve_steady(
                             &b_w,
                             &mut w,
                             GAUSS_SEIDEL_ITERS,
-                            SolutionMethod::GaussSeidel,
+                            SolutionMethod::Jacobi,
                             GAUSS_SEIDEL_RELAXATION,
                         );
                     });
@@ -155,7 +156,7 @@ pub fn solve_steady(
                     &pressure_correction_matrices.b,
                     &mut p_prime,
                     GAUSS_SEIDEL_ITERS,
-                    SolutionMethod::GaussSeidel,
+                    SolutionMethod::Jacobi,
                     GAUSS_SEIDEL_RELAXATION,
                 );
 
@@ -186,9 +187,9 @@ pub fn solve_steady(
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
                     iter_number,
-                    u.iter().map(|(i,x)| x).sum::<Float>() / (cell_count as Float),
-                    v.iter().map(|(i,x)| x).sum::<Float>() / (cell_count as Float),
-                    w.iter().map(|(i,x)| x).sum::<Float>() / (cell_count as Float),
+                    u.iter().map(|(i, x)| x).sum::<Float>() / (cell_count as Float),
+                    v.iter().map(|(i, x)| x).sum::<Float>() / (cell_count as Float),
+                    w.iter().map(|(i, x)| x).sum::<Float>() / (cell_count as Float),
                 );
             }
         } // _ => panic!("unsupported pressure-velocity coupling"),
@@ -332,9 +333,20 @@ pub fn solve_linear_system(
     relaxation_factor: Float,
 ) {
     match method {
+        SolutionMethod::Jacobi => {
+            let eye = CsMat::eye(5);
+            let mut x = CsVec::new(5, vec![0, 2, 4], vec![1., 2., 3.]);
+            let y = &eye * &x;
+
+            let mut a2: CsMat<Float> = CsMat::eye(a.rows());
+            a2 = &a2 - a;
+            for _ in 0..iteration_count {
+                let iteration_value = solution_vector.clone();
+                let solution_vector = &a2 * &iteration_value;
+            }
+        }
         SolutionMethod::GaussSeidel => {
             'iter_loop: for _ in 0..iteration_count {
-                // solution_vector = solution_vector * (1. - relaxation_factor)
                 'row_loop: for i in 0..a.rows() {
                     solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
                         b[i]
