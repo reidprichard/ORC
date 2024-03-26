@@ -12,8 +12,8 @@ use orc::solver::*;
 use sprs::{CsMat, CsVec, TriMat};
 use std::env;
 
-const PRESSURE_RELAXATION: Float = 0.4;
-const MOMENTUM_RELAXATION: Float = 1.0;
+const PRESSURE_RELAXATION: Float = 0.5;
+const MOMENTUM_RELAXATION: Float = 0.5;
 
 fn test_jacobi() {
     println!("*** Testing Jacobi solver for correctness. ***");
@@ -163,7 +163,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     // mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
     // mesh.get_face_zone("INLET").vector_value = Vector {x: 0.1, y: 0., z: 0.};
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 0.03; // 1 Pa/m = 1 Pa/cell
+    mesh.get_face_zone("INLET").scalar_value = 3.; // 1 Pa/m = 1 Pa/cell
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -201,7 +201,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        10.,
+        100.,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,
@@ -222,6 +222,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         //     1e-6
         // ));
     }
+
 }
 
 fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -342,7 +343,7 @@ fn main() {
         .unwrap_or(&"10".to_string())
         .parse()
         .expect("arg 1 should be an integer");
-    // test_jacobi();
+    test_jacobi();
     // test_gauss_seidel();
     // test_2d();
     test_3d_1x3(iteration_count, 0.1, 0.1);
