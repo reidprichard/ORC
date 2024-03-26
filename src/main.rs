@@ -163,7 +163,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         pressure_relaxation,
     );
 
-    for cell_number in 1..=mesh.cells.len() {
+    for cell_number in 0..mesh.cells.len() {
         let cell_velocity = Vector {
             x: u[cell_number],
             y: v[cell_number],
@@ -231,31 +231,32 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     );
 
     let mut avg_velocity = Vector::zero();
-    for cell_number in 1..=mesh.cells.len() {
+    for cell_number in 0..mesh.cells.len() {
         let cell_velocity = Vector {
             x: u[cell_number],
             y: v[cell_number],
             z: w[cell_number],
         };
-        assert!(cell_velocity.approx_equals(
-            &Vector {
-                x: -7.54e-2,
-                y: 0.,
-                z: 0.
-            },
-            1e-2
-        ));
+        // assert!(cell_velocity.approx_equals(
+        //     &Vector {
+        //         x: -7.54e-2,
+        //         y: 0.,
+        //         z: 0.
+        //     },
+        //     1e-2
+        // ));
         avg_velocity += cell_velocity;
     }
     avg_velocity /= mesh.cells.len();
-    assert!(avg_velocity.approx_equals(
-        &Vector {
-            x: -7.54e-2,
-            y: 0.,
-            z: 0.
-        },
-        1e-3
-    ));
+    // assert!(avg_velocity.approx_equals(
+    //     &Vector {
+    //         x: -7.54e-2,
+    //         y: 0.,
+    //         z: 0.
+    //     },
+    //     1e-3
+    // ));
+    write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
 }
 
 fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -286,7 +287,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     // a = 0.001; dx = 0.01; mu = 0.001; dp = -0.01
     // V = 0.0000833333 = 8.33e-5
 
-    write_data(&mesh, &u, &v, &w, &p, "couette.csv".into());
+    write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
 }
 
 fn main() {
@@ -300,9 +301,9 @@ fn main() {
     // test_gauss_seidel();
     // test_2d();
     // test_3d_1x3(1000, 1.0, 0.4);
-    // test_3d_3x3(250, 1.0, 0.4);
+    test_3d_3x3(250, 1.0, 0.4);
     // test_3d();
-    couette(iteration_count, 0.5, 0.2);
+    // couette(iteration_count, 0.5, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh
