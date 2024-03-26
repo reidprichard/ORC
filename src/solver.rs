@@ -6,6 +6,7 @@ use log::{info, log_enabled};
 use rayon::prelude::*;
 use sprs::{CsMat, CsVec, TriMat};
 use std::thread;
+extern crate nalgebra as na;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
@@ -240,8 +241,8 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut CsVec<Float>) {
     // print!("\n\n");
 }
 
-fn get_velocity_source_term(_location: Vector) -> Vector {
-    Vector::zero()
+fn get_velocity_source_term(_location: Vec3) -> Vec3 {
+    Vec3::zero()
 }
 
 fn calculate_face_velocity(
@@ -251,15 +252,15 @@ fn calculate_face_velocity(
     w: &CsVec<Float>,
     face_index: usize,
     interpolation_scheme: VelocityInterpolation,
-) -> Vector {
+) -> Vec3 {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
-        FaceConditionTypes::Wall => Vector::zero(),
+        FaceConditionTypes::Wall => Vec3::zero(),
         FaceConditionTypes::Symmetry => {
             // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
-            let cell_velocity = Vector {
+            let cell_velocity = Vec3 {
                 x: get_csvec(&u, face.cell_indices[0]),
                 y: get_csvec(&v, face.cell_indices[0]),
                 z: get_csvec(&w, face.cell_indices[0]),
@@ -267,7 +268,7 @@ fn calculate_face_velocity(
             cell_velocity - cell_velocity.dot(&face.normal)
         }
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
-        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vector {
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vec3 {
             x: get_csvec(&u, face.cell_indices[0]),
             y: get_csvec(&v, face.cell_indices[0]),
             z: get_csvec(&w, face.cell_indices[0]),
@@ -278,7 +279,7 @@ fn calculate_face_velocity(
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                 let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                Vector {
+                Vec3 {
                     x: get_csvec(&u, c0)
                         + (get_csvec(&u, c1) - get_csvec(&u, c0)) * x0 / (x0 + x1),
                     y: get_csvec(&v, c0)
@@ -414,8 +415,8 @@ fn build_momentum_matrices(
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         let mut s_p = 0.; // proportional source term TODO
         let mut s_u = get_velocity_source_term(cell.centroid); // general source term
-        let mut s_u_dc = Vector::zero(); // deferred correction source term TODO
-        let mut s_d_cross = Vector::zero(); // cross diffusion source term TODO
+        let mut s_u_dc = Vec3::zero(); // deferred correction source term TODO
+        let mut s_d_cross = Vec3::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = s_p;
@@ -476,7 +477,7 @@ fn build_momentum_matrices(
                     }
 
                     // Cell centroids vector
-                    let e_xi: Vector = mesh.cells[&neighbor_cell_index].centroid - cell.centroid;
+                    let e_xi: Vec3 = mesh.cells[&neighbor_cell_index].centroid - cell.centroid;
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area / e_xi.norm();
 
@@ -622,7 +623,7 @@ fn apply_pressure_correction(
         let velocity_correction = cell
             .face_indices
             .iter()
-            .fold(Vector::zero(), |acc, face_index| {
+            .fold(Vec3::zero(), |acc, face_index| {
                 let face = &mesh.faces[face_index];
                 let face_zone = &mesh.face_zones[&face.zone];
                 let outward_face_normal = get_outward_face_normal(&face, *cell_index);
