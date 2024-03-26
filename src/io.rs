@@ -510,10 +510,10 @@ pub fn write_mesh() {}
 
 pub fn write_data(
     mesh: &Mesh,
-    u: &Vec<Float>,
-    v: &Vec<Float>,
-    w: &Vec<Float>,
-    p: &Vec<Float>,
+    u: &HashMap<usize,Float>,
+    v: &HashMap<usize,Float>,
+    w: &HashMap<usize,Float>,
+    p: &HashMap<usize,Float>,
     output_file_name: String,
 ) {
     let mut file = File::create(output_file_name).unwrap();
@@ -522,17 +522,17 @@ pub fn write_data(
             file,
             "{},\t({}, {}, {}),\t{}\n",
             cell.centroid,
-            u[*cell_index],
-            v[*cell_index],
-            w[*cell_index],
-            p[*cell_index]
+            u[cell_index],
+            v[cell_index],
+            w[cell_index],
+            p[cell_index]
         );
     }
 }
 
 pub fn write_settings() {}
 
-pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
+pub fn print_linear_system(a: &CsMat<Float>, b: &HashMap<usize, Float>) {
     for i in 0..a.rows() {
         print!("{}: ", i + 1);
         for j in 0..a.rows() {
@@ -540,6 +540,6 @@ pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
             let formatted_number = format!("{coeff:.2e}");
             print!("{: >9}, ", formatted_number);
         }
-        println!(" | {}", b[i]);
+        println!(" | {}", b[&i]);
     }
 }

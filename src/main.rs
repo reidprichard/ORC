@@ -8,6 +8,7 @@ use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
 use sprs::{CsMat, TriMat};
+use std::collections::HashMap;
 use std::env;
 
 const PRESSURE_RELAXATION: Float = 0.4;
@@ -35,19 +36,19 @@ fn test_gauss_seidel() {
 
     let a = a_tri.to_csr();
     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = vec![3., 2., 1.];
+    let b: HashMap<usize, Float> = [(0, 3.), (1, 2.), (2, 1.)].iter().cloned().collect(); // = vec![3., 2., 1.];
 
-    let mut x = vec![0., 0., 0.];
+    let mut x: HashMap<usize, Float> = [(0, 0.), (1, 0.), (2, 0.)].iter().cloned().collect(); // = vec![3., 2., 1.];
 
     solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
 
     for row_num in 0..a.rows() {
         assert!(
             Float::abs(
-                a.get(row_num, 0).unwrap_or(&0.) * x[0]
-                    + a.get(row_num, 1).unwrap_or(&0.) * x[1]
-                    + a.get(row_num, 2).unwrap_or(&0.) * x[2]
-                    - b[row_num]
+                a.get(row_num, 0).unwrap_or(&0.) * x[&0]
+                    + a.get(row_num, 1).unwrap_or(&0.) * x[&1]
+                    + a.get(row_num, 2).unwrap_or(&0.) * x[&2]
+                    - b[&row_num]
             ) < TOL
         );
     }
@@ -165,9 +166,9 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 
     for cell_number in 1..=mesh.cells.len() {
         let cell_velocity = Vector {
-            x: u[cell_number],
-            y: v[cell_number],
-            z: w[cell_number],
+            x: u[&cell_number],
+            y: v[&cell_number],
+            z: w[&cell_number],
         };
         assert!(cell_velocity.approx_equals(
             &Vector {
@@ -233,9 +234,9 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     let mut avg_velocity = Vector::zero();
     for cell_number in 1..=mesh.cells.len() {
         let cell_velocity = Vector {
-            x: u[cell_number],
-            y: v[cell_number],
-            z: w[cell_number],
+            x: u[&cell_number],
+            y: v[&cell_number],
+            z: w[&cell_number],
         };
         assert!(cell_velocity.approx_equals(
             &Vector {
@@ -270,7 +271,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
-    let (u,v,w,p) = solve_steady(
+    let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
