@@ -1,9 +1,10 @@
-use crate::common::*;
 use crate::io::print_linear_system;
 use crate::mesh::*;
+use crate::{common::*, io::print_vec_scientific};
 use itertools::izip;
 use log::{info, log_enabled};
 use sprs::{CsMat, TriMat};
+use std::thread;
 // use std::collections::HashMap;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
@@ -86,30 +87,39 @@ pub fn solve_steady(
                     println!("Momentum:");
                     print_linear_system(&a, &b_u);
                 }
-                solve_linear_system(
-                    &a,
-                    &b_u,
-                    &mut u,
-                    GAUSS_SEIDEL_ITERS,
-                    SolutionMethod::GaussSeidel,
-                    GAUSS_SEIDEL_RELAXATION,
-                );
-                solve_linear_system(
-                    &a,
-                    &b_v,
-                    &mut v,
-                    GAUSS_SEIDEL_ITERS,
-                    SolutionMethod::GaussSeidel,
-                    GAUSS_SEIDEL_RELAXATION,
-                );
-                solve_linear_system(
-                    &a,
-                    &b_w,
-                    &mut w,
-                    GAUSS_SEIDEL_ITERS,
-                    SolutionMethod::GaussSeidel,
-                    GAUSS_SEIDEL_RELAXATION,
-                );
+
+                thread::scope(|s| {
+                    s.spawn(|| {
+                        solve_linear_system(
+                            &a,
+                            &b_u,
+                            &mut u,
+                            GAUSS_SEIDEL_ITERS,
+                            SolutionMethod::GaussSeidel,
+                            GAUSS_SEIDEL_RELAXATION,
+                        );
+                    });
+                    s.spawn(|| {
+                        solve_linear_system(
+                            &a,
+                            &b_v,
+                            &mut v,
+                            GAUSS_SEIDEL_ITERS,
+                            SolutionMethod::GaussSeidel,
+                            GAUSS_SEIDEL_RELAXATION,
+                        );
+                    });
+                    s.spawn(|| {
+                        solve_linear_system(
+                            &a,
+                            &b_w,
+                            &mut w,
+                            GAUSS_SEIDEL_ITERS,
+                            SolutionMethod::GaussSeidel,
+                            GAUSS_SEIDEL_RELAXATION,
+                        );
+                    });
+                });
 
                 let pressure_correction_matrices = build_pressure_correction_matrices(
                     mesh,
@@ -150,11 +160,16 @@ pub fn solve_steady(
                 );
 
                 if log_enabled!(log::Level::Info) {
-                    println!("u: {u:?}\nv: {v:?}\nw: {w:?}");
+                    print!("u: ");
+                    print_vec_scientific(&u);
+                    print!("v: ");
+                    print_vec_scientific(&v);
+                    print!("w: ");
+                    print_vec_scientific(&w);
                 }
                 if log_enabled!(log::Level::Info) {
-                    println!("p : {p:?}");
-                    println!("p': {p_prime:?}");
+                    print!("p: ");
+                    print_vec_scientific(&p);
                 }
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
@@ -467,10 +482,10 @@ fn build_momentum_matrices(
                 max_peclet_number = Float::max(Float::abs(f_i / d_i), max_peclet_number);
             }
 
-            a_p += -a_nb + f_i + s_p; // sign of f_i?
+            a_p += -a_nb + f_i + s_p; // sign of s_p?
             s_u += source_term;
 
-            // If it's zero, that means it's a boundary face
+            // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
                 a.add_triplet(*cell_index, neighbor_cell_index, a_nb);

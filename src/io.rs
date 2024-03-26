@@ -543,3 +543,14 @@ pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
         println!(" | {}", b[i]);
     }
 }
+
+pub fn print_vec_scientific(v: &Vec<Float>) {
+    // if v.len() == 0 {
+    //     return
+    // }
+    print!("[");
+    for i in 0..v.len()-1 {
+        print!("{:.2e}, ", v[i]);
+    }
+    println!("{:.2e}]", v[v.len()-1]);
+}

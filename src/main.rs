@@ -224,7 +224,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        20.,
+        100.,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,
@@ -263,7 +263,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 0.01;
+    mesh.get_face_zone("INLET").scalar_value = 0.001;
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -301,9 +301,9 @@ fn main() {
     // test_gauss_seidel();
     // test_2d();
     // test_3d_1x3(1000, 1.0, 0.4);
-    test_3d_3x3(250, 1.0, 0.4);
+    // test_3d_3x3(iteration_count, 1.0, 0.4);
     // test_3d();
-    // couette(iteration_count, 0.5, 0.2);
+    couette(iteration_count, 0.5, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh
