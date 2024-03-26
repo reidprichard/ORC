@@ -348,14 +348,16 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
     let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
 
+    mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
+
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 0.001;
+    mesh.get_face_zone("INLET").scalar_value = 2.;
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
 
-    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
-    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
+    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Wall;
+    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Wall;
 
     let (u, v, w, p) = solve_steady(
         &mut mesh,
@@ -373,7 +375,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     // a = 0.001; dx = 0.01; mu = 0.001; dp = -0.01
     // V = 0.0000833333 = 8.33e-5
 
-    // write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
+    write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
 }
 
 fn main() {

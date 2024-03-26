@@ -512,10 +512,10 @@ pub fn write_mesh() {}
 
 pub fn write_data(
     mesh: &Mesh,
-    u: &Vec<Float>,
-    v: &Vec<Float>,
-    w: &Vec<Float>,
-    p: &Vec<Float>,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
     output_file_name: String,
 ) {
     let mut file = File::create(output_file_name).unwrap();

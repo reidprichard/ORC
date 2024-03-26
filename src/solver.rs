@@ -578,6 +578,9 @@ fn build_momentum_matrices(
     if max_peclet_number > 2. {
         println!("Warning: High Peclet number may be unstable. Pe = {max_peclet_number:.2}");
     }
+    else if max_peclet_number < 1. {
+        println!("Warning: Low Peclet number may cause pressure correction to become unbounded. Pe = {max_peclet_number:.1e}");
+    }
     (CsrMatrix::from(&a), u_source, v_source, w_source)
 }
 
