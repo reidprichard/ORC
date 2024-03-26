@@ -3,9 +3,9 @@ use crate::mesh::*;
 use crate::{common::*, io::print_vec_scientific};
 use itertools::izip;
 use log::{info, log_enabled};
+use rayon::prelude::*;
 use sprs::{CsMat, TriMat};
 use std::thread;
-// use std::collections::HashMap;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
@@ -174,9 +174,9 @@ pub fn solve_steady(
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
                     iter_number,
-                    u.iter().fold(0., |acc, u_i| acc + u_i) / (u.len() as Float),
-                    v.iter().fold(0., |acc, v_i| acc + v_i) / (v.len() as Float),
-                    w.iter().fold(0., |acc, w_i| acc + w_i) / (w.len() as Float)
+                    u.iter().sum::<Float>() / (u.len() as Float),
+                    v.iter().sum::<Float>() / (v.len() as Float),
+                    w.iter().sum::<Float>() / (w.len() as Float)
                 );
             }
         } // _ => panic!("unsupported pressure-velocity coupling"),
@@ -205,9 +205,9 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut Vec<Float>) {
                     FaceConditionTypes::Interior => mesh.faces[&face_index]
                         .cell_indices
                         .iter()
-                        .fold(0., |acc, neighbor_cell_index| {
-                            acc + p[*neighbor_cell_index] / 2.
-                        }),
+                        .map(|neighbor_cell_index| {
+                            p[*neighbor_cell_index]
+                        }).sum::<Float>() / 2.,
                     _ => panic!("unsupported face zone type for initialization"),
                 }
             }
@@ -326,9 +326,9 @@ pub fn solve_linear_system(
                         - solution_vector
                             .iter()
                             .enumerate()
-                            .fold(0., |acc, (j, x)| {
-                                acc + a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
-                            })
+                            .map(|(j, x)| {
+                                a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
+                            }).sum::<Float>()
                     ) / a.get(i, i)
                         .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector");
                     if solution_vector[i].is_nan() {
