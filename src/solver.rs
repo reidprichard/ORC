@@ -12,8 +12,8 @@ use std::thread;
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
 
-const GAUSS_SEIDEL_RELAXATION: Float = 0.5;
-const GAUSS_SEIDEL_ITERS: Uint = 1000;
+const MATRIX_SOLVER_RELAXATION: Float = 0.33;
+const MATRIX_SOLVER_ITERS: Uint = 100;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -100,38 +100,62 @@ pub fn solve_steady(
                     print_linear_system(&a, &b_u);
                 }
 
-                thread::scope(|s| {
-                    s.spawn(|| {
-                        solve_linear_system(
-                            &a,
-                            &b_u,
-                            &mut u,
-                            GAUSS_SEIDEL_ITERS,
-                            SolutionMethod::Jacobi,
-                            GAUSS_SEIDEL_RELAXATION,
-                        );
-                    });
-                    s.spawn(|| {
-                        solve_linear_system(
-                            &a,
-                            &b_v,
-                            &mut v,
-                            GAUSS_SEIDEL_ITERS,
-                            SolutionMethod::Jacobi,
-                            GAUSS_SEIDEL_RELAXATION,
-                        );
-                    });
-                    s.spawn(|| {
-                        solve_linear_system(
-                            &a,
-                            &b_w,
-                            &mut w,
-                            GAUSS_SEIDEL_ITERS,
-                            SolutionMethod::Jacobi,
-                            GAUSS_SEIDEL_RELAXATION,
-                        );
-                    });
-                });
+                solve_linear_system(
+                    &a,
+                    &b_u,
+                    &mut u,
+                    MATRIX_SOLVER_ITERS,
+                    SolutionMethod::Jacobi,
+                    MATRIX_SOLVER_RELAXATION,
+                );
+                solve_linear_system(
+                    &a,
+                    &b_v,
+                    &mut v,
+                    MATRIX_SOLVER_ITERS,
+                    SolutionMethod::Jacobi,
+                    MATRIX_SOLVER_RELAXATION,
+                );
+                solve_linear_system(
+                    &a,
+                    &b_w,
+                    &mut w,
+                    MATRIX_SOLVER_ITERS,
+                    SolutionMethod::Jacobi,
+                    MATRIX_SOLVER_RELAXATION,
+                );
+                // thread::scope(|s| {
+                //     s.spawn(|| {
+                //         solve_linear_system(
+                //             &a,
+                //             &b_u,
+                //             &mut u,
+                //             GAUSS_SEIDEL_ITERS,
+                //             SolutionMethod::Jacobi,
+                //             GAUSS_SEIDEL_RELAXATION,
+                //         );
+                //     });
+                //     s.spawn(|| {
+                //         solve_linear_system(
+                //             &a,
+                //             &b_v,
+                //             &mut v,
+                //             GAUSS_SEIDEL_ITERS,
+                //             SolutionMethod::Jacobi,
+                //             GAUSS_SEIDEL_RELAXATION,
+                //         );
+                //     });
+                //     s.spawn(|| {
+                //         solve_linear_system(
+                //             &a,
+                //             &b_w,
+                //             &mut w,
+                //             GAUSS_SEIDEL_ITERS,
+                //             SolutionMethod::Jacobi,
+                //             GAUSS_SEIDEL_RELAXATION,
+                //         );
+                //     });
+                // });
 
                 let pressure_correction_matrices = build_pressure_correction_matrices(
                     mesh,
@@ -151,21 +175,33 @@ pub fn solve_steady(
                     );
                 }
                 solve_linear_system(
+                    &a,
+                    &b_w,
+                    &mut w,
+                    MATRIX_SOLVER_ITERS,
+                    SolutionMethod::Jacobi,
+                    MATRIX_SOLVER_RELAXATION,
+                );
+                solve_linear_system(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    GAUSS_SEIDEL_ITERS,
-                    SolutionMethod::GaussSeidel,
-                    GAUSS_SEIDEL_RELAXATION,
+                    10000,
+                    SolutionMethod::Jacobi,
+                    MATRIX_SOLVER_RELAXATION,
                 );
 
                 if log_enabled!(log::Level::Info) {
-                    print!("u: ");
+                    print!("u:  ");
                     print_vec_scientific(&u);
-                    print!("v: ");
+                    print!("v:  ");
                     print_vec_scientific(&v);
-                    print!("w: ");
+                    print!("w:  ");
                     print_vec_scientific(&w);
+                    print!("p': ");
+                    print_vec_scientific(&p_prime);
+                    print!("p:  ");
+                    print_vec_scientific(&p);
                 }
                 apply_pressure_correction(
                     mesh,
@@ -179,12 +215,6 @@ pub fn solve_steady(
                     momentum_relaxation_factor,
                 );
 
-                if log_enabled!(log::Level::Info) {
-                    print!("p': ");
-                    print_vec_scientific(&p_prime);
-                    print!("p:  ");
-                    print_vec_scientific(&p);
-                }
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
                     iter_number,
@@ -350,21 +380,26 @@ pub fn solve_linear_system(
             }
         }
         SolutionMethod::GaussSeidel => {
-            'iter_loop: for _ in 0..iteration_count {
+            'iter_loop: for iter_num in 0..iteration_count {
+                if log_enabled!(log::Level::Trace) {
+                    println!("Gauss-Seidel iteration {iter_num} = {solution_vector:?}");
+                }
                 'row_loop: for i in 0..a.nrows() {
-                    solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
-                        b[i]
-                        - solution_vector
-                            .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
-                            .enumerate()
-                            .map(|(j, x)| {
-                                if i!=j {
-                                    a.get_entry(i, j).unwrap().into_value() * x
-                                } else {
-                                    0.
-                                }
-                            }).sum::<Float>()
-                    ) / a.get_entry(i, i).unwrap().into_value();
+                    solution_vector[i] = solution_vector[i] * (1. - relaxation_factor)
+                        + relaxation_factor
+                            * (b[i]
+                                - solution_vector
+                                    .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
+                                    .enumerate()
+                                    .map(|(j, x)| {
+                                        if i != j {
+                                            a.get_entry(i, j).unwrap().into_value() * x
+                                        } else {
+                                            0.
+                                        }
+                                    })
+                                    .sum::<Float>())
+                            / a.get_entry(i, i).unwrap().into_value();
                     if solution_vector[i].is_nan() {
                         panic!("****** Solution diverged ******");
                     }

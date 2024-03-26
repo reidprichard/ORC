@@ -346,7 +346,7 @@ fn main() {
     test_jacobi();
     // test_gauss_seidel();
     // test_2d();
-    test_3d_1x3(iteration_count, 0.1, 0.1);
+    test_3d_1x3(iteration_count, 0.5, 0.2);
     // test_3d_3x3(iteration_count, 1.0, 0.4);
     // test_3d();
     // couette(iteration_count, 0.2, 0.2);
