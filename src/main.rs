@@ -15,9 +15,10 @@ use std::env;
 const PRESSURE_RELAXATION: Float = 0.5;
 const MOMENTUM_RELAXATION: Float = 0.5;
 
-fn test_jacobi() {
-    println!("*** Testing Jacobi solver for correctness. ***");
+fn validate_solvers() {
     const TOL: Float = 1e-6;
+
+    println!("*** Testing Jacobi solver for correctness. ***");
     // | 2 0 1 |   | 3 |
     // | 0 3 2 | = | 2 |
     // | 2 0 4 |   | 1 |
@@ -55,6 +56,46 @@ fn test_jacobi() {
 
     println!("x = {x:?}");
     println!("*** Jacobi solver validated. ***");
+
+
+    println!("*** Testing Gauss-Seidel solver for correctness. ***");
+    // | 2 0 1 |   | 3 |
+    // | 0 3 2 | = | 2 |
+    // | 2 0 4 |   | 1 |
+    //
+    // | 1 0 0 |   | 11/6 |   | 1.833 |
+    // | 0 1 0 |   | 10/9 |   | 1.111 |
+    // | 0 0 1 | = | -2/3 | = | -0.67 |
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
+    a_coo.push(0, 0, 2.);
+    a_coo.push(0, 2, 1.);
+
+    a_coo.push(1, 1, 3.);
+    a_coo.push(1, 2, 2.);
+
+    a_coo.push(2, 0, 2.);
+    a_coo.push(2, 2, 4.);
+
+    let a = CsrMatrix::from(&a_coo);
+    // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
+    let b = DVector::from_column_slice(&vec![3.,2.,1.]);
+    let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
+
+    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.5);
+
+    for row_num in 0..a.nrows() {
+        assert!(
+            Float::abs(
+                a.get_entry(row_num, 0).unwrap().into_value() * x[0]
+                    + a.get_entry(row_num, 1).unwrap().into_value() * x[1]
+                    + a.get_entry(row_num, 2).unwrap().into_value() * x[2]
+                    - b[row_num]
+            ) < TOL
+        );
+    }
+
+    println!("x = {x:?}");
+    println!("*** Gauss-Seidel solver validated. ***");
 }
 
 // fn test_gauss_seidel() {
@@ -343,11 +384,11 @@ fn main() {
         .unwrap_or(&"10".to_string())
         .parse()
         .expect("arg 1 should be an integer");
-    test_jacobi();
+    validate_solvers();
     // test_gauss_seidel();
     // test_2d();
     test_3d_1x3(iteration_count, 0.5, 0.2);
-    // test_3d_3x3(iteration_count, 1.0, 0.4);
+    // test_3d_3x3(iteration_count, 1.0, 0.1);
     // test_3d();
     // couette(iteration_count, 0.2, 0.2);
 

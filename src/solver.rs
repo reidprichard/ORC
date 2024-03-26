@@ -13,7 +13,7 @@ use std::thread;
 // TODO: Change cell/face/node numbers to `usize`
 
 const MATRIX_SOLVER_RELAXATION: Float = 0.33;
-const MATRIX_SOLVER_ITERS: Uint = 100;
+const MATRIX_SOLVER_ITERS: Uint = 10;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -174,19 +174,18 @@ pub fn solve_steady(
                         &pressure_correction_matrices.b,
                     );
                 }
-                solve_linear_system(
-                    &a,
-                    &b_w,
-                    &mut w,
-                    MATRIX_SOLVER_ITERS,
-                    SolutionMethod::Jacobi,
-                    MATRIX_SOLVER_RELAXATION,
-                );
+
+                // I think what's happening here is that, if Pe < 1 in all cells, a_nb will all
+                // have the same sign in each row of the pressure correction system. This means
+                // that sum(abs(a_nb)) == a_p for each row, whereas the boundedness criterion
+                // requires that sum(abs(a_nb)) < a_p for at least one row.
+                // What's the solution? Skip pressure correction if max Pe < 1?
+                // Reducing the iteration count (10k -> 10) seems to have fixed the issue for now.
                 solve_linear_system(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    10000,
+                    MATRIX_SOLVER_ITERS,
                     SolutionMethod::Jacobi,
                     MATRIX_SOLVER_RELAXATION,
                 );
