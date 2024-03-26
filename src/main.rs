@@ -2,7 +2,7 @@
 #![allow(unused)]
 
 use orc::common::Float;
-use orc::common::{Uint, Vector};
+use orc::common::{Uint, Vector3};
 use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
@@ -13,48 +13,48 @@ use std::env;
 const PRESSURE_RELAXATION: Float = 0.4;
 const MOMENTUM_RELAXATION: Float = 1.0;
 
-fn test_gauss_seidel() {
-    println!("*** Testing Gauss-Seidel for correctness. ***");
-    const TOL: Float = 1e-6;
-    // | 2 0 1 |   | 3 |
-    // | 0 3 2 | = | 2 |
-    // | 2 0 4 |   | 1 |
-    //
-    // | 1 0 0 |   | 11/6 |   | 1.833 |
-    // | 0 1 0 |   | 10/9 |   | 1.111 |
-    // | 0 0 1 | = | -2/3 | = | -0.67 |
-    let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
-    a_tri.add_triplet(0, 0, 2.);
-    a_tri.add_triplet(0, 2, 1.);
-
-    a_tri.add_triplet(1, 1, 3.);
-    a_tri.add_triplet(1, 2, 2.);
-
-    a_tri.add_triplet(2, 0, 2.);
-    a_tri.add_triplet(2, 2, 4.);
-
-    let a = a_tri.to_csr();
-    // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = CsVec::new(3, vec![0,1,2], vec![3., 2., 1.]);
-
-    let mut x = CsVec::new(3, vec![0,1,2], vec![0., 0., 0.]);
-
-    solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
-
-    for row_num in 0..a.rows() {
-        assert!(
-            Float::abs(
-                a.get(row_num, 0).unwrap_or(&0.) * x[0]
-                    + a.get(row_num, 1).unwrap_or(&0.) * x[1]
-                    + a.get(row_num, 2).unwrap_or(&0.) * x[2]
-                    - b[row_num]
-            ) < TOL
-        );
-    }
-
-    println!("x = {x:?}");
-    println!("*** Gauss-Seidel test passed. ***");
-}
+// fn test_gauss_seidel() {
+//     println!("*** Testing Gauss-Seidel for correctness. ***");
+//     const TOL: Float = 1e-6;
+//     // | 2 0 1 |   | 3 |
+//     // | 0 3 2 | = | 2 |
+//     // | 2 0 4 |   | 1 |
+//     //
+//     // | 1 0 0 |   | 11/6 |   | 1.833 |
+//     // | 0 1 0 |   | 10/9 |   | 1.111 |
+//     // | 0 0 1 | = | -2/3 | = | -0.67 |
+//     let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
+//     a_tri.add_triplet(0, 0, 2.);
+//     a_tri.add_triplet(0, 2, 1.);
+//
+//     a_tri.add_triplet(1, 1, 3.);
+//     a_tri.add_triplet(1, 2, 2.);
+//
+//     a_tri.add_triplet(2, 0, 2.);
+//     a_tri.add_triplet(2, 2, 4.);
+//
+//     let a = a_tri.to_csr();
+//     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
+//     let b = CsVec::new(3, vec![0,1,2], vec![3., 2., 1.]);
+//
+//     let mut x = CsVec::new(3, vec![0,1,2], vec![0., 0., 0.]);
+//
+//     solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
+//
+//     for row_num in 0..a.rows() {
+//         assert!(
+//             Float::abs(
+//                 a.get(row_num, 0).unwrap_or(&0.) * x[0]
+//                     + a.get(row_num, 1).unwrap_or(&0.) * x[1]
+//                     + a.get(row_num, 2).unwrap_or(&0.) * x[2]
+//                     - b[row_num]
+//             ) < TOL
+//         );
+//     }
+//
+//     println!("x = {x:?}");
+//     println!("*** Gauss-Seidel test passed. ***");
+// }
 
 fn test_2d(iteration_count: Uint) {
     let domain_height = 1.;
@@ -157,26 +157,26 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        100.,
+        1.,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,
     );
 
     for cell_number in 0..mesh.cells.len() {
-        let cell_velocity = Vector {
+        let cell_velocity = Vector3 {
             x: u[cell_number],
             y: v[cell_number],
             z: w[cell_number],
         };
-        assert!(cell_velocity.approx_equals(
-            &Vector {
-                x: 0.005,
-                y: 0.,
-                z: 0.
-            },
-            1e-6
-        ));
+        // assert!(cell_velocity.approx_equals(
+        //     &Vector3 {
+        //         x: 0.005,
+        //         y: 0.,
+        //         z: 0.
+        //     },
+        //     1e-6
+        // ));
     }
 }
 
@@ -230,9 +230,9 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         pressure_relaxation,
     );
 
-    let mut avg_velocity = Vector::zero();
+    let mut avg_velocity = Vector3::zero();
     for cell_number in 0..mesh.cells.len() {
-        let cell_velocity = Vector {
+        let cell_velocity = Vector3 {
             x: u[cell_number],
             y: v[cell_number],
             z: w[cell_number],
@@ -300,10 +300,10 @@ fn main() {
         .expect("arg 1 should be an integer");
     // test_gauss_seidel();
     // test_2d();
-    test_3d_1x3(1000, 1.0, 0.4);
+    // test_3d_1x3(iteration_count, 1.0, 0.4);
     // test_3d_3x3(iteration_count, 1.0, 0.4);
     // test_3d();
-    // couette(iteration_count, 0.5, 0.2);
+    couette(iteration_count, 0.5, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh

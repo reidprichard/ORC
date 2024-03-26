@@ -10,7 +10,7 @@ pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
 pub struct FaceZone {
     pub zone_type: FaceConditionTypes,
     pub scalar_value: Float,
-    pub vector_value: Vector,
+    pub vector_value: Vector3,
     pub name: String,
 }
 
@@ -135,7 +135,7 @@ pub struct Cell {
     pub zone_number: Uint,
     pub face_indices: Vec<usize>,
     pub volume: Float,
-    pub centroid: Vector,
+    pub centroid: Vector3,
 }
 impl Default for Cell {
     fn default() -> Cell {
@@ -143,14 +143,14 @@ impl Default for Cell {
             zone_number: 0,
             face_indices: Vec::new(),
             volume: 0.,
-            centroid: Vector::zero(),
+            centroid: Vector3::zero(),
         }
     }
 }
 
 // #[derive(Copy, Clone)]
 pub struct Node {
-    pub position: Vector,
+    pub position: Vector3,
 }
 impl Node {
     fn interpolate_velocity(&mut self) {}
@@ -164,7 +164,7 @@ impl Node {
 impl Default for Node {
     fn default() -> Node {
         Node {
-            position: Vector::zero(),
+            position: Vector3::zero(),
         }
     }
 }
@@ -175,8 +175,8 @@ pub struct Face {
     pub cell_indices: Vec<usize>,
     pub node_indices: Vec<usize>,
     pub area: Float,
-    pub centroid: Vector,
-    pub normal: Vector,
+    pub centroid: Vector3,
+    pub normal: Vector3,
 }
 impl Face {}
 impl Default for Face {
@@ -186,8 +186,8 @@ impl Default for Face {
             cell_indices: Vec::new(),
             node_indices: Vec::new(),
             area: 0.,
-            centroid: Vector::zero(),
-            normal: Vector::zero(), // points toward cell 0!
+            centroid: Vector3::zero(),
+            normal: Vector3::zero(), // points toward cell 0!
         }
     }
 }
@@ -228,7 +228,7 @@ impl Mesh {
     // }
 }
 
-pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector {
+pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector3 {
     if cell_number == face.cell_indices[0] {
         face.normal
     } else {
@@ -236,6 +236,6 @@ pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector {
     }
 }
 
-pub fn get_inward_face_normal(face: &Face, cell_number: usize) -> Vector {
+pub fn get_inward_face_normal(face: &Face, cell_number: usize) -> Vector3 {
     get_outward_face_normal(face, cell_number) * -1.
 }

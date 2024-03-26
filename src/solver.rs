@@ -3,10 +3,11 @@ use crate::mesh::*;
 use crate::{common::*, io::print_vec_scientific};
 use itertools::izip;
 use log::{info, log_enabled};
+use nalgebra::{DMatrix, DVector};
+use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use rayon::prelude::*;
-use sprs::{CsMat, CsVec, TriMat};
+// use sprs::{CsMat, TriMat};
 use std::thread;
-extern crate nalgebra as na;
 
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
@@ -44,13 +45,13 @@ pub enum VelocityInterpolation {
 }
 
 pub struct LinearSystem {
-    a: CsMat<Float>,
-    b: CsVec<Float>,
+    a: CsrMatrix<Float>,
+    b: DVector<Float>,
 }
 
-macro_rules! initialize_CsVec {
+macro_rules! initialize_DVector {
     ($n:expr) => {
-        CsVec::new($n, (0..$n).collect(), vec![0.; $n])
+        DVector::from_column_slice(&vec![0.; $n])
     };
 }
 
@@ -65,26 +66,23 @@ pub fn solve_steady(
     iteration_count: Uint,
     momentum_relaxation_factor: Float,
     pressure_relaxation_factor: Float, // 0.4 seems to be the upper limit for stability
-) -> (CsVec<Float>, CsVec<Float>, CsVec<Float>, CsVec<Float>) {
+) -> (
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
     const GAUSS_SEIDEL_ITERS: Uint = 50;
     let cell_count: usize = mesh.cells.len();
-    let mut u = initialize_CsVec!(cell_count);
-    let mut v = initialize_CsVec!(cell_count);
-    let mut w = initialize_CsVec!(cell_count);
-    let mut p = initialize_CsVec!(cell_count);
-    let mut p_prime = CsVec::new(cell_count, (0..cell_count).collect(), vec![0.; cell_count]);
-    // let mut u: Vec<Float> = vec![0.; cell_count];
-    // let mut v: Vec<Float> = vec![0.; cell_count];
-    // let mut w: Vec<Float> = vec![0.; cell_count];
-    // let mut p: Vec<Float> = vec![0.; cell_count];
-    // let mut p_prime: Vec<Float> = vec![0.; cell_count];
+    let mut u = initialize_DVector!(cell_count);
+    let mut v = initialize_DVector!(cell_count);
+    let mut w = initialize_DVector!(cell_count);
+    let mut p = initialize_DVector!(cell_count);
+    let mut p_prime = initialize_DVector!(cell_count);
     initialize_pressure_field(mesh, &mut p);
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                // let mut u: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.x).collect();
-                // let mut v: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.y).collect();
-                // let mut w: Vec<Float> = mesh.cells.iter().map(|(_, c)| c.velocity.z).collect();
                 let (a, b_u, b_v, b_w) = build_momentum_matrices(
                     mesh,
                     &u,
@@ -99,7 +97,7 @@ pub fn solve_steady(
                 );
                 if log_enabled!(log::Level::Debug) {
                     println!("Momentum:");
-                    // print_linear_system(&a, &b_u);
+                    print_linear_system(&a, &b_u);
                 }
 
                 thread::scope(|s| {
@@ -147,10 +145,10 @@ pub fn solve_steady(
                 );
                 if log_enabled!(log::Level::Debug) {
                     println!("\nPressure:");
-                    // print_linear_system(
-                    //     &pressure_correction_matrices.a,
-                    //     &pressure_correction_matrices.b,
-                    // );
+                    print_linear_system(
+                        &pressure_correction_matrices.a,
+                        &pressure_correction_matrices.b,
+                    );
                 }
                 solve_linear_system(
                     &pressure_correction_matrices.a,
@@ -173,24 +171,24 @@ pub fn solve_steady(
                     momentum_relaxation_factor,
                 );
 
-                // if log_enabled!(log::Level::Info) {
-                //     print!("u: ");
-                //     print_vec_scientific(&u);
-                //     print!("v: ");
-                //     print_vec_scientific(&v);
-                //     print!("w: ");
-                //     print_vec_scientific(&w);
-                // }
-                // if log_enabled!(log::Level::Info) {
-                //     print!("p: ");
-                //     print_vec_scientific(&p);
-                // }
+                if log_enabled!(log::Level::Info) {
+                    print!("u: ");
+                    print_vec_scientific(&u);
+                    print!("v: ");
+                    print_vec_scientific(&v);
+                    print!("w: ");
+                    print_vec_scientific(&w);
+                }
+                if log_enabled!(log::Level::Info) {
+                    print!("p: ");
+                    print_vec_scientific(&p);
+                }
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
                     iter_number,
-                    u.iter().map(|(i, x)| x).sum::<Float>() / (cell_count as Float),
-                    v.iter().map(|(i, x)| x).sum::<Float>() / (cell_count as Float),
-                    w.iter().map(|(i, x)| x).sum::<Float>() / (cell_count as Float),
+                    u.iter().sum::<Float>() / (cell_count as Float),
+                    v.iter().sum::<Float>() / (cell_count as Float),
+                    w.iter().sum::<Float>() / (cell_count as Float),
                 );
             }
         } // _ => panic!("unsupported pressure-velocity coupling"),
@@ -198,7 +196,7 @@ pub fn solve_steady(
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(mesh: &mut Mesh, p: &mut CsVec<Float>) {
+fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>) {
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
@@ -241,26 +239,26 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut CsVec<Float>) {
     // print!("\n\n");
 }
 
-fn get_velocity_source_term(_location: Vec3) -> Vec3 {
-    Vec3::zero()
+fn get_velocity_source_term(_location: Vector3) -> Vector3 {
+    Vector3::zero()
 }
 
 fn calculate_face_velocity(
     mesh: &Mesh,
-    u: &CsVec<Float>,
-    v: &CsVec<Float>,
-    w: &CsVec<Float>,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
     face_index: usize,
     interpolation_scheme: VelocityInterpolation,
-) -> Vec3 {
+) -> Vector3 {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
-        FaceConditionTypes::Wall => Vec3::zero(),
+        FaceConditionTypes::Wall => Vector3::zero(),
         FaceConditionTypes::Symmetry => {
             // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
-            let cell_velocity = Vec3 {
+            let cell_velocity = Vector3 {
                 x: get_csvec(&u, face.cell_indices[0]),
                 y: get_csvec(&v, face.cell_indices[0]),
                 z: get_csvec(&w, face.cell_indices[0]),
@@ -268,7 +266,7 @@ fn calculate_face_velocity(
             cell_velocity - cell_velocity.dot(&face.normal)
         }
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
-        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vec3 {
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vector3 {
             x: get_csvec(&u, face.cell_indices[0]),
             y: get_csvec(&v, face.cell_indices[0]),
             z: get_csvec(&w, face.cell_indices[0]),
@@ -279,13 +277,10 @@ fn calculate_face_velocity(
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                 let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                Vec3 {
-                    x: get_csvec(&u, c0)
-                        + (get_csvec(&u, c1) - get_csvec(&u, c0)) * x0 / (x0 + x1),
-                    y: get_csvec(&v, c0)
-                        + (get_csvec(&v, c1) - get_csvec(&v, c0)) * x0 / (x0 + x1),
-                    z: get_csvec(&w, c0)
-                        + (get_csvec(&w, c1) - get_csvec(&w, c0)) * x0 / (x0 + x1),
+                Vector3 {
+                    x: get_csvec(&u, c0) + (get_csvec(&u, c1) - get_csvec(&u, c0)) * x0 / (x0 + x1),
+                    y: get_csvec(&v, c0) + (get_csvec(&v, c1) - get_csvec(&v, c0)) * x0 / (x0 + x1),
+                    z: get_csvec(&w, c0) + (get_csvec(&w, c1) - get_csvec(&w, c0)) * x0 / (x0 + x1),
                 }
             }
             VelocityInterpolation::RhieChow2 => {
@@ -299,7 +294,7 @@ fn calculate_face_velocity(
 
 fn calculate_face_pressure(
     mesh: &Mesh,
-    p: &CsVec<Float>,
+    p: &DVector<Float>,
     face_index: usize,
     interpolation_scheme: PressureInterpolation,
 ) -> Float {
@@ -322,8 +317,7 @@ fn calculate_face_pressure(
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                 let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                get_csvec(&p, c0)
-                    + (get_csvec(&p, c1) - get_csvec(&p, c0)) * x0 / (x0 + x1)
+                get_csvec(&p, c0) + (get_csvec(&p, c1) - get_csvec(&p, c0)) * x0 / (x0 + x1)
             }
             _ => panic!("unsupported pressure interpolation"),
         },
@@ -332,47 +326,49 @@ fn calculate_face_pressure(
 }
 
 pub fn solve_linear_system(
-    a: &CsMat<Float>,
-    b: &CsVec<Float>,
-    solution_vector: &mut CsVec<Float>,
+    a: &CsrMatrix<Float>,
+    b: &DVector<Float>,
+    solution_vector: &mut DVector<Float>,
     iteration_count: Uint,
     method: SolutionMethod,
     relaxation_factor: Float,
 ) {
     match method {
         SolutionMethod::Jacobi => {
-            let eye = CsMat::eye(5);
-            let mut x = CsVec::new(5, vec![0, 2, 4], vec![1., 2., 3.]);
-            let y = &eye * &x;
-
-            let mut a2: CsMat<Float> = CsMat::eye(a.rows());
-            a2 = &a2 - a;
-            for _ in 0..iteration_count {
-                let iteration_value = solution_vector.clone();
-                *solution_vector = &a2 * &iteration_value;
+            let a_new = a.diagonal_as_csr() - a;
+            for iter_num in 0..iteration_count {
+                if log_enabled!(log::Level::Trace) {
+                    println!("Jacobi iteration {iter_num} = {solution_vector:?}");
+                }
+                let prev_guess = solution_vector.clone();
+                *solution_vector = ((1. - relaxation_factor) * &prev_guess
+                    + relaxation_factor * (b - &a_new * &prev_guess));
+                for i in 0..solution_vector.nrows() {
+                    solution_vector[i] /= a.get_entry(i as usize, i as usize).unwrap().into_value();
+                }
             }
         }
         SolutionMethod::GaussSeidel => {
-            'iter_loop: for _ in 0..iteration_count {
-                'row_loop: for i in 0..a.rows() {
-                    solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
-                        b[i]
-                        - solution_vector
-                            .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
-                            .map(|(j, x)| {
-                                if i!=j {
-                                    a.get(i, j).unwrap_or(&0.) * x
-                                } else {
-                                    0.
-                                }
-                            }).sum::<Float>()
-                    ) / a.get(i, i)
-                        .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector");
-                    if solution_vector[i].is_nan() {
-                        panic!("****** Solution diverged ******");
-                    }
-                }
-            }
+            // 'iter_loop: for _ in 0..iteration_count {
+            //     'row_loop: for i in 0..a.rows() {
+            //         solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
+            //             b[i]
+            //             - solution_vector
+            //                 .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
+            //                 .map(|(j, x)| {
+            //                     if i!=j {
+            //                         a.get(i, j).unwrap_or(&0.) * x
+            //                     } else {
+            //                         0.
+            //                     }
+            //                 }).sum::<Float>()
+            //         ) / a.get(i, i)
+            //             .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector");
+            //         if solution_vector[i].is_nan() {
+            //             panic!("****** Solution diverged ******");
+            //         }
+            //     }
+            // }
         }
         _ => panic!("unsupported solution method"),
     }
@@ -380,22 +376,27 @@ pub fn solve_linear_system(
 
 fn build_momentum_matrices(
     mesh: &Mesh,
-    u: &CsVec<Float>,
-    v: &CsVec<Float>,
-    w: &CsVec<Float>,
-    p: &CsVec<Float>,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
     momentum_scheme: MomentumDiscretization,
     pressure_interpolation_scheme: PressureInterpolation,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
     mu: Float,
-) -> (CsMat<Float>, CsVec<Float>, CsVec<Float>, CsVec<Float>) {
+) -> (
+    CsrMatrix<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
     // TODO: Ignore boundary cells
     let cell_count = mesh.cells.len();
-    let mut a = TriMat::new((cell_count, cell_count));
-    let mut u_source = initialize_CsVec!(cell_count);
-    let mut v_source = initialize_CsVec!(cell_count);
-    let mut w_source = initialize_CsVec!(cell_count);
+    let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
+    let mut u_source = initialize_DVector!(cell_count);
+    let mut v_source = initialize_DVector!(cell_count);
+    let mut w_source = initialize_DVector!(cell_count);
 
     let mut max_peclet_number: Float = 0.;
 
@@ -415,8 +416,8 @@ fn build_momentum_matrices(
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         let mut s_p = 0.; // proportional source term TODO
         let mut s_u = get_velocity_source_term(cell.centroid); // general source term
-        let mut s_u_dc = Vec3::zero(); // deferred correction source term TODO
-        let mut s_d_cross = Vec3::zero(); // cross diffusion source term TODO
+        let mut s_u_dc = Vector3::zero(); // deferred correction source term TODO
+        let mut s_d_cross = Vector3::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = s_p;
@@ -477,7 +478,7 @@ fn build_momentum_matrices(
                     }
 
                     // Cell centroids vector
-                    let e_xi: Vec3 = mesh.cells[&neighbor_cell_index].centroid - cell.centroid;
+                    let e_xi: Vector3 = mesh.cells[&neighbor_cell_index].centroid - cell.centroid;
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area / e_xi.norm();
 
@@ -525,7 +526,7 @@ fn build_momentum_matrices(
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
-                a.add_triplet(*cell_index, neighbor_cell_index, a_nb);
+                a.push(*cell_index, neighbor_cell_index, a_nb);
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
@@ -533,36 +534,32 @@ fn build_momentum_matrices(
         v_source[*cell_index] = source_total.y;
         w_source[*cell_index] = source_total.z;
 
-        a.add_triplet(
-            (*cell_index).try_into().unwrap(),
-            (*cell_index).try_into().unwrap(),
-            a_p + s_p,
-        );
+        a.push(*cell_index, *cell_index, a_p + s_p);
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
     if max_peclet_number > 2. {
         println!("Warning: High Peclet number may be unstable. Pe = {max_peclet_number:.2}");
     }
-    (a.to_csr(), u_source, v_source, w_source)
+    (CsrMatrix::from(&a), u_source, v_source, w_source)
 }
 
 fn build_pressure_correction_matrices(
     mesh: &Mesh,
-    u: &CsVec<Float>,
-    v: &CsVec<Float>,
-    w: &CsVec<Float>,
-    p: &CsVec<Float>,
-    momentum_matrices: &CsMat<Float>,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
+    momentum_matrices: &CsrMatrix<Float>,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
 ) -> LinearSystem {
     // TODO: ignore boundary cells
     let cell_count = mesh.cells.len();
     // The coefficients of the pressure correction matrix
-    let mut a = TriMat::new((cell_count, cell_count));
+    let mut a = CooMatrix::new(cell_count, cell_count);
     // This is the net mass flow rate into each cell
-    let mut b = initialize_CsVec!(cell_count);
+    let mut b = initialize_DVector!(cell_count);
 
     for (cell_index, cell) in &mesh.cells {
         let mut a_p: Float = 0.;
@@ -587,33 +584,37 @@ fn build_pressure_correction_matrices(
                 } else {
                     face.cell_indices[1]
                 };
+                let x = momentum_matrices.get_entry(0, 0);
+                let y = x.unwrap();
+                let z: Float = y.into_value();
                 // NOTE: I'm not confident on why this is negative, but it works.
                 let a_nb = -rho * Float::powi(face.area, 2)
                     / momentum_matrices
-                        .get(*cell_index, neighbor_cell_index)
-                        .unwrap_or_else(|| {
-                            println!("{cell_index}, {neighbor_cell_index}");
-                            &0.
-                        });
-                a.add_triplet(*cell_index, neighbor_cell_index, -a_nb);
+                        .get_entry(*cell_index, neighbor_cell_index)
+                        .unwrap()
+                        .into_value();
+                a.push(*cell_index, neighbor_cell_index, -a_nb);
                 a_p += a_nb;
             }
         }
-        a.add_triplet(*cell_index, *cell_index, a_p);
+        a.push(*cell_index, *cell_index, a_p);
         b[*cell_index] = b_p;
     }
 
-    LinearSystem { a: a.to_csr(), b }
+    LinearSystem {
+        a: CsrMatrix::from(&a),
+        b,
+    }
 }
 
 fn apply_pressure_correction(
     mesh: &mut Mesh,
-    momentum_matrices: &CsMat<Float>, // NOTE: I really only need the diagonal
-    p_prime: &CsVec<Float>,
-    u: &mut CsVec<Float>,
-    v: &mut CsVec<Float>,
-    w: &mut CsVec<Float>,
-    p: &mut CsVec<Float>,
+    momentum_matrices: &CsrMatrix<Float>, // NOTE: I really only need the diagonal
+    p_prime: &DVector<Float>,
+    u: &mut DVector<Float>,
+    v: &mut DVector<Float>,
+    w: &mut DVector<Float>,
+    p: &mut DVector<Float>,
     pressure_relaxation_factor: Float,
     momentum_relaxation_factor: Float,
 ) {
@@ -623,7 +624,7 @@ fn apply_pressure_correction(
         let velocity_correction = cell
             .face_indices
             .iter()
-            .fold(Vec3::zero(), |acc, face_index| {
+            .fold(Vector3::zero(), |acc, face_index| {
                 let face = &mesh.faces[face_index];
                 let face_zone = &mesh.face_zones[&face.zone];
                 let outward_face_normal = get_outward_face_normal(&face, *cell_index);
@@ -650,21 +651,18 @@ fn apply_pressure_correction(
                         panic!("BC not supported");
                     }
                 };
-                acc + outward_face_normal
-                    * (get_csvec(&p_prime, *cell_index) - p_prime_neighbor)
-                    * face.area
-                    / *momentum_matrices.get(*cell_index, *cell_index)
-                        .expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
+                acc + outward_face_normal * (get_csvec(&p_prime, *cell_index) - p_prime_neighbor) * face.area / momentum_matrices.get_entry(*cell_index, *cell_index).expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
+.into_value()
             });
-        u[*cell_index] = get_csvec(&u, *cell_index) * (1. - momentum_relaxation_factor)
-            + velocity_correction.x;
-        v[*cell_index] = get_csvec(&v, *cell_index) * (1. - momentum_relaxation_factor)
-            + velocity_correction.y;
-        w[*cell_index] = get_csvec(&w, *cell_index) * (1. - momentum_relaxation_factor)
-            + velocity_correction.z;
+        u[*cell_index] =
+            get_csvec(&u, *cell_index) * (1. - momentum_relaxation_factor) + velocity_correction.x;
+        v[*cell_index] =
+            get_csvec(&v, *cell_index) * (1. - momentum_relaxation_factor) + velocity_correction.y;
+        w[*cell_index] =
+            get_csvec(&w, *cell_index) * (1. - momentum_relaxation_factor) + velocity_correction.z;
     }
 }
 
-fn get_csvec(v: &CsVec<Float>, n: usize) -> Float {
+fn get_csvec(v: &DVector<Float>, n: usize) -> Float {
     *v.get(n).unwrap_or(&0.)
 }
