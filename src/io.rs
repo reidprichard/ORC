@@ -521,11 +521,7 @@ pub fn write_data(
         write!(
             file,
             "{},\t({}, {}, {}),\t{}\n",
-            cell.centroid,
-            u[*cell_index],
-            v[*cell_index],
-            w[*cell_index],
-            p[*cell_index]
+            cell.centroid, u[*cell_index], v[*cell_index], w[*cell_index], p[*cell_index]
         );
     }
 }
@@ -549,8 +545,8 @@ pub fn print_vec_scientific(v: &Vec<Float>) {
     //     return
     // }
     print!("[");
-    for i in 0..v.len()-1 {
+    for i in 0..v.len() - 1 {
         print!("{:.2e}, ", v[i]);
     }
-    println!("{:.2e}]", v[v.len()-1]);
+    println!("{:.2e}]", v[v.len() - 1]);
 }

@@ -202,12 +202,14 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut Vec<Float>) {
                     FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                         mesh.face_zones[face_zone].scalar_value
                     }
-                    FaceConditionTypes::Interior => mesh.faces[&face_index]
-                        .cell_indices
-                        .iter()
-                        .map(|neighbor_cell_index| {
-                            p[*neighbor_cell_index]
-                        }).sum::<Float>() / 2.,
+                    FaceConditionTypes::Interior => {
+                        mesh.faces[&face_index]
+                            .cell_indices
+                            .iter()
+                            .map(|neighbor_cell_index| p[*neighbor_cell_index])
+                            .sum::<Float>()
+                            / 2.
+                    }
                     _ => panic!("unsupported face zone type for initialization"),
                 }
             }
@@ -324,10 +326,14 @@ pub fn solve_linear_system(
                     solution_vector[i] = solution_vector[i]*(1. - relaxation_factor) + relaxation_factor * (
                         b[i]
                         - solution_vector
-                            .iter()
+                            .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
                             .enumerate()
                             .map(|(j, x)| {
-                                a.get(i, j).unwrap_or(&0.) * x * Float::from(i != j)
+                                if i!=j {
+                                    a.get(i, j).unwrap_or(&0.) * x
+                                } else {
+                                    0.
+                                }
                             }).sum::<Float>()
                     ) / a.get(i, i)
                         .expect("matrix A should have a (nonzero) diagonal element for each element of solution vector");

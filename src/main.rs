@@ -271,7 +271,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
-    let (u,v,w,p) = solve_steady(
+    let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,

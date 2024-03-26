@@ -96,7 +96,7 @@ pub mod common {
             )
         }
 
-        pub fn approx_equals(&self, other: &Self, tol:Float) -> bool {
+        pub fn approx_equals(&self, other: &Self, tol: Float) -> bool {
             (*self - *other).infinity_norm() < tol
         }
     }
