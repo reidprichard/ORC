@@ -387,10 +387,10 @@ fn main() {
     validate_solvers();
     // test_gauss_seidel();
     // test_2d();
-    test_3d_1x3(iteration_count, 0.5, 0.2);
+    // test_3d_1x3(iteration_count, 0.5, 0.2);
     // test_3d_3x3(iteration_count, 1.0, 0.1);
     // test_3d();
-    // couette(iteration_count, 0.2, 0.2);
+    couette(iteration_count, 0.2, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh

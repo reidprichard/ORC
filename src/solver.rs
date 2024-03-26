@@ -14,6 +14,7 @@ use std::thread;
 
 const MATRIX_SOLVER_RELAXATION: Float = 0.33;
 const MATRIX_SOLVER_ITERS: Uint = 10;
+const PARALLELIZE_U_V_W: bool = true;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -100,63 +101,65 @@ pub fn solve_steady(
                     print_linear_system(&a, &b_u);
                 }
 
-                solve_linear_system(
-                    &a,
-                    &b_u,
-                    &mut u,
-                    MATRIX_SOLVER_ITERS,
-                    SolutionMethod::Jacobi,
-                    MATRIX_SOLVER_RELAXATION,
-                );
-                solve_linear_system(
-                    &a,
-                    &b_v,
-                    &mut v,
-                    MATRIX_SOLVER_ITERS,
-                    SolutionMethod::Jacobi,
-                    MATRIX_SOLVER_RELAXATION,
-                );
-                solve_linear_system(
-                    &a,
-                    &b_w,
-                    &mut w,
-                    MATRIX_SOLVER_ITERS,
-                    SolutionMethod::Jacobi,
-                    MATRIX_SOLVER_RELAXATION,
-                );
-                // thread::scope(|s| {
-                //     s.spawn(|| {
-                //         solve_linear_system(
-                //             &a,
-                //             &b_u,
-                //             &mut u,
-                //             GAUSS_SEIDEL_ITERS,
-                //             SolutionMethod::Jacobi,
-                //             GAUSS_SEIDEL_RELAXATION,
-                //         );
-                //     });
-                //     s.spawn(|| {
-                //         solve_linear_system(
-                //             &a,
-                //             &b_v,
-                //             &mut v,
-                //             GAUSS_SEIDEL_ITERS,
-                //             SolutionMethod::Jacobi,
-                //             GAUSS_SEIDEL_RELAXATION,
-                //         );
-                //     });
-                //     s.spawn(|| {
-                //         solve_linear_system(
-                //             &a,
-                //             &b_w,
-                //             &mut w,
-                //             GAUSS_SEIDEL_ITERS,
-                //             SolutionMethod::Jacobi,
-                //             GAUSS_SEIDEL_RELAXATION,
-                //         );
-                //     });
-                // });
-
+                if PARALLELIZE_U_V_W {
+                    thread::scope(|s| {
+                        s.spawn(|| {
+                            solve_linear_system(
+                                &a,
+                                &b_u,
+                                &mut u,
+                                MATRIX_SOLVER_ITERS,
+                                SolutionMethod::Jacobi,
+                                MATRIX_SOLVER_RELAXATION,
+                            );
+                        });
+                        s.spawn(|| {
+                            solve_linear_system(
+                                &a,
+                                &b_v,
+                                &mut v,
+                                MATRIX_SOLVER_ITERS,
+                                SolutionMethod::Jacobi,
+                                MATRIX_SOLVER_RELAXATION,
+                            );
+                        });
+                        s.spawn(|| {
+                            solve_linear_system(
+                                &a,
+                                &b_w,
+                                &mut w,
+                                MATRIX_SOLVER_ITERS,
+                                SolutionMethod::Jacobi,
+                                MATRIX_SOLVER_RELAXATION,
+                            );
+                        });
+                    });
+                } else {
+                    solve_linear_system(
+                        &a,
+                        &b_u,
+                        &mut u,
+                        MATRIX_SOLVER_ITERS,
+                        SolutionMethod::Jacobi,
+                        MATRIX_SOLVER_RELAXATION,
+                    );
+                    solve_linear_system(
+                        &a,
+                        &b_v,
+                        &mut v,
+                        MATRIX_SOLVER_ITERS,
+                        SolutionMethod::Jacobi,
+                        MATRIX_SOLVER_RELAXATION,
+                    );
+                    solve_linear_system(
+                        &a,
+                        &b_w,
+                        &mut w,
+                        MATRIX_SOLVER_ITERS,
+                        SolutionMethod::Jacobi,
+                        MATRIX_SOLVER_RELAXATION,
+                    );
+                }
                 let pressure_correction_matrices = build_pressure_correction_matrices(
                     mesh,
                     &u,
