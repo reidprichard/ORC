@@ -12,7 +12,8 @@ use std::thread;
 // TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
 // TODO: Change cell/face/node numbers to `usize`
 
-const GAUSS_SEIDEL_RELAXATION: Float = 0.25;
+const GAUSS_SEIDEL_RELAXATION: Float = 0.5;
+const GAUSS_SEIDEL_ITERS: Uint = 100;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -72,7 +73,6 @@ pub fn solve_steady(
     DVector<Float>,
     DVector<Float>,
 ) {
-    const GAUSS_SEIDEL_ITERS: Uint = 50;
     let cell_count: usize = mesh.cells.len();
     let mut u = initialize_DVector!(cell_count);
     let mut v = initialize_DVector!(cell_count);
@@ -180,7 +180,9 @@ pub fn solve_steady(
                     print_vec_scientific(&w);
                 }
                 if log_enabled!(log::Level::Info) {
-                    print!("p: ");
+                    print!("p': ");
+                    print_vec_scientific(&p_prime);
+                    print!("p:  ");
                     print_vec_scientific(&p);
                 }
                 println!(
@@ -335,17 +337,18 @@ pub fn solve_linear_system(
 ) {
     match method {
         SolutionMethod::Jacobi => {
-            let a_new = a.diagonal_as_csr() - a;
+            let a_new = a - a.diagonal_as_csr();
             for iter_num in 0..iteration_count {
                 if log_enabled!(log::Level::Trace) {
                     println!("Jacobi iteration {iter_num} = {solution_vector:?}");
                 }
                 let prev_guess = solution_vector.clone();
-                *solution_vector = ((1. - relaxation_factor) * &prev_guess
-                    + relaxation_factor * (b - &a_new * &prev_guess));
+                *solution_vector = relaxation_factor * (b - &a_new * &prev_guess);
+                // idk a better way to do this
                 for i in 0..solution_vector.nrows() {
                     solution_vector[i] /= a.get_entry(i as usize, i as usize).unwrap().into_value();
                 }
+                *solution_vector += prev_guess * (1. - relaxation_factor);
             }
         }
         SolutionMethod::GaussSeidel => {

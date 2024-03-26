@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use nalgebra::DVector;
+use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::common::Float;
 use orc::common::{Uint, Vector3};
 use orc::io::read_mesh;
@@ -13,6 +15,48 @@ use std::env;
 const PRESSURE_RELAXATION: Float = 0.4;
 const MOMENTUM_RELAXATION: Float = 1.0;
 
+fn test_jacobi() {
+    println!("*** Testing Jacobi solver for correctness. ***");
+    const TOL: Float = 1e-6;
+    // | 2 0 1 |   | 3 |
+    // | 0 3 2 | = | 2 |
+    // | 2 0 4 |   | 1 |
+    //
+    // | 1 0 0 |   | 11/6 |   | 1.833 |
+    // | 0 1 0 |   | 10/9 |   | 1.111 |
+    // | 0 0 1 | = | -2/3 | = | -0.67 |
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
+    a_coo.push(0, 0, 2.);
+    a_coo.push(0, 2, 1.);
+
+    a_coo.push(1, 1, 3.);
+    a_coo.push(1, 2, 2.);
+
+    a_coo.push(2, 0, 2.);
+    a_coo.push(2, 2, 4.);
+
+    let a = CsrMatrix::from(&a_coo);
+    // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
+    let b = DVector::from_column_slice(&vec![3.,2.,1.]);
+    let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
+
+    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::Jacobi, 0.5);
+
+    for row_num in 0..a.nrows() {
+        assert!(
+            Float::abs(
+                a.get_entry(row_num, 0).unwrap().into_value() * x[0]
+                    + a.get_entry(row_num, 1).unwrap().into_value() * x[1]
+                    + a.get_entry(row_num, 2).unwrap().into_value() * x[2]
+                    - b[row_num]
+            ) < TOL
+        );
+    }
+
+    println!("x = {x:?}");
+    println!("*** Jacobi solver validated. ***");
+}
+
 // fn test_gauss_seidel() {
 //     println!("*** Testing Gauss-Seidel for correctness. ***");
 //     const TOL: Float = 1e-6;
@@ -24,14 +68,14 @@ const MOMENTUM_RELAXATION: Float = 1.0;
 //     // | 0 1 0 |   | 10/9 |   | 1.111 |
 //     // | 0 0 1 | = | -2/3 | = | -0.67 |
 //     let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
-//     a_tri.add_triplet(0, 0, 2.);
-//     a_tri.add_triplet(0, 2, 1.);
+//     a_tri.push(0, 0, 2.);
+//     a_tri.push(0, 2, 1.);
 //
-//     a_tri.add_triplet(1, 1, 3.);
-//     a_tri.add_triplet(1, 2, 2.);
+//     a_tri.push(1, 1, 3.);
+//     a_tri.push(1, 2, 2.);
 //
-//     a_tri.add_triplet(2, 0, 2.);
-//     a_tri.add_triplet(2, 2, 4.);
+//     a_tri.push(2, 0, 2.);
+//     a_tri.push(2, 2, 4.);
 //
 //     let a = a_tri.to_csr();
 //     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
@@ -119,7 +163,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     // mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
     // mesh.get_face_zone("INLET").vector_value = Vector {x: 0.1, y: 0., z: 0.};
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 3.; // 1 Pa/m = 1 Pa/cell
+    mesh.get_face_zone("INLET").scalar_value = 0.03; // 1 Pa/m = 1 Pa/cell
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -157,7 +201,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        1.,
+        10.,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,
@@ -298,12 +342,13 @@ fn main() {
         .unwrap_or(&"10".to_string())
         .parse()
         .expect("arg 1 should be an integer");
+    // test_jacobi();
     // test_gauss_seidel();
     // test_2d();
-    // test_3d_1x3(iteration_count, 1.0, 0.4);
+    test_3d_1x3(iteration_count, 0.1, 0.1);
     // test_3d_3x3(iteration_count, 1.0, 0.4);
     // test_3d();
-    couette(iteration_count, 0.5, 0.2);
+    // couette(iteration_count, 0.2, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh
