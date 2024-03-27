@@ -51,7 +51,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         items
     }
 
-    let mut nodes: HashMap<usize, Node> = HashMap::new();
+    let mut nodes: HashMap<usize, Vertex> = HashMap::new();
     let mut faces: HashMap<usize, Face> = HashMap::new();
     let mut cells: HashMap<usize, Cell> = HashMap::new();
     let mut face_zones: HashMap<Uint, FaceZone> = HashMap::new();
@@ -157,9 +157,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             }
                             nodes.insert(
                                 node_number - 1,
-                                Node {
+                                Vertex {
                                     position: Vector3 { x, y, z },
-                                    ..Node::default()
+                                    ..Vertex::default()
                                 },
                             );
                             debug!(
@@ -300,7 +300,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             println!("dimensions: {}", face.node_indices.len());
             panic!("face has too few nodes");
         }
-        let face_nodes: Vec<&Node> = face
+        let face_nodes: Vec<&Vertex> = face
             .node_indices
             .iter()
             .map(|n| nodes.get(n).expect("nodes should have all been read"))

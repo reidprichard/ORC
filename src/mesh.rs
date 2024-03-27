@@ -149,11 +149,10 @@ impl Default for Cell {
 }
 
 // #[derive(Copy, Clone)]
-// TODO: Consider renaming Node to Vertex for consistency with typical nomenclature
-pub struct Node {
+pub struct Vertex {
     pub position: Vector3,
 }
-impl Node {
+impl Vertex {
     fn interpolate_velocity(&mut self) {}
 
     fn interpolate_pressure(&mut self, method: GreenGaussVariants) {
@@ -162,9 +161,9 @@ impl Node {
         }
     }
 }
-impl Default for Node {
-    fn default() -> Node {
-        Node {
+impl Default for Vertex {
+    fn default() -> Vertex {
+        Vertex {
             position: Vector3::zero(),
         }
     }
@@ -194,7 +193,7 @@ impl Default for Face {
 }
 
 pub struct Mesh {
-    pub nodes: HashMap<usize, Node>,
+    pub nodes: HashMap<usize, Vertex>,
     pub faces: HashMap<usize, Face>,
     pub cells: HashMap<usize, Cell>,
     pub face_zones: HashMap<Uint, FaceZone>,
