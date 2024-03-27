@@ -352,12 +352,12 @@ fn get_face_flux(
             let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
             let v0 = Vector3 {
                 x: u[c0],
-                y: u[c0],
+                y: v[c0],
                 z: w[c0],
             };
             let v1 = Vector3 {
                 x: u[c1],
-                y: u[c1],
+                y: v[c1],
                 z: w[c1],
             };
             match interpolation_scheme {
