@@ -13,7 +13,7 @@ use std::thread;
 // TODO: Change cell/face/node numbers to `usize`
 
 const MATRIX_SOLVER_RELAXATION: Float = 0.33;
-const MATRIX_SOLVER_ITERS: Uint = 10;
+const MATRIX_SOLVER_ITERS: Uint = 20;
 const PARALLELIZE_U_V_W: bool = true;
 
 #[derive(Copy, Clone)]
@@ -81,7 +81,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
     initialize_pressure_field(mesh, &mut p);
-    let a_di = build_momentum_diffusion_matrix(
+    let (a_di, boundary_face_diffusion_coeffs) = build_momentum_diffusion_matrix(
         mesh,
         &u,
         &v,
@@ -96,18 +96,19 @@ pub fn solve_steady(
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                let (mut a, b_u, b_v, b_w) = build_momentum_matrices(
-                    mesh,
-                    &u,
-                    &v,
-                    &w,
-                    &p,
-                    momentum_scheme,
-                    pressure_interpolation_scheme,
-                    velocity_interpolation_scheme,
-                    rho,
-                    mu,
-                );
+                let (mut a, boundary_face_advection_coeffs, b_u, b_v, b_w) =
+                    build_momentum_matrices(
+                        mesh,
+                        &u,
+                        &v,
+                        &w,
+                        &p,
+                        momentum_scheme,
+                        pressure_interpolation_scheme,
+                        velocity_interpolation_scheme,
+                        rho,
+                        mu,
+                    );
                 a = &a + &a_di;
                 if log_enabled!(log::Level::Debug) {
                     println!("Momentum:");
@@ -180,6 +181,7 @@ pub fn solve_steady(
                     &w,
                     &p,
                     &a,
+                    &(&boundary_face_advection_coeffs + &boundary_face_diffusion_coeffs),
                     velocity_interpolation_scheme,
                     rho,
                 );
@@ -436,10 +438,17 @@ fn build_momentum_diffusion_matrix(
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
     mu: Float,
-) -> (CsrMatrix<Float>) {
+) -> (CsrMatrix<Float>, CsrMatrix<Float>) {
     // TODO: split calculation of D_i into different function so it only needs to be done once
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
+    // We need to keep track of boundary faces separately:
+    // In the pressure correction equation, we need to be able to calculate
+    // <density> * <face area>^2 / <face's advection/diffusion coeff>
+    // For interior cells, this is encoded in the momentum system's off-diagonals,
+    // but all of a cell's boundary face contributions get absorbed into its diagonal
+    // term.
+    let mut boundary_face_diffusion_coeffs = CooMatrix::<Float>::new(mesh.faces.len(), 1);
 
     // Iterate over all cells in the mesh
     for (cell_index, cell) in &mesh.cells {
@@ -511,16 +520,22 @@ fn build_momentum_diffusion_matrix(
                 );
             }
 
-            a_p += d_i;
+            let face_contribution = d_i;
+            a_p += face_contribution;
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
                 a.push(*cell_index, neighbor_cell_index, -d_i);
+            } else {
+                boundary_face_diffusion_coeffs.push(*face_index, 0, face_contribution);
             }
         } // end face loop
         a.push(*cell_index, *cell_index, a_p);
     } // end cell loop
-    CsrMatrix::from(&a)
+    (
+        CsrMatrix::from(&a),
+        CsrMatrix::from(&boundary_face_diffusion_coeffs),
+    )
 }
 
 fn build_momentum_matrices(
@@ -536,6 +551,7 @@ fn build_momentum_matrices(
     mu: Float,
 ) -> (
     CsrMatrix<Float>,
+    CsrMatrix<Float>,
     DVector<Float>,
     DVector<Float>,
     DVector<Float>,
@@ -543,6 +559,7 @@ fn build_momentum_matrices(
     // TODO: split calculation of D_i into different function so it only needs to be done once
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
+    let mut boundary_face_advection_coeffs = CooMatrix::<Float>::new(mesh.faces.len(), 1);
     let mut u_source = initialize_DVector!(cell_count);
     let mut v_source = initialize_DVector!(cell_count);
     let mut w_source = initialize_DVector!(cell_count);
@@ -617,13 +634,16 @@ fn build_momentum_matrices(
                 _ => panic!("unsupported momentum scheme"),
             };
 
-            a_p += -a_nb + f_i + s_p; // sign of s_p?
+            let face_contribution = -a_nb + f_i + s_p; // sign of s_p?
+            a_p += face_contribution;
             s_u += (-outward_face_normal) * face_pressure * face.area;
 
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
                 a.push(*cell_index, neighbor_cell_index, a_nb);
+            } else {
+                boundary_face_advection_coeffs.push(*face_index, 0, face_contribution);
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
@@ -635,7 +655,13 @@ fn build_momentum_matrices(
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
-    (CsrMatrix::from(&a), u_source, v_source, w_source)
+    (
+        CsrMatrix::from(&a),
+        CsrMatrix::from(&boundary_face_advection_coeffs),
+        u_source,
+        v_source,
+        w_source,
+    )
 }
 
 fn build_pressure_correction_matrices(
@@ -645,6 +671,7 @@ fn build_pressure_correction_matrices(
     w: &DVector<Float>,
     p: &DVector<Float>,
     momentum_matrices: &CsrMatrix<Float>,
+    boundary_face_coeffs: &CsrMatrix<Float>,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
 ) -> LinearSystem {
@@ -687,7 +714,13 @@ fn build_pressure_correction_matrices(
                 a.push(*cell_index, neighbor_cell_index, -a_nb);
                 a_p += a_nb;
             } else {
-                // TODO
+                let boundary_face_contribution = boundary_face_coeffs
+                    .get_entry(*face_index, 0)
+                    .unwrap()
+                    .into_value();
+                if boundary_face_contribution != 0. {
+                    a_p += -rho * Float::powi(face.area, 2) / boundary_face_contribution;
+                }
             }
         }
         a.push(*cell_index, *cell_index, a_p);
