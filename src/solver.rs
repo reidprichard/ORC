@@ -1,9 +1,8 @@
 use crate::io::{dvector_to_str, print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::{common::*, io::print_vec_scientific};
-use itertools::izip;
-use log::{info, log_enabled};
-use nalgebra::{DMatrix, DVector};
+use log::log_enabled;
+use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use rayon::prelude::*;
 use std::thread;
@@ -26,6 +25,10 @@ pub enum PressureVelocityCoupling {
 #[derive(Copy, Clone)]
 pub enum MomentumDiscretization {
     UD,
+    CD,
+}
+
+pub enum DiffusionScheme {
     CD,
 }
 
@@ -57,6 +60,7 @@ pub fn solve_steady(
     mesh: &mut Mesh,
     pressure_velocity_coupling: PressureVelocityCoupling,
     momentum_scheme: MomentumDiscretization,
+    diffusion_scheme: DiffusionScheme,
     pressure_interpolation_scheme: PressureInterpolation,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
@@ -77,17 +81,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
     // initialize_pressure_field(mesh, &mut p, 1000);
-    let a_di = build_momentum_diffusion_matrix(
-        mesh,
-        &u,
-        &v,
-        &w,
-        &p,
-        pressure_interpolation_scheme,
-        velocity_interpolation_scheme,
-        rho,
-        mu,
-    );
+    let a_di = build_momentum_diffusion_matrix(mesh, diffusion_scheme, mu);
     if log_enabled!(log::Level::Debug) {
         println!("\nMomentum diffusion:");
         print_matrix(&a_di);
@@ -105,7 +99,6 @@ pub fn solve_steady(
                     pressure_interpolation_scheme,
                     velocity_interpolation_scheme,
                     rho,
-                    mu,
                 );
                 a = &a + &a_di;
                 if log_enabled!(log::Level::Debug) {
@@ -177,7 +170,6 @@ pub fn solve_steady(
                     &u,
                     &v,
                     &w,
-                    &p,
                     &a,
                     velocity_interpolation_scheme,
                     rho,
@@ -397,11 +389,11 @@ pub fn solve_linear_system(
             }
         }
         SolutionMethod::GaussSeidel => {
-            'iter_loop: for iter_num in 0..iteration_count {
+            for iter_num in 0..iteration_count {
                 if log_enabled!(log::Level::Trace) {
                     println!("Gauss-Seidel iteration {iter_num} = {solution_vector:?}");
                 }
-                'row_loop: for i in 0..a.nrows() {
+                for i in 0..a.nrows() {
                     solution_vector[i] = solution_vector[i] * (1. - relaxation_factor)
                         + relaxation_factor
                             * (b[i]
@@ -429,15 +421,13 @@ pub fn solve_linear_system(
 
 fn build_momentum_diffusion_matrix(
     mesh: &Mesh,
-    u: &DVector<Float>,
-    v: &DVector<Float>,
-    w: &DVector<Float>,
-    p: &DVector<Float>,
-    pressure_interpolation_scheme: PressureInterpolation,
-    velocity_interpolation_scheme: VelocityInterpolation,
-    rho: Float,
+    diffusion_scheme: DiffusionScheme,
     mu: Float,
 ) -> CsrMatrix<Float> {
+    if !matches!(diffusion_scheme, DiffusionScheme::CD) {
+        panic!("unsupported diffusion scheme");
+    }
+
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
 
@@ -535,7 +525,6 @@ fn build_momentum_matrices(
     pressure_interpolation_scheme: PressureInterpolation,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
-    mu: Float,
 ) -> (
     CsrMatrix<Float>,
     DVector<Float>,
@@ -572,7 +561,6 @@ fn build_momentum_matrices(
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
-            let face_bc = &mesh.face_zones[&face.zone];
             let face_velocity = calculate_face_velocity(
                 &mesh,
                 &u,
@@ -625,7 +613,7 @@ fn build_momentum_matrices(
                 _ => panic!("unsupported momentum scheme"),
             };
 
-            let face_contribution = -a_nb + f_i + s_p; // sign of s_p?
+            let face_contribution = -a_nb + f_i; // sign of s_p?
             a_p += face_contribution;
             s_u += (-outward_face_normal) * face_pressure * face.area;
 
@@ -640,7 +628,7 @@ fn build_momentum_matrices(
         v_source[*cell_index] = source_total.y;
         w_source[*cell_index] = source_total.z;
 
-        a.push(*cell_index, *cell_index, a_p + s_p);
+        a.push(*cell_index, *cell_index, a_p);
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
@@ -652,7 +640,6 @@ fn build_pressure_correction_matrices(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
-    p: &DVector<Float>,
     momentum_matrices: &CsrMatrix<Float>,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
