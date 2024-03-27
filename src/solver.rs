@@ -81,10 +81,22 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
     initialize_pressure_field(mesh, &mut p);
+    let a_di = build_momentum_diffusion_matrix(
+        mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        momentum_scheme,
+        pressure_interpolation_scheme,
+        velocity_interpolation_scheme,
+        rho,
+        mu,
+    );
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                let (a, b_u, b_v, b_w) = build_momentum_matrices(
+                let (mut a, b_u, b_v, b_w) = build_momentum_matrices(
                     mesh,
                     &u,
                     &v,
@@ -96,6 +108,7 @@ pub fn solve_steady(
                     rho,
                     mu,
                 );
+                a = &a + &a_di;
                 if log_enabled!(log::Level::Debug) {
                     println!("Momentum:");
                     print_linear_system(&a, &b_u);
@@ -412,7 +425,7 @@ pub fn solve_linear_system(
     }
 }
 
-fn build_momentum_matrices(
+fn build_momentum_diffusion_matrix(
     mesh: &Mesh,
     u: &DVector<Float>,
     v: &DVector<Float>,
@@ -423,63 +436,20 @@ fn build_momentum_matrices(
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
     mu: Float,
-) -> (
-    CsrMatrix<Float>,
-    DVector<Float>,
-    DVector<Float>,
-    DVector<Float>,
-) {
-    // TODO: Ignore boundary cells
+) -> (CsrMatrix<Float>) {
+    // TODO: split calculation of D_i into different function so it only needs to be done once
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
-    let mut u_source = initialize_DVector!(cell_count);
-    let mut v_source = initialize_DVector!(cell_count);
-    let mut w_source = initialize_DVector!(cell_count);
-
-    let mut max_peclet_number: Float = 0.;
 
     // Iterate over all cells in the mesh
     for (cell_index, cell) in &mesh.cells {
-        // Diffusion of scalar phi from neighbor into this cell
-        // = <face area> * <diffusivity> * <face-normal gradient of phi>
-        // = A * nu * d/dn(phi)
-        // = A * nu * (phi_nb - phi_c) / |n|
-        // = -D_i * (phi_c - phi_nb)
-        // Advection of scalar phi from neighbor into this cell
-        // = <face velocity> dot <face inward normal> * <face area> * <face value of phi>
-        // = ~F_i * (phi_c + phi_nb) / 2 (central differencing)
-        //
-        // <sum of convection/diffusion of momentum into cell> = <momentum source>
-
-        // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        let mut s_p = 0.; // proportional source term TODO
-        let mut s_u = get_velocity_source_term(cell.centroid); // general source term
-        let mut s_u_dc = Vector3::zero(); // deferred correction source term TODO
-        let mut s_d_cross = Vector3::zero(); // cross diffusion source term TODO
-
         // The current cell's coefficients (matrix diagonal)
-        let mut a_p = s_p;
+        let mut a_p = 0.;
 
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
             let face_bc = &mesh.face_zones[&face.zone];
-            let face_velocity = calculate_face_velocity(
-                &mesh,
-                &u,
-                &v,
-                &w,
-                *face_index,
-                velocity_interpolation_scheme,
-            );
-            // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
-            // TODO: Consider flipping convention of face normal direction and/or potentially
-            // make it an area vector
-            let outward_face_normal = get_outward_face_normal(&face, *cell_index);
-            let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
-            let face_pressure =
-                calculate_face_pressure(mesh, &p, *face_index, pressure_interpolation_scheme);
-            // println!("cell {cell_index}, face {face_index}: pressure = {face_pressure}");
             let (d_i, neighbor_cell_index) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
                     let d_i = mu * face.area * (face.centroid - cell.centroid).norm();
@@ -536,25 +506,116 @@ fn build_momentum_matrices(
             }; // end BC match
             if log_enabled!(log::Level::Trace) {
                 println!(
-                    "cell {: >3}, face {: >3}: F_i = {: >9}, D_i = {: >9}",
-                    cell_index, face_index, f_i, d_i
+                    "cell {: >3}, face {: >3}: D_i = {: >9}",
+                    cell_index, face_index, d_i
                 );
             }
-            let a_nb: Float = -d_i
-                + match momentum_scheme {
-                    MomentumDiscretization::UD => {
-                        panic!("untested");
-                        // Neighbor only affects this cell if flux is into this
-                        // cell => f_i < 0. Therefore, if f_i < 0, we set it to 0.
-                        Float::max(f_i, 0.)
-                    }
-                    MomentumDiscretization::CD => f_i / 2.,
-                    _ => panic!("unsupported momentum scheme"),
-                };
 
-            if d_i.ne(&0.) {
-                max_peclet_number = Float::max(Float::abs(f_i / d_i), max_peclet_number);
+            a_p += d_i;
+            // If it's MAX, that means it's a boundary face
+            if neighbor_cell_index != usize::MAX {
+                // negate a_nb to move to LHS of equation
+                a.push(*cell_index, neighbor_cell_index, -d_i);
             }
+        } // end face loop
+        a.push(*cell_index, *cell_index, a_p);
+    } // end cell loop
+    CsrMatrix::from(&a)
+}
+
+fn build_momentum_matrices(
+    mesh: &Mesh,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
+    momentum_scheme: MomentumDiscretization,
+    pressure_interpolation_scheme: PressureInterpolation,
+    velocity_interpolation_scheme: VelocityInterpolation,
+    rho: Float,
+    mu: Float,
+) -> (
+    CsrMatrix<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
+    // TODO: split calculation of D_i into different function so it only needs to be done once
+    let cell_count = mesh.cells.len();
+    let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
+    let mut u_source = initialize_DVector!(cell_count);
+    let mut v_source = initialize_DVector!(cell_count);
+    let mut w_source = initialize_DVector!(cell_count);
+
+    // Iterate over all cells in the mesh
+    for (cell_index, cell) in &mesh.cells {
+        // Diffusion of scalar phi from neighbor into this cell
+        // = <face area> * <diffusivity> * <face-normal gradient of phi>
+        // = A * nu * d/dn(phi)
+        // = A * nu * (phi_nb - phi_c) / |n|
+        // = -D_i * (phi_c - phi_nb)
+        // Advection of scalar phi from neighbor into this cell
+        // = <face velocity> dot <face inward normal> * <face area> * <face value of phi>
+        // = ~F_i * (phi_c + phi_nb) / 2 (central differencing)
+        //
+        // <sum of convection/diffusion of momentum into cell> = <momentum source>
+
+        // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
+        let mut s_p = 0.; // proportional source term TODO (don't think I need this since I include
+                          // BCs in a_p directly)
+        let mut s_u = get_velocity_source_term(cell.centroid); // general source term
+        let mut s_u_dc = Vector3::zero(); // deferred correction source term TODO
+        let mut s_d_cross = Vector3::zero(); // cross diffusion source term TODO
+
+        // The current cell's coefficients (matrix diagonal)
+        let mut a_p = 0.;
+
+        // Iterate over this cell's faces
+        for face_index in &cell.face_indices {
+            let face = &mesh.faces[face_index];
+            let face_bc = &mesh.face_zones[&face.zone];
+            let face_velocity = calculate_face_velocity(
+                &mesh,
+                &u,
+                &v,
+                &w,
+                *face_index,
+                velocity_interpolation_scheme,
+            );
+            // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
+            // TODO: Consider flipping convention of face normal direction and/or potentially
+            // make it an area vector
+            let outward_face_normal = get_outward_face_normal(&face, *cell_index);
+            let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
+            let face_pressure =
+                calculate_face_pressure(mesh, &p, *face_index, pressure_interpolation_scheme);
+            let neighbor_cell_index = if face.cell_indices.len() == 1 {
+                usize::MAX
+            } else if face.cell_indices[0] == *cell_index {
+                // face normal points to cell 0 by default, so we need to flip it
+                *face
+                    .cell_indices
+                    .get(1)
+                    .expect("interior faces should have two neighbors")
+            } else {
+                face.cell_indices[0]
+            };
+            if log_enabled!(log::Level::Trace) {
+                println!(
+                    "cell {: >3}, face {: >3}: F_i = {: >9}",
+                    cell_index, face_index, f_i
+                );
+            }
+            let a_nb: Float = match momentum_scheme {
+                MomentumDiscretization::UD => {
+                    panic!("untested");
+                    // Neighbor only affects this cell if flux is into this
+                    // cell => f_i < 0. Therefore, if f_i < 0, we set it to 0.
+                    Float::max(f_i, 0.)
+                }
+                MomentumDiscretization::CD => f_i / 2.,
+                _ => panic!("unsupported momentum scheme"),
+            };
 
             a_p += -a_nb + f_i + s_p; // sign of s_p?
             s_u += (-outward_face_normal) * face_pressure * face.area;
@@ -574,12 +635,6 @@ fn build_momentum_matrices(
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
-    if max_peclet_number > 2. {
-        println!("Warning: High Peclet number may be unstable. Pe = {max_peclet_number:.2}");
-    }
-    else if max_peclet_number < 1. {
-        println!("Warning: Low Peclet number may cause pressure correction to become unbounded. Pe = {max_peclet_number:.1e}");
-    }
     (CsrMatrix::from(&a), u_source, v_source, w_source)
 }
 
@@ -630,9 +685,12 @@ fn build_pressure_correction_matrices(
                         .unwrap()
                         .into_value();
                 a.push(*cell_index, neighbor_cell_index, -a_nb);
+                a_p += a_nb;
+            } else {
+                // TODO
             }
         }
-        a.push(*cell_index, *cell_index, momentum_matrices.get_entry(*cell_index, *cell_index).unwrap().into_value());
+        a.push(*cell_index, *cell_index, a_p);
         b[*cell_index] = b_p;
     }
 
