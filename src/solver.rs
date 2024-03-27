@@ -279,6 +279,38 @@ fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
+fn calculate_scalar_gradient(
+    mesh: &Mesh,
+    scalar: &DVector<Float>,
+    cell_index: usize,
+    gradient_scheme: GradientReconstructionMethods,
+) -> Vector3 {
+    let cell = &mesh.cells[&cell_index];
+    match gradient_scheme {
+        GradientReconstructionMethods::GreenGauss(variant) => {
+            match variant {
+                GreenGaussVariants::CellBased => {
+                    cell.face_indices.iter().map(|f| {
+                        let mut neighbor_count = 0.;
+                        let face = &mesh.faces[f];
+                        let face_value: Float = face
+                            .cell_indices
+                            .iter()
+                            .map(|c| {
+                                neighbor_count += 1.;
+                                &scalar[*c]
+                            })
+                            .sum::<Float>() / neighbor_count;
+                        face_value * (face.centroid - cell.centroid)
+                    }).fold(Vector3::zero(), |acc, v| acc + v)
+                }
+                _ => panic!("unsupported Green-Gauss scheme"),
+            }
+        }
+        _ => panic!("unsupported gradient scheme"),
+    }
+}
+
 fn calculate_face_velocity(
     mesh: &Mesh,
     u: &DVector<Float>,

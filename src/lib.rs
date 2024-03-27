@@ -13,6 +13,7 @@ pub mod common {
     use std::{
         fmt,
         ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
+        iter::Sum
     };
 
     pub type Int = i32;
@@ -158,6 +159,12 @@ pub mod common {
             }
         }
     }
+
+    // impl Sum<Self> for Vector3 {
+    //     fn sum<I>(iter: I) -> Self {
+    //         iter.fold(Vector3::zero(), |acc, v| acc + v)
+    //     }
+    // }
 
     macro_rules! vector_div {
         ($T: ty) => {
