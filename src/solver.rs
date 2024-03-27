@@ -436,12 +436,6 @@ pub fn iterative_solve(
     match method {
         SolutionMethod::Jacobi => {
             let mut a_new = a.clone();
-            let b_new: DVector<Float> = DVector::from_iterator(
-                b.nrows(),
-                b.iter()
-                    .enumerate()
-                    .map(|(i, v)| *v / a.get_entry(i, i).unwrap().into_value()),
-            );
             a_new.triplet_iter_mut().for_each(|(i, j, v)| {
                 *v = if i == j {
                     0.
@@ -449,6 +443,12 @@ pub fn iterative_solve(
                     *v / a.get_entry(i, i).unwrap().into_value()
                 }
             });
+            let b_new: DVector<Float> = DVector::from_iterator(
+                b.nrows(),
+                b.iter()
+                    .enumerate()
+                    .map(|(i, v)| *v / a.get_entry(i, i).unwrap().into_value()),
+            );
             for iter_num in 0..iteration_count {
                 if log_enabled!(log::Level::Trace) {
                     println!(
@@ -458,12 +458,8 @@ pub fn iterative_solve(
                     );
                 }
                 let prev_guess = solution_vector.clone();
-                *solution_vector = relaxation_factor * (&b_new - &a_new * &prev_guess);
-                // idk a better way to do this
-                // for i in 0..solution_vector.nrows() {
-                //     solution_vector[i] /= a.get_entry(i as usize, i as usize).unwrap().into_value();
-                // }
-                *solution_vector += prev_guess * (1. - relaxation_factor);
+                *solution_vector = relaxation_factor * (&b_new - &a_new * &prev_guess)
+                    + prev_guess * (1. - relaxation_factor);
             }
         }
         SolutionMethod::GaussSeidel => {
