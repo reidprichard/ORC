@@ -366,7 +366,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        0.1,
+        0.001,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,

@@ -6,11 +6,7 @@ use log::{info, log_enabled};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use rayon::prelude::*;
-// use sprs::{CsMat, TriMat};
 use std::thread;
-
-// TODO: Change to SOA format (separate u, v, w, p arrays rather than being stored in cell objs)
-// TODO: Change cell/face/node numbers to `usize`
 
 const MATRIX_SOLVER_RELAXATION: Float = 0.33;
 const MATRIX_SOLVER_ITERS: Uint = 20;
@@ -352,7 +348,6 @@ fn calculate_face_pressure(
     match face_zone.zone_type {
         FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
             // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
-            // TODO: Off by one here?
             p[face.cell_indices[0]]
         }
         FaceConditionTypes::VelocityInlet => p[face.cell_indices[0]],
@@ -443,7 +438,6 @@ fn build_momentum_diffusion_matrix(
     rho: Float,
     mu: Float,
 ) -> CsrMatrix<Float> {
-    // TODO: split calculation of D_i into different function so it only needs to be done once
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
 
@@ -548,7 +542,6 @@ fn build_momentum_matrices(
     DVector<Float>,
     DVector<Float>,
 ) {
-    // TODO: split calculation of D_i into different function so it only needs to be done once
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
     let mut u_source = initialize_DVector!(cell_count);
@@ -569,8 +562,6 @@ fn build_momentum_matrices(
         // <sum of convection/diffusion of momentum into cell> = <momentum source>
 
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        let mut s_p = 0.; // proportional source term TODO (don't think I need this since I include
-                          // BCs in a_p directly)
         let mut s_u = get_velocity_source_term(cell.centroid); // general source term
         let mut s_u_dc = Vector3::zero(); // deferred correction source term TODO
         let mut s_d_cross = Vector3::zero(); // cross diffusion source term TODO
@@ -666,7 +657,6 @@ fn build_pressure_correction_matrices(
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
 ) -> LinearSystem {
-    // TODO: ignore boundary cells
     let cell_count = mesh.cells.len();
     // The coefficients of the pressure correction matrix
     let mut a = CooMatrix::new(cell_count, cell_count);
