@@ -9,7 +9,6 @@ use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
-use sprs::{CsMat, CsVec, TriMat};
 use std::env;
 
 const PRESSURE_RELAXATION: Float = 0.5;
@@ -41,7 +40,7 @@ fn validate_solvers() {
     let b = DVector::from_column_slice(&vec![3.,2.,1.]);
     let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
 
-    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::Jacobi, 0.5);
+    iterative_solve(&a, &b, &mut x, 100, SolutionMethod::Jacobi, 0.5);
 
     for row_num in 0..a.nrows() {
         assert!(
@@ -81,7 +80,7 @@ fn validate_solvers() {
     let b = DVector::from_column_slice(&vec![3.,2.,1.]);
     let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
 
-    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.5);
+    iterative_solve(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.5);
 
     for row_num in 0..a.nrows() {
         assert!(
@@ -185,6 +184,7 @@ fn test_2d(iteration_count: Uint) {
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::UD,
+        DiffusionScheme::CD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
@@ -239,6 +239,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
+        DiffusionScheme::CD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
@@ -307,6 +308,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
+        DiffusionScheme::CD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
@@ -363,6 +365,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::UD,
+        DiffusionScheme::CD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,

@@ -5,7 +5,6 @@ use log::{debug, info};
 use nalgebra::DVector;
 use nalgebra_sparse::CsrMatrix;
 use regex::Regex;
-use sprs::CsMat;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;

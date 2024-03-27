@@ -109,7 +109,7 @@ pub fn solve_steady(
                 if PARALLELIZE_U_V_W {
                     thread::scope(|s| {
                         s.spawn(|| {
-                            solve_linear_system(
+                            iterative_solve(
                                 &a,
                                 &b_u,
                                 &mut u,
@@ -119,7 +119,7 @@ pub fn solve_steady(
                             );
                         });
                         s.spawn(|| {
-                            solve_linear_system(
+                            iterative_solve(
                                 &a,
                                 &b_v,
                                 &mut v,
@@ -129,7 +129,7 @@ pub fn solve_steady(
                             );
                         });
                         s.spawn(|| {
-                            solve_linear_system(
+                            iterative_solve(
                                 &a,
                                 &b_w,
                                 &mut w,
@@ -140,7 +140,7 @@ pub fn solve_steady(
                         });
                     });
                 } else {
-                    solve_linear_system(
+                    iterative_solve(
                         &a,
                         &b_u,
                         &mut u,
@@ -148,7 +148,7 @@ pub fn solve_steady(
                         SolutionMethod::Jacobi,
                         MATRIX_SOLVER_RELAXATION,
                     );
-                    solve_linear_system(
+                    iterative_solve(
                         &a,
                         &b_v,
                         &mut v,
@@ -156,7 +156,7 @@ pub fn solve_steady(
                         SolutionMethod::Jacobi,
                         MATRIX_SOLVER_RELAXATION,
                     );
-                    solve_linear_system(
+                    iterative_solve(
                         &a,
                         &b_w,
                         &mut w,
@@ -188,7 +188,7 @@ pub fn solve_steady(
                 // requires that sum(abs(a_nb)) < a_p for at least one row.
                 // What's the solution? Skip pressure correction if max Pe < 1?
                 // Reducing the iteration count (10k -> 10) seems to have fixed the issue for now.
-                solve_linear_system(
+                iterative_solve(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
@@ -360,7 +360,7 @@ fn calculate_face_pressure(
     }
 }
 
-pub fn solve_linear_system(
+pub fn iterative_solve(
     a: &CsrMatrix<Float>,
     b: &DVector<Float>,
     solution_vector: &mut DVector<Float>,
