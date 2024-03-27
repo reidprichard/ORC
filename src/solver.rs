@@ -435,15 +435,15 @@ pub fn iterative_solve(
 ) {
     match method {
         SolutionMethod::Jacobi => {
-            let mut a_new = a.clone();
-            a_new.triplet_iter_mut().for_each(|(i, j, v)| {
+            let mut a_prime = a.clone();
+            a_prime.triplet_iter_mut().for_each(|(i, j, v)| {
                 *v = if i == j {
                     0.
                 } else {
                     *v / a.get_entry(i, i).unwrap().into_value()
                 }
             });
-            let b_new: DVector<Float> = DVector::from_iterator(
+            let b_prime: DVector<Float> = DVector::from_iterator(
                 b.nrows(),
                 b.iter()
                     .enumerate()
@@ -457,9 +457,10 @@ pub fn iterative_solve(
                         dvector_to_str(&solution_vector)
                     );
                 }
+                // It seems like there must be a way to avoid cloning solution_vector, even if that
+                // turns this into Gauss-Seidel
                 let prev_guess = solution_vector.clone();
-                *solution_vector = relaxation_factor * (&b_new - &a_new * &prev_guess)
-                    + prev_guess * (1. - relaxation_factor);
+                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess) + prev_guess * (1. - relaxation_factor);
             }
         }
         SolutionMethod::GaussSeidel => {
