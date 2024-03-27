@@ -1,4 +1,6 @@
 from matplotlib import pyplot as plt
+import matplotlib.tri as tri
+import numpy as np
 import re
 
 
@@ -16,6 +18,17 @@ def main():
     x, y, z, u, v, w, p = list(zip(*row_values))
 
     fig, ax = plt.subplots()
+
+    xi = np.linspace(min(x), max(x), 100)
+    yi = np.linspace(min(y), max(y), 100)
+    triang = tri.Triangulation(x, y)
+    interpolator = tri.LinearTriInterpolator(triang, p)
+    Xi, Yi = np.meshgrid(xi, yi)
+    zi = interpolator(Xi, Yi)
+    cm = ax.contourf(xi,yi,zi)
+
+    fig.colorbar(cm, label="Gage Pressure [Pa]")
+
     ax.quiver(x, y, u, v)
     plt.show()
 
