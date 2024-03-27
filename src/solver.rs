@@ -10,6 +10,7 @@ use std::thread;
 const MATRIX_SOLVER_RELAXATION: Float = 0.33;
 const MATRIX_SOLVER_ITERS: Uint = 20;
 const PARALLELIZE_U_V_W: bool = true;
+const SOLVE_METHOD: SolutionMethod = SolutionMethod::Jacobi;
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -42,7 +43,7 @@ pub enum PressureInterpolation {
 
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
-    WeightedLinear,
+    LinearWeighted,
     RhieChow2,
 }
 
@@ -118,7 +119,7 @@ pub fn solve_steady(
                                 &b_u,
                                 &mut u,
                                 MATRIX_SOLVER_ITERS,
-                                SolutionMethod::Jacobi,
+                                SOLVE_METHOD,
                                 MATRIX_SOLVER_RELAXATION,
                             );
                         });
@@ -128,7 +129,7 @@ pub fn solve_steady(
                                 &b_v,
                                 &mut v,
                                 MATRIX_SOLVER_ITERS,
-                                SolutionMethod::Jacobi,
+                                SOLVE_METHOD,
                                 MATRIX_SOLVER_RELAXATION,
                             );
                         });
@@ -138,7 +139,7 @@ pub fn solve_steady(
                                 &b_w,
                                 &mut w,
                                 MATRIX_SOLVER_ITERS,
-                                SolutionMethod::Jacobi,
+                                SOLVE_METHOD,
                                 MATRIX_SOLVER_RELAXATION,
                             );
                         });
@@ -149,7 +150,7 @@ pub fn solve_steady(
                         &b_u,
                         &mut u,
                         MATRIX_SOLVER_ITERS,
-                        SolutionMethod::Jacobi,
+                        SOLVE_METHOD,
                         MATRIX_SOLVER_RELAXATION,
                     );
                     iterative_solve(
@@ -157,7 +158,7 @@ pub fn solve_steady(
                         &b_v,
                         &mut v,
                         MATRIX_SOLVER_ITERS,
-                        SolutionMethod::Jacobi,
+                        SOLVE_METHOD,
                         MATRIX_SOLVER_RELAXATION,
                     );
                     iterative_solve(
@@ -165,7 +166,7 @@ pub fn solve_steady(
                         &b_w,
                         &mut w,
                         MATRIX_SOLVER_ITERS,
-                        SolutionMethod::Jacobi,
+                        SOLVE_METHOD,
                         MATRIX_SOLVER_RELAXATION,
                     );
                 }
@@ -174,8 +175,10 @@ pub fn solve_steady(
                     &u,
                     &v,
                     &w,
+                    &p,
                     &a,
                     velocity_interpolation_scheme,
+                    gradient_scheme,
                     rho,
                 );
                 if log_enabled!(log::Level::Debug) {
@@ -197,7 +200,7 @@ pub fn solve_steady(
                     &pressure_correction_matrices.b,
                     &mut p_prime,
                     MATRIX_SOLVER_ITERS,
-                    SolutionMethod::Jacobi,
+                    SOLVE_METHOD,
                     MATRIX_SOLVER_RELAXATION,
                 );
 
@@ -321,38 +324,55 @@ fn get_face_flux(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
+    p: &DVector<Float>,
     face_index: usize,
     cell_index: usize,
     interpolation_scheme: VelocityInterpolation,
+    gradient_scheme: GradientReconstructionMethods,
+    // momentum_matrices: &CsrMatrix<Float>,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
     let outward_face_normal = get_outward_face_normal(face, cell_index);
     let face_zone = &mesh.face_zones[&face.zone];
+    let c0 = face.cell_indices[0];
     match face_zone.zone_type {
         FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => 0.,
         FaceConditionTypes::VelocityInlet => face_zone.vector_value.dot(&outward_face_normal),
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
             outward_face_normal.dot(&Vector3 {
-                x: u[face.cell_indices[0]],
-                y: v[face.cell_indices[0]],
-                z: w[face.cell_indices[0]],
+                x: u[c0],
+                y: v[c0],
+                z: w[c0],
             })
         }
-        FaceConditionTypes::Interior => match interpolation_scheme {
-            VelocityInterpolation::WeightedLinear => {
-                let c0 = face.cell_indices[0];
-                let c1 = face.cell_indices[1];
-                let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-                let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                outward_face_normal.dot(&Vector3 {
-                    x: &u[c0] + (&u[c1] - &u[c0]) * x0 / (x0 + x1),
-                    y: &v[c0] + (&v[c1] - &v[c0]) * x0 / (x0 + x1),
-                    z: &w[c0] + (&w[c1] - &w[c0]) * x0 / (x0 + x1),
-                })
+        FaceConditionTypes::Interior => {
+            let c1 = face.cell_indices[1];
+            let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
+            let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
+            let v0 = Vector3 {
+                x: u[c0],
+                y: u[c0],
+                z: w[c0],
+            };
+            let v1 = Vector3 {
+                x: u[c1],
+                y: u[c1],
+                z: w[c1],
+            };
+            match interpolation_scheme {
+                VelocityInterpolation::LinearWeighted => {
+                    outward_face_normal.dot(&(v0 + (v1 - v0) * x0 / (x0 + x1)))
+                }
+                VelocityInterpolation::RhieChow2 => {
+                    // let a0 = momentum_matrices.get_entry(c0, c0).unwrap().into_value();
+                    // let a1 = momentum_matrices.get_entry(c1, c1).unwrap().into_value();
+                    // let p_grad_1 = calculate_scalar_gradient(&mesh, &p, cell_index, gradient_scheme);
+                    // 0.5 * (outward_face_normal.dot(&(v0+v1)) + (mesh.cells[&c0].volume / a0 + mesh.cells[&c1].volume / a1))
+                    0.
+                }
             }
-            VelocityInterpolation::RhieChow2 => 0.,
-        },
+        }
         _ => panic!("unsupported face zone type"),
     }
 }
@@ -415,7 +435,18 @@ pub fn iterative_solve(
 ) {
     match method {
         SolutionMethod::Jacobi => {
-            let a_new = a - a.diagonal_as_csr();
+            let mut a_new = a.clone();
+            let mut b_new = b.clone();
+            a_new.triplet_iter_mut().for_each(|(i, j, v)| {
+                *v = if i == j {
+                    0.
+                } else {
+                    *v / a.get_entry(i, i).unwrap().into_value()
+                }
+            });
+            b_new.iter_mut().enumerate().for_each(|(i, v)| {
+                *v /= a.get_entry(i, i).unwrap().into_value();
+            });
             for iter_num in 0..iteration_count {
                 if log_enabled!(log::Level::Trace) {
                     println!(
@@ -425,11 +456,11 @@ pub fn iterative_solve(
                     );
                 }
                 let prev_guess = solution_vector.clone();
-                *solution_vector = relaxation_factor * (b - &a_new * &prev_guess);
+                *solution_vector = relaxation_factor * (&b_new - &a_new * &prev_guess);
                 // idk a better way to do this
-                for i in 0..solution_vector.nrows() {
-                    solution_vector[i] /= a.get_entry(i as usize, i as usize).unwrap().into_value();
-                }
+                // for i in 0..solution_vector.nrows() {
+                //     solution_vector[i] /= a.get_entry(i as usize, i as usize).unwrap().into_value();
+                // }
                 *solution_vector += prev_guess * (1. - relaxation_factor);
             }
         }
@@ -561,6 +592,7 @@ fn build_momentum_diffusion_matrix(
 }
 
 fn build_momentum_matrices(
+    // a: &mut CsrMatrix<Float>,
     mesh: &Mesh,
     u: &DVector<Float>,
     v: &DVector<Float>,
@@ -612,9 +644,11 @@ fn build_momentum_matrices(
                 &u,
                 &v,
                 &w,
+                &p,
                 *face_index,
                 *cell_index,
                 velocity_interpolation_scheme,
+                gradient_scheme,
             );
             // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
             // TODO: Consider flipping convention of face normal direction and/or potentially
@@ -672,6 +706,7 @@ fn build_momentum_matrices(
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
+                // a.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() = 1.;
                 a.push(*cell_index, neighbor_cell_index, a_nb);
             }
         } // end face loop
@@ -692,8 +727,10 @@ fn build_pressure_correction_matrices(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
+    p: &DVector<Float>,
     momentum_matrices: &CsrMatrix<Float>,
     velocity_interpolation_scheme: VelocityInterpolation,
+    gradient_scheme: GradientReconstructionMethods,
     rho: Float,
 ) -> LinearSystem {
     let cell_count = mesh.cells.len();
@@ -712,9 +749,11 @@ fn build_pressure_correction_matrices(
                 &u,
                 &v,
                 &w,
+                &p,
                 *face_index,
                 *cell_index,
                 velocity_interpolation_scheme,
+                gradient_scheme,
             );
             let inward_face_normal = get_inward_face_normal(&face, *cell_index);
             // The net mass flow rate through this face into this cell
