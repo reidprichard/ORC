@@ -496,8 +496,7 @@ fn build_momentum_matrices(
                 }
                 FaceConditionTypes::VelocityInlet => {
                     // Diffusion coefficient
-                    // NOTE: I think a source term addition is needed to include face's
-                    // contribution since there's no cell on the other side?
+                    // TODO: Add source term contribution to diffusion since there's no cell on the other side
                     let d_i: Float = mu * face.area * (face.centroid - cell.centroid).norm();
                     (d_i, usize::MAX)
                 }
@@ -624,9 +623,6 @@ fn build_pressure_correction_matrices(
                 } else {
                     face.cell_indices[1]
                 };
-                let x = momentum_matrices.get_entry(0, 0);
-                let y = x.unwrap();
-                let z: Float = y.into_value();
                 // NOTE: I'm not confident on why this is negative, but it works.
                 let a_nb = -rho * Float::powi(face.area, 2)
                     / momentum_matrices
@@ -634,10 +630,9 @@ fn build_pressure_correction_matrices(
                         .unwrap()
                         .into_value();
                 a.push(*cell_index, neighbor_cell_index, -a_nb);
-                a_p += a_nb;
             }
         }
-        a.push(*cell_index, *cell_index, a_p);
+        a.push(*cell_index, *cell_index, momentum_matrices.get_entry(*cell_index, *cell_index).unwrap().into_value());
         b[*cell_index] = b_p;
     }
 
