@@ -44,7 +44,7 @@ pub enum PressureInterpolation {
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
     LinearWeighted,
-    RhieChow2,
+    RhieChow,
 }
 
 pub struct LinearSystem {
@@ -86,6 +86,11 @@ pub fn solve_steady(
     let mut p_prime = initialize_DVector!(cell_count);
     // initialize_pressure_field(mesh, &mut p, 1000);
     let a_di = build_momentum_diffusion_matrix(mesh, diffusion_scheme, mu);
+    let mut a = a_di.clone(); // TODO: Initialize to identity or something
+    let mut b_u = initialize_DVector!(cell_count);
+    let mut b_v = initialize_DVector!(cell_count);
+    let mut b_w = initialize_DVector!(cell_count);
+
     if log_enabled!(log::Level::Debug) {
         println!("\nMomentum diffusion:");
         print_matrix(&a_di);
@@ -93,7 +98,11 @@ pub fn solve_steady(
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                let (mut a, b_u, b_v, b_w) = build_momentum_matrices(
+                build_momentum_matrices(
+                    &mut a,
+                    &mut b_u,
+                    &mut b_v,
+                    &mut b_w,
                     mesh,
                     &u,
                     &v,
@@ -364,7 +373,7 @@ fn get_face_flux(
                 VelocityInterpolation::LinearWeighted => {
                     outward_face_normal.dot(&(v0 + (v1 - v0) * x0 / (x0 + x1)))
                 }
-                VelocityInterpolation::RhieChow2 => {
+                VelocityInterpolation::RhieChow => {
                     // let a0 = momentum_matrices.get_entry(c0, c0).unwrap().into_value();
                     // let a1 = momentum_matrices.get_entry(c1, c1).unwrap().into_value();
                     // let p_grad_1 = calculate_scalar_gradient(&mesh, &p, cell_index, gradient_scheme);
@@ -460,7 +469,8 @@ pub fn iterative_solve(
                 // It seems like there must be a way to avoid cloning solution_vector, even if that
                 // turns this into Gauss-Seidel
                 let prev_guess = solution_vector.clone();
-                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess) + prev_guess * (1. - relaxation_factor);
+                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess)
+                    + prev_guess * (1. - relaxation_factor);
             }
         }
         SolutionMethod::GaussSeidel => {
@@ -591,7 +601,10 @@ fn build_momentum_diffusion_matrix(
 }
 
 fn build_momentum_matrices(
-    // a: &mut CsrMatrix<Float>,
+    a: &mut CsrMatrix<Float>,
+    b_u: &mut DVector<Float>,
+    b_v: &mut DVector<Float>,
+    b_w: &mut DVector<Float>,
     mesh: &Mesh,
     u: &DVector<Float>,
     v: &DVector<Float>,
@@ -602,17 +615,12 @@ fn build_momentum_matrices(
     velocity_interpolation_scheme: VelocityInterpolation,
     gradient_scheme: GradientReconstructionMethods,
     rho: Float,
-) -> (
-    CsrMatrix<Float>,
-    DVector<Float>,
-    DVector<Float>,
-    DVector<Float>,
 ) {
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
-    let mut u_source = initialize_DVector!(cell_count);
-    let mut v_source = initialize_DVector!(cell_count);
-    let mut w_source = initialize_DVector!(cell_count);
+    // let mut b_u = initialize_DVector!(cell_count);
+    // let mut b_v = initialize_DVector!(cell_count);
+    // let mut b_v = initialize_DVector!(cell_count);
 
     // Iterate over all cells in the mesh
     for (cell_index, cell) in &mesh.cells {
@@ -710,15 +718,14 @@ fn build_momentum_matrices(
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
-        u_source[*cell_index] = source_total.x;
-        v_source[*cell_index] = source_total.y;
-        w_source[*cell_index] = source_total.z;
+        b_u[*cell_index] = source_total.x;
+        b_v[*cell_index] = source_total.y;
+        b_v[*cell_index] = source_total.z;
 
         a.push(*cell_index, *cell_index, a_p);
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
-    (CsrMatrix::from(&a), u_source, v_source, w_source)
 }
 
 fn build_pressure_correction_matrices(
