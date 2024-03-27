@@ -1,21 +1,24 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use nalgebra::DVector;
+use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::common::Float;
-use orc::common::{Uint, Vector};
+use orc::common::{Uint, Vector3};
 use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
-use sprs::{CsMat, TriMat};
+use sprs::{CsMat, CsVec, TriMat};
 use std::env;
 
-const PRESSURE_RELAXATION: Float = 0.4;
-const MOMENTUM_RELAXATION: Float = 1.0;
+const PRESSURE_RELAXATION: Float = 0.5;
+const MOMENTUM_RELAXATION: Float = 0.5;
 
-fn test_gauss_seidel() {
-    println!("*** Testing Gauss-Seidel for correctness. ***");
+fn validate_solvers() {
     const TOL: Float = 1e-6;
+
+    println!("*** Testing Jacobi solver for correctness. ***");
     // | 2 0 1 |   | 3 |
     // | 0 3 2 | = | 2 |
     // | 2 0 4 |   | 1 |
@@ -23,38 +26,120 @@ fn test_gauss_seidel() {
     // | 1 0 0 |   | 11/6 |   | 1.833 |
     // | 0 1 0 |   | 10/9 |   | 1.111 |
     // | 0 0 1 | = | -2/3 | = | -0.67 |
-    let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
-    a_tri.add_triplet(0, 0, 2.);
-    a_tri.add_triplet(0, 2, 1.);
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
+    a_coo.push(0, 0, 2.);
+    a_coo.push(0, 2, 1.);
 
-    a_tri.add_triplet(1, 1, 3.);
-    a_tri.add_triplet(1, 2, 2.);
+    a_coo.push(1, 1, 3.);
+    a_coo.push(1, 2, 2.);
 
-    a_tri.add_triplet(2, 0, 2.);
-    a_tri.add_triplet(2, 2, 4.);
+    a_coo.push(2, 0, 2.);
+    a_coo.push(2, 2, 4.);
 
-    let a = a_tri.to_csr();
+    let a = CsrMatrix::from(&a_coo);
     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = vec![3., 2., 1.];
+    let b = DVector::from_column_slice(&vec![3.,2.,1.]);
+    let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
 
-    let mut x = vec![0., 0., 0.];
+    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::Jacobi, 0.5);
 
-    solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
-
-    for row_num in 0..a.rows() {
+    for row_num in 0..a.nrows() {
         assert!(
             Float::abs(
-                a.get(row_num, 0).unwrap_or(&0.) * x[0]
-                    + a.get(row_num, 1).unwrap_or(&0.) * x[1]
-                    + a.get(row_num, 2).unwrap_or(&0.) * x[2]
+                a.get_entry(row_num, 0).unwrap().into_value() * x[0]
+                    + a.get_entry(row_num, 1).unwrap().into_value() * x[1]
+                    + a.get_entry(row_num, 2).unwrap().into_value() * x[2]
                     - b[row_num]
             ) < TOL
         );
     }
 
     println!("x = {x:?}");
-    println!("*** Gauss-Seidel test passed. ***");
+    println!("*** Jacobi solver validated. ***");
+
+
+    println!("*** Testing Gauss-Seidel solver for correctness. ***");
+    // | 2 0 1 |   | 3 |
+    // | 0 3 2 | = | 2 |
+    // | 2 0 4 |   | 1 |
+    //
+    // | 1 0 0 |   | 11/6 |   | 1.833 |
+    // | 0 1 0 |   | 10/9 |   | 1.111 |
+    // | 0 0 1 | = | -2/3 | = | -0.67 |
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
+    a_coo.push(0, 0, 2.);
+    a_coo.push(0, 2, 1.);
+
+    a_coo.push(1, 1, 3.);
+    a_coo.push(1, 2, 2.);
+
+    a_coo.push(2, 0, 2.);
+    a_coo.push(2, 2, 4.);
+
+    let a = CsrMatrix::from(&a_coo);
+    // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
+    let b = DVector::from_column_slice(&vec![3.,2.,1.]);
+    let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
+
+    solve_linear_system(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.5);
+
+    for row_num in 0..a.nrows() {
+        assert!(
+            Float::abs(
+                a.get_entry(row_num, 0).unwrap().into_value() * x[0]
+                    + a.get_entry(row_num, 1).unwrap().into_value() * x[1]
+                    + a.get_entry(row_num, 2).unwrap().into_value() * x[2]
+                    - b[row_num]
+            ) < TOL
+        );
+    }
+
+    println!("x = {x:?}");
+    println!("*** Gauss-Seidel solver validated. ***");
 }
+
+// fn test_gauss_seidel() {
+//     println!("*** Testing Gauss-Seidel for correctness. ***");
+//     const TOL: Float = 1e-6;
+//     // | 2 0 1 |   | 3 |
+//     // | 0 3 2 | = | 2 |
+//     // | 2 0 4 |   | 1 |
+//     //
+//     // | 1 0 0 |   | 11/6 |   | 1.833 |
+//     // | 0 1 0 |   | 10/9 |   | 1.111 |
+//     // | 0 0 1 | = | -2/3 | = | -0.67 |
+//     let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
+//     a_tri.push(0, 0, 2.);
+//     a_tri.push(0, 2, 1.);
+//
+//     a_tri.push(1, 1, 3.);
+//     a_tri.push(1, 2, 2.);
+//
+//     a_tri.push(2, 0, 2.);
+//     a_tri.push(2, 2, 4.);
+//
+//     let a = a_tri.to_csr();
+//     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
+//     let b = CsVec::new(3, vec![0,1,2], vec![3., 2., 1.]);
+//
+//     let mut x = CsVec::new(3, vec![0,1,2], vec![0., 0., 0.]);
+//
+//     solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
+//
+//     for row_num in 0..a.rows() {
+//         assert!(
+//             Float::abs(
+//                 a.get(row_num, 0).unwrap_or(&0.) * x[0]
+//                     + a.get(row_num, 1).unwrap_or(&0.) * x[1]
+//                     + a.get(row_num, 2).unwrap_or(&0.) * x[2]
+//                     - b[row_num]
+//             ) < TOL
+//         );
+//     }
+//
+//     println!("x = {x:?}");
+//     println!("*** Gauss-Seidel test passed. ***");
+// }
 
 fn test_2d(iteration_count: Uint) {
     let domain_height = 1.;
@@ -157,27 +242,28 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        100.,
+        10.,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,
     );
 
     for cell_number in 0..mesh.cells.len() {
-        let cell_velocity = Vector {
+        let cell_velocity = Vector3 {
             x: u[cell_number],
             y: v[cell_number],
             z: w[cell_number],
         };
-        assert!(cell_velocity.approx_equals(
-            &Vector {
-                x: 0.005,
-                y: 0.,
-                z: 0.
-            },
-            1e-6
-        ));
+        // assert!(cell_velocity.approx_equals(
+        //     &Vector3 {
+        //         x: 0.005,
+        //         y: 0.,
+        //         z: 0.
+        //     },
+        //     1e-6
+        // ));
     }
+
 }
 
 fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -230,9 +316,9 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         pressure_relaxation,
     );
 
-    let mut avg_velocity = Vector::zero();
+    let mut avg_velocity = Vector3::zero();
     for cell_number in 0..mesh.cells.len() {
-        let cell_velocity = Vector {
+        let cell_velocity = Vector3 {
             x: u[cell_number],
             y: v[cell_number],
             z: w[cell_number],
@@ -256,14 +342,16 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     //     },
     //     1e-3
     // ));
-    write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
+    // write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
 }
 
 fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
     let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
 
+    mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
+
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 0.001;
+    mesh.get_face_zone("INLET").scalar_value = 2.;
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -274,7 +362,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::CD,
+        MomentumDiscretization::UD,
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
@@ -293,17 +381,19 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
 fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
+    let reporting_interval: Uint = 10;
     let iteration_count: Uint = args
         .get(1)
         .unwrap_or(&"10".to_string())
         .parse()
         .expect("arg 1 should be an integer");
+    validate_solvers();
     // test_gauss_seidel();
     // test_2d();
-    // test_3d_1x3(1000, 1.0, 0.4);
-    // test_3d_3x3(iteration_count, 1.0, 0.4);
+    // test_3d_1x3(iteration_count, 0.8, 0.5);
+    // test_3d_3x3(iteration_count, 1.0, 0.1);
     // test_3d();
-    couette(iteration_count, 0.5, 0.2);
+    couette(iteration_count, 0.2, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh

@@ -2,6 +2,8 @@ use crate::common::*;
 use crate::mesh::*;
 use itertools::Itertools;
 use log::{debug, info};
+use nalgebra::DVector;
+use nalgebra_sparse::CsrMatrix;
 use regex::Regex;
 use sprs::CsMat;
 use std::collections::HashMap;
@@ -157,7 +159,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             nodes.insert(
                                 node_number - 1,
                                 Node {
-                                    position: Vector { x, y, z },
+                                    position: Vector3 { x, y, z },
                                     ..Node::default()
                                 },
                             );
@@ -209,7 +211,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             .expect("valid BC type"),
                         name: zone_name.clone(),
                         scalar_value: 0.,
-                        vector_value: Vector {
+                        vector_value: Vector3 {
                             x: 0.,
                             y: 0.,
                             z: 0.,
@@ -308,13 +310,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             2 => {
                 let tangent = face_nodes[1].position - face_nodes[0].position;
                 face.normal = if tangent.x == 0. {
-                    Vector {
+                    Vector3 {
                         x: 1.,
                         y: -tangent.x / tangent.y,
                         z: 0.,
                     }
                 } else {
-                    Vector {
+                    Vector3 {
                         x: -tangent.y / tangent.x,
                         y: 1.,
                         z: 0.,
@@ -341,7 +343,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         face.centroid = face
             .node_indices
             .iter()
-            .fold(Vector::zero(), |acc, n| acc + nodes[n].position)
+            .fold(Vector3::zero(), |acc, n| acc + nodes[n].position)
             / (face.node_indices.len() as Float);
         face.area = match face_nodes.len() {
             0 | 1 => panic!("faces must have 2+ nodes"),
@@ -361,7 +363,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 // translate to a 2D coordinate system to allow this
                 // let axis_1 = (face_nodes[1].position - face_nodes[0].position).unit();
                 // let axis_2 = axis_1.cross(&face.normal).unit();
-                // let translate = |x: &Vector| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
+                // let translate = |x: &Vector3| -> (Float, Float) { (x.dot(&axis_1), x.dot(&axis_2)) };
                 // let mut area: Float = 0.;
                 // let mut node_index = 0;
                 // while node_index < face_nodes.len() {
@@ -376,7 +378,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 // If polygon is convex (which I think is guaranteed), we can just decompose into
                 // triangles
                 let calculate_triangle_area =
-                    |vertex_1: &Vector, vertex_2: &Vector, vertex_3: &Vector| -> Float {
+                    |vertex_1: &Vector3, vertex_2: &Vector3, vertex_3: &Vector3| -> Float {
                         Float::abs(
                             (*vertex_2 - *vertex_1)
                                 .cross(&(*vertex_3 - *vertex_1))
@@ -448,7 +450,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     // TODO: Rewrite more concisely
     // Very ugly way to do this
-    let node_positions: Vec<Vector> = nodes.iter().map(|(_, n)| n.position).collect();
+    let node_positions: Vec<Vector3> = nodes.iter().map(|(_, n)| n.position).collect();
     let x_min = node_positions
         .iter()
         .fold(Float::INFINITY, |acc, &n| acc.min(n.x));
@@ -510,10 +512,10 @@ pub fn write_mesh() {}
 
 pub fn write_data(
     mesh: &Mesh,
-    u: &Vec<Float>,
-    v: &Vec<Float>,
-    w: &Vec<Float>,
-    p: &Vec<Float>,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
     output_file_name: String,
 ) {
     let mut file = File::create(output_file_name).unwrap();
@@ -528,11 +530,38 @@ pub fn write_data(
 
 pub fn write_settings() {}
 
-pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
-    for i in 0..a.rows() {
+pub fn print_matrix(a: &CsrMatrix<Float>) {
+    for i in 0..a.nrows() {
         print!("{}: ", i + 1);
-        for j in 0..a.rows() {
-            let coeff = a.get(i, j).unwrap_or(&0.);
+        for j in 0..a.ncols() {
+            let coeff = a.get_entry(i, j).unwrap().into_value();
+            let formatted_number = format!("{coeff:.2e}");
+            print!("{: >9}, ", formatted_number);
+        }
+        println!("");
+    }
+}
+
+pub fn dvector_to_str(a: &DVector<Float>) -> String {
+    let mut output = String::from("[");
+    for i in 0..a.nrows() {
+        let coeff = a[i];
+        let formatted_number = format!("{coeff:.2e}");
+        output += &format!(
+            "{: >9.2e}{}",
+            coeff,
+            if i < a.nrows() - 1 { ", " } else { "" }
+        );
+    }
+    output += "]";
+    output
+}
+
+pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
+    for i in 0..b.len() {
+        print!("{}: ", i + 1);
+        for j in 0..b.len() {
+            let coeff = a.get_entry(i, j).unwrap().into_value();
             let formatted_number = format!("{coeff:.2e}");
             print!("{: >9}, ", formatted_number);
         }
@@ -540,12 +569,12 @@ pub fn print_linear_system(a: &CsMat<Float>, b: &Vec<Float>) {
     }
 }
 
-pub fn print_vec_scientific(v: &Vec<Float>) {
+pub fn print_vec_scientific(v: &DVector<Float>) {
     // if v.len() == 0 {
     //     return
     // }
     print!("[");
-    for i in 0..v.len() - 1 {
+    for i in 0..v.nrows() - 1 {
         print!("{:.2e}, ", v[i]);
     }
     println!("{:.2e}]", v[v.len() - 1]);
