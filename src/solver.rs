@@ -1,4 +1,4 @@
-use crate::io::print_linear_system;
+use crate::io::{dvector_to_str, print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::{common::*, io::print_vec_scientific};
 use itertools::izip;
@@ -80,7 +80,7 @@ pub fn solve_steady(
     let mut w = initialize_DVector!(cell_count);
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
-    initialize_pressure_field(mesh, &mut p);
+    // initialize_pressure_field(mesh, &mut p, 1000);
     let (a_di, boundary_face_diffusion_coeffs) = build_momentum_diffusion_matrix(
         mesh,
         &u,
@@ -93,6 +93,10 @@ pub fn solve_steady(
         rho,
         mu,
     );
+    if log_enabled!(log::Level::Debug) {
+        println!("\nMomentum diffusion:");
+        print_matrix(&a_di);
+    }
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
@@ -111,7 +115,7 @@ pub fn solve_steady(
                     );
                 a = &a + &a_di;
                 if log_enabled!(log::Level::Debug) {
-                    println!("Momentum:");
+                    println!("\nMomentum:");
                     print_linear_system(&a, &b_u);
                 }
 
@@ -215,10 +219,10 @@ pub fn solve_steady(
                     print_vec_scientific(&v);
                     print!("w:  ");
                     print_vec_scientific(&w);
-                    print!("p': ");
-                    print_vec_scientific(&p_prime);
                     print!("p:  ");
                     print_vec_scientific(&p);
+                    print!("p': ");
+                    print_vec_scientific(&p_prime);
                 }
                 apply_pressure_correction(
                     mesh,
@@ -245,13 +249,13 @@ pub fn solve_steady(
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>) {
+fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
     // - Inlet: d/dn (psi) = V
     // - Outlet: psi = 0
-    for _ in 0..100 {
+    for _ in 0..iteration_count {
         for cell_index in 0..mesh.cells.len() {
             let mut p_i = 0.;
             let cell = &mesh.cells[&cell_index];
@@ -385,7 +389,11 @@ pub fn solve_linear_system(
             let a_new = a - a.diagonal_as_csr();
             for iter_num in 0..iteration_count {
                 if log_enabled!(log::Level::Trace) {
-                    println!("Jacobi iteration {iter_num} = {solution_vector:?}");
+                    println!(
+                        "[{:?}] Jacobi iteration {iter_num} = {}",
+                        std::thread::current().id(),
+                        dvector_to_str(&solution_vector)
+                    );
                 }
                 let prev_guess = solution_vector.clone();
                 *solution_vector = relaxation_factor * (b - &a_new * &prev_guess);
@@ -461,7 +469,7 @@ fn build_momentum_diffusion_matrix(
             let face_bc = &mesh.face_zones[&face.zone];
             let (d_i, neighbor_cell_index) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
-                    let d_i = mu * face.area * (face.centroid - cell.centroid).norm();
+                    let d_i = mu * face.area / (face.centroid - cell.centroid).norm();
                     (d_i, usize::MAX)
                 }
                 FaceConditionTypes::PressureInlet
@@ -474,9 +482,10 @@ fn build_momentum_diffusion_matrix(
                     )
                 }
                 FaceConditionTypes::VelocityInlet => {
+                    panic!("untested");
                     // Diffusion coefficient
                     // TODO: Add source term contribution to diffusion since there's no cell on the other side
-                    let d_i: Float = mu * face.area * (face.centroid - cell.centroid).norm();
+                    let d_i: Float = mu * face.area / (face.centroid - cell.centroid).norm();
                     (d_i, usize::MAX)
                 }
                 FaceConditionTypes::Interior => {
@@ -617,12 +626,21 @@ fn build_momentum_matrices(
             } else {
                 face.cell_indices[0]
             };
+
             if log_enabled!(log::Level::Trace) {
                 println!(
-                    "cell {: >3}, face {: >3}: F_i = {: >9}",
-                    cell_index, face_index, f_i
+                    "cell {: >3}, face {: >3}: F_i = {: >9} {}",
+                    cell_index,
+                    face_index,
+                    f_i,
+                    if neighbor_cell_index == usize::MAX {
+                        "(boundary)"
+                    } else {
+                        ""
+                    }
                 );
             }
+
             let a_nb: Float = match momentum_scheme {
                 MomentumDiscretization::UD => {
                     panic!("untested");
@@ -699,28 +717,34 @@ fn build_pressure_correction_matrices(
             // The net mass flow rate through this face into this cell
             b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
 
+            let a_ii = momentum_matrices
+                .get_entry(*cell_index, *cell_index)
+                .unwrap()
+                .into_value();
+
             if face.cell_indices.len() > 1 {
-                let neighbor_cell_index: usize = if face.cell_indices[0] != *cell_index {
+                let neighbor_cell_index = if face.cell_indices[0] != *cell_index {
                     face.cell_indices[0]
                 } else {
                     face.cell_indices[1]
                 };
-                // NOTE: I'm not confident on why this is negative, but it works.
-                let a_nb = -rho * Float::powi(face.area, 2)
-                    / momentum_matrices
-                        .get_entry(*cell_index, neighbor_cell_index)
-                        .unwrap()
-                        .into_value();
-                a.push(*cell_index, neighbor_cell_index, -a_nb);
-                a_p += a_nb;
-            } else {
-                let boundary_face_contribution = boundary_face_coeffs
-                    .get_entry(*face_index, 0)
+                // NOTE: It would be more rigorous to recalculate the advective coefficients,
+                // but I think this should be sufficient for now.
+                let a_ij = momentum_matrices
+                    .get_entry(*cell_index, neighbor_cell_index)
                     .unwrap()
                     .into_value();
-                if boundary_face_contribution != 0. {
-                    a_p += -rho * Float::powi(face.area, 2) / boundary_face_contribution;
+
+                let a_interpolated = (a_ij + a_ii) / 2.;
+
+                if a_interpolated != 0. {
+                    let a_nb = rho * Float::powi(face.area, 2) / a_interpolated;
+                    a.push(*cell_index, neighbor_cell_index, -a_nb);
+                    a_p += a_nb;
                 }
+            } else {
+                let a_nb = rho * Float::powi(face.area, 2) / a_ii;
+                a_p += a_nb/2.; // NOTE: I'm not sure if dividing by two is correct here?
             }
         }
         a.push(*cell_index, *cell_index, a_p);

@@ -149,6 +149,7 @@ impl Default for Cell {
 }
 
 // #[derive(Copy, Clone)]
+// TODO: Consider renaming Node to Vertex for consistency with typical nomenclature
 pub struct Node {
     pub position: Vector3,
 }

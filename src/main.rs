@@ -242,7 +242,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         PressureInterpolation::Linear,
         VelocityInterpolation::Linear,
         1000.,
-        100.,
+        10.,
         iteration_count,
         momentum_relaxation,
         pressure_relaxation,
@@ -389,10 +389,10 @@ fn main() {
     validate_solvers();
     // test_gauss_seidel();
     // test_2d();
-    // test_3d_1x3(iteration_count, 0.5, 0.2);
+    test_3d_1x3(iteration_count, 0.8, 0.5);
     // test_3d_3x3(iteration_count, 1.0, 0.1);
     // test_3d();
-    couette(iteration_count, 0.2, 0.2);
+    // couette(iteration_count, 0.2, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh

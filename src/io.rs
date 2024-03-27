@@ -530,6 +530,33 @@ pub fn write_data(
 
 pub fn write_settings() {}
 
+pub fn print_matrix(a: &CsrMatrix<Float>) {
+    for i in 0..a.nrows() {
+        print!("{}: ", i + 1);
+        for j in 0..a.ncols() {
+            let coeff = a.get_entry(i, j).unwrap().into_value();
+            let formatted_number = format!("{coeff:.2e}");
+            print!("{: >9}, ", formatted_number);
+        }
+        println!("");
+    }
+}
+
+pub fn dvector_to_str(a: &DVector<Float>) -> String {
+    let mut output = String::from("[");
+    for i in 0..a.nrows() {
+        let coeff = a[i];
+        let formatted_number = format!("{coeff:.2e}");
+        output += &format!(
+            "{: >9.2e}{}",
+            coeff,
+            if i < a.nrows() - 1 { ", " } else { "" }
+        );
+    }
+    output += "]";
+    output
+}
+
 pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
     for i in 0..b.len() {
         print!("{}: ", i + 1);
