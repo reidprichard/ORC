@@ -87,7 +87,6 @@ pub fn solve_steady(
         &v,
         &w,
         &p,
-        momentum_scheme,
         pressure_interpolation_scheme,
         velocity_interpolation_scheme,
         rho,
@@ -439,7 +438,6 @@ fn build_momentum_diffusion_matrix(
     v: &DVector<Float>,
     w: &DVector<Float>,
     p: &DVector<Float>,
-    momentum_scheme: MomentumDiscretization,
     pressure_interpolation_scheme: PressureInterpolation,
     velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
@@ -596,6 +594,7 @@ fn build_momentum_matrices(
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
             let outward_face_normal = get_outward_face_normal(&face, *cell_index);
+            // Mass flow rate out of this cell through this face
             let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
             let face_pressure =
                 calculate_face_pressure(mesh, &p, *face_index, pressure_interpolation_scheme);
@@ -627,10 +626,9 @@ fn build_momentum_matrices(
 
             let a_nb: Float = match momentum_scheme {
                 MomentumDiscretization::UD => {
-                    panic!("untested");
                     // Neighbor only affects this cell if flux is into this
-                    // cell => f_i < 0. Therefore, if f_i < 0, we set it to 0.
-                    Float::max(f_i, 0.)
+                    // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
+                    Float::min(f_i, 0.)
                 }
                 MomentumDiscretization::CD => f_i / 2.,
                 _ => panic!("unsupported momentum scheme"),
