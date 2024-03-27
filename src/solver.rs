@@ -3,7 +3,7 @@ use crate::mesh::*;
 use crate::{common::*, io::print_vec_scientific};
 use log::log_enabled;
 use nalgebra::DVector;
-use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
+use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 use rayon::prelude::*;
 use std::thread;
 
@@ -84,7 +84,10 @@ pub fn solve_steady(
     let mut w = initialize_DVector!(cell_count);
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
+
+    // TODO: Re-enable before release
     // initialize_pressure_field(mesh, &mut p, 1000);
+
     let a_di = build_momentum_diffusion_matrix(mesh, diffusion_scheme, mu);
     let mut a = a_di.clone(); // TODO: Initialize to identity or something
     let mut b_u = initialize_DVector!(cell_count);
@@ -617,7 +620,7 @@ fn build_momentum_matrices(
     rho: Float,
 ) {
     let cell_count = mesh.cells.len();
-    let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
+    // let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
     // let mut b_u = initialize_DVector!(cell_count);
     // let mut b_v = initialize_DVector!(cell_count);
     // let mut b_v = initialize_DVector!(cell_count);
@@ -713,8 +716,10 @@ fn build_momentum_matrices(
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
-                // a.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() = 1.;
-                a.push(*cell_index, neighbor_cell_index, a_nb);
+                match a.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
+                    NonZero(v) => *v = a_nb,
+                    Zero => panic!(),
+                }
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
@@ -722,7 +727,10 @@ fn build_momentum_matrices(
         b_v[*cell_index] = source_total.y;
         b_v[*cell_index] = source_total.z;
 
-        a.push(*cell_index, *cell_index, a_p);
+        match a.get_entry_mut(*cell_index, *cell_index).unwrap() {
+            NonZero(v) => *v = a_p,
+            Zero => panic!(),
+        }
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
