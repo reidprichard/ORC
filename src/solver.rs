@@ -436,7 +436,12 @@ pub fn iterative_solve(
     match method {
         SolutionMethod::Jacobi => {
             let mut a_new = a.clone();
-            let b_new: DVector<Float> = DVector::from_iterator(b.nrows(), b.iter().enumerate().map(|(i,v)| *v / a.get_entry(i, i).unwrap().into_value()));
+            let b_new: DVector<Float> = DVector::from_iterator(
+                b.nrows(),
+                b.iter()
+                    .enumerate()
+                    .map(|(i, v)| *v / a.get_entry(i, i).unwrap().into_value()),
+            );
             a_new.triplet_iter_mut().for_each(|(i, j, v)| {
                 *v = if i == j {
                     0.
