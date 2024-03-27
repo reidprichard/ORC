@@ -21,14 +21,16 @@ Technical details:
   - Velocity inlet
   - Symmetry (not added yet)
 
-**Pre-alpha** with basic functionality still in the works. ORC is currently capable of loading a mesh, building momentum and pressure correction matrices, and iterating, but it is HIGHLY unstable. I'm unsure whether this is due to a bug or the inherent instability of the numerical methods used.
+**Pre-alpha** with basic functionality still in the works. ORC is currently capable of loading a mesh, building momentum and pressure correction matrices, and producing a semi-sane solution, but it is definitely not correct and somewhat unstable. I'm unsure whether the incorrectness is due to a bug or whether it's a result of the basic methods that are implemented.
 
 Roadmap:
 - [X] Read TGRID (ANSYS Fluent) mesh into memory
 - [X] Build solution matrices
 - [ ] Initialize flow (30% complete)
 - [X] Iterate steady
-- [ ] Add under-relaxation
+- [X] Add under-relaxation
+- [ ] Implement Rhie-Chow interpolation
+- [ ] Add cross diffusion correction
 - [ ] Read/write solution data (20% complete)
 - [ ] Read/write settings?
 - [ ] CLI
