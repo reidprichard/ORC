@@ -121,11 +121,13 @@ impl fmt::Display for FaceConditionTypes {
 // (5, "polygonal (N nodes)"),
 // }
 
+#[derive(Copy, Clone)]
 pub enum GreenGaussVariants {
     CellBased,
     NodeBased,
 }
 
+#[derive(Copy, Clone)]
 pub enum GradientReconstructionMethods {
     GreenGauss(GreenGaussVariants),
     LeastSquares,

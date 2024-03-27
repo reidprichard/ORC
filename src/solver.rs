@@ -33,9 +33,17 @@ pub enum DiffusionScheme {
 }
 
 #[derive(Copy, Clone)]
-pub enum InterpolationScheme {
+pub enum PressureInterpolation {
     Linear,
-    RhieChow,
+    LinearWeighted,
+    Standard,
+    SecondOrder,
+}
+
+#[derive(Copy, Clone)]
+pub enum VelocityInterpolation {
+    Linear,
+    RhieChow2,
 }
 
 pub struct LinearSystem {
@@ -49,13 +57,15 @@ macro_rules! initialize_DVector {
     };
 }
 
+    // TODO: Make struct to encapsulate all settings so I don't have a million args
 pub fn solve_steady(
     mesh: &mut Mesh,
     pressure_velocity_coupling: PressureVelocityCoupling,
     momentum_scheme: MomentumDiscretization,
     diffusion_scheme: DiffusionScheme,
-    pressure_interpolation_scheme: InterpolationScheme,
-    velocity_interpolation_scheme: InterpolationScheme,
+    pressure_interpolation_scheme: PressureInterpolation,
+    velocity_interpolation_scheme: VelocityInterpolation,
+    gradient_scheme: GradientReconstructionMethods,
     rho: Float,
     mu: Float,
     iteration_count: Uint,
@@ -91,6 +101,7 @@ pub fn solve_steady(
                     momentum_scheme,
                     pressure_interpolation_scheme,
                     velocity_interpolation_scheme,
+                    gradient_scheme,
                     rho,
                 );
                 a = &a + &a_di;
@@ -280,26 +291,27 @@ fn calculate_scalar_gradient(
 ) -> Vector3 {
     let cell = &mesh.cells[&cell_index];
     match gradient_scheme {
-        GradientReconstructionMethods::GreenGauss(variant) => {
-            match variant {
-                GreenGaussVariants::CellBased => {
-                    cell.face_indices.iter().map(|f| {
-                        let mut neighbor_count = 0.;
-                        let face = &mesh.faces[f];
-                        let face_value: Float = face
-                            .cell_indices
-                            .iter()
-                            .map(|c| {
-                                neighbor_count += 1.;
-                                &scalar[*c]
-                            })
-                            .sum::<Float>() / neighbor_count;
-                        face_value * (face.centroid - cell.centroid)
-                    }).fold(Vector3::zero(), |acc, v| acc + v)
-                }
-                _ => panic!("unsupported Green-Gauss scheme"),
-            }
-        }
+        GradientReconstructionMethods::GreenGauss(variant) => match variant {
+            GreenGaussVariants::CellBased => cell
+                .face_indices
+                .iter()
+                .map(|f| {
+                    let mut neighbor_count = 0.;
+                    let face = &mesh.faces[f];
+                    let face_value: Float = face
+                        .cell_indices
+                        .iter()
+                        .map(|c| {
+                            neighbor_count += 1.;
+                            &scalar[*c]
+                        })
+                        .sum::<Float>()
+                        / neighbor_count;
+                    face_value * (face.centroid - cell.centroid)
+                })
+                .fold(Vector3::zero(), |acc, v| acc + v),
+            _ => panic!("unsupported Green-Gauss scheme"),
+        },
         _ => panic!("unsupported gradient scheme"),
     }
 }
@@ -310,7 +322,7 @@ fn get_face_velocity(
     v: &DVector<Float>,
     w: &DVector<Float>,
     face_index: usize,
-    interpolation_scheme: InterpolationScheme,
+    interpolation_scheme: VelocityInterpolation,
 ) -> Vector3 {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -333,7 +345,7 @@ fn get_face_velocity(
             z: w[face.cell_indices[0]],
         },
         FaceConditionTypes::Interior => match interpolation_scheme {
-            InterpolationScheme::Linear => {
+            VelocityInterpolation::Linear => {
                 let c0 = face.cell_indices[0];
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
@@ -344,7 +356,7 @@ fn get_face_velocity(
                     z: &w[c0] + (&w[c1] - &w[c0]) * x0 / (x0 + x1),
                 }
             }
-            InterpolationScheme::RhieChow => {
+            VelocityInterpolation::RhieChow2 => {
                 // see Versteeg & Malalasekara p340-341
                 panic!("unsupported");
             }
@@ -357,7 +369,8 @@ fn get_face_pressure(
     mesh: &Mesh,
     p: &DVector<Float>,
     face_index: usize,
-    interpolation_scheme: InterpolationScheme,
+    interpolation_scheme: PressureInterpolation,
+    gradient_scheme: GradientReconstructionMethods,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -371,16 +384,31 @@ fn get_face_pressure(
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
             face_zone.scalar_value
         }
-        FaceConditionTypes::Interior => match interpolation_scheme {
-            InterpolationScheme::Linear => {
-                let c0 = face.cell_indices[0];
-                let c1 = face.cell_indices[1];
-                let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-                let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                &p[c0] + (&p[c1] - &p[c0]) * x0 / (x0 + x1)
+        FaceConditionTypes::Interior => {
+            let c0 = face.cell_indices[0];
+            let c1 = face.cell_indices[1];
+            match interpolation_scheme {
+                PressureInterpolation::Linear => (&p[c0] + &p[c1]) * 0.5,
+                PressureInterpolation::LinearWeighted => {
+                    let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
+                    let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
+                    &p[c0] + (&p[c1] - &p[c0]) * x0 / (x0 + x1)
+                }
+                PressureInterpolation::Standard => {
+                    // requires momentum matrix coeffs; seems expensive to have to pass that whole
+                    // matrix each time
+                    panic!("`standard` pressure interpolation unsupported");
+                }
+                PressureInterpolation::SecondOrder => {
+                    let c0_grad = calculate_scalar_gradient(&mesh, &p, c0, gradient_scheme);
+                    let c1_grad = calculate_scalar_gradient(&mesh, &p, c1, gradient_scheme);
+                    let r_c0 = face.centroid - mesh.cells[&c0].centroid;
+                    let r_c1 = face.centroid - mesh.cells[&c1].centroid;
+                    0.5 * ((&p[c0] + &p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
+                }
+                _ => panic!("unsupported pressure interpolation"),
             }
-            _ => panic!("unsupported pressure interpolation"),
-        },
+        }
         _ => panic!("unsupported face zone type"),
     }
 }
@@ -547,8 +575,9 @@ fn build_momentum_matrices(
     w: &DVector<Float>,
     p: &DVector<Float>,
     momentum_scheme: MomentumDiscretization,
-    pressure_interpolation_scheme: InterpolationScheme,
-    velocity_interpolation_scheme: InterpolationScheme,
+    pressure_interpolation_scheme: PressureInterpolation,
+    velocity_interpolation_scheme: VelocityInterpolation,
+    gradient_scheme: GradientReconstructionMethods,
     rho: Float,
 ) -> (
     CsrMatrix<Float>,
@@ -601,7 +630,7 @@ fn build_momentum_matrices(
             // Mass flow rate out of this cell through this face
             let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
             let face_pressure =
-                get_face_pressure(mesh, &p, *face_index, pressure_interpolation_scheme);
+                get_face_pressure(mesh, &p, *face_index, pressure_interpolation_scheme, gradient_scheme);
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
             } else if face.cell_indices[0] == *cell_index {
@@ -666,7 +695,7 @@ fn build_pressure_correction_matrices(
     v: &DVector<Float>,
     w: &DVector<Float>,
     momentum_matrices: &CsrMatrix<Float>,
-    velocity_interpolation_scheme: InterpolationScheme,
+    velocity_interpolation_scheme: VelocityInterpolation,
     rho: Float,
 ) -> LinearSystem {
     let cell_count = mesh.cells.len();
@@ -680,14 +709,8 @@ fn build_pressure_correction_matrices(
         let mut b_p: Float = 0.;
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
-            let face_velocity = get_face_velocity(
-                mesh,
-                &u,
-                &v,
-                &w,
-                *face_index,
-                velocity_interpolation_scheme,
-            );
+            let face_velocity =
+                get_face_velocity(mesh, &u, &v, &w, *face_index, velocity_interpolation_scheme);
             let inward_face_normal = get_inward_face_normal(&face, *cell_index);
             // The net mass flow rate through this face into this cell
             b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
