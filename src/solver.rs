@@ -42,7 +42,7 @@ pub enum PressureInterpolation {
 
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
-    Linear,
+    WeightedLinear,
     RhieChow2,
 }
 
@@ -57,7 +57,7 @@ macro_rules! initialize_DVector {
     };
 }
 
-    // TODO: Make struct to encapsulate all settings so I don't have a million args
+// TODO: Make struct to encapsulate all settings so I don't have a million args
 pub fn solve_steady(
     mesh: &mut Mesh,
     pressure_velocity_coupling: PressureVelocityCoupling,
@@ -316,50 +316,42 @@ fn calculate_scalar_gradient(
     }
 }
 
-fn get_face_velocity(
+fn get_face_flux(
     mesh: &Mesh,
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
     face_index: usize,
+    cell_index: usize,
     interpolation_scheme: VelocityInterpolation,
-) -> Vector3 {
+) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
+    let outward_face_normal = get_outward_face_normal(face, cell_index);
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
-        FaceConditionTypes::Wall => Vector3::zero(),
-        FaceConditionTypes::Symmetry => {
-            // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
-            let cell_velocity = Vector3 {
+        FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => 0.,
+        FaceConditionTypes::VelocityInlet => face_zone.vector_value.dot(&outward_face_normal),
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+            outward_face_normal.dot(&Vector3 {
                 x: u[face.cell_indices[0]],
                 y: v[face.cell_indices[0]],
                 z: w[face.cell_indices[0]],
-            };
-            cell_velocity - cell_velocity.dot(&face.normal)
+            })
         }
-        FaceConditionTypes::VelocityInlet => face_zone.vector_value,
-        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vector3 {
-            x: u[face.cell_indices[0]],
-            y: v[face.cell_indices[0]],
-            z: w[face.cell_indices[0]],
-        },
         FaceConditionTypes::Interior => match interpolation_scheme {
-            VelocityInterpolation::Linear => {
+            VelocityInterpolation::WeightedLinear => {
                 let c0 = face.cell_indices[0];
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                 let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                Vector3 {
+                outward_face_normal.dot(&Vector3 {
                     x: &u[c0] + (&u[c1] - &u[c0]) * x0 / (x0 + x1),
                     y: &v[c0] + (&v[c1] - &v[c0]) * x0 / (x0 + x1),
                     z: &w[c0] + (&w[c1] - &w[c0]) * x0 / (x0 + x1),
-                }
+                })
             }
-            VelocityInterpolation::RhieChow2 => {
-                // see Versteeg & Malalasekara p340-341
-                panic!("unsupported");
-            }
+            VelocityInterpolation::RhieChow2 => 0.,
         },
         _ => panic!("unsupported face zone type"),
     }
@@ -615,12 +607,13 @@ fn build_momentum_matrices(
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
-            let face_velocity = get_face_velocity(
+            let face_flux = get_face_flux(
                 &mesh,
                 &u,
                 &v,
                 &w,
                 *face_index,
+                *cell_index,
                 velocity_interpolation_scheme,
             );
             // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
@@ -628,9 +621,14 @@ fn build_momentum_matrices(
             // make it an area vector
             let outward_face_normal = get_outward_face_normal(&face, *cell_index);
             // Mass flow rate out of this cell through this face
-            let f_i = face_velocity.dot(&outward_face_normal) * face.area * rho;
-            let face_pressure =
-                get_face_pressure(mesh, &p, *face_index, pressure_interpolation_scheme, gradient_scheme);
+            let f_i = face_flux * face.area * rho;
+            let face_pressure = get_face_pressure(
+                mesh,
+                &p,
+                *face_index,
+                pressure_interpolation_scheme,
+                gradient_scheme,
+            );
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
             } else if face.cell_indices[0] == *cell_index {
@@ -709,11 +707,18 @@ fn build_pressure_correction_matrices(
         let mut b_p: Float = 0.;
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
-            let face_velocity =
-                get_face_velocity(mesh, &u, &v, &w, *face_index, velocity_interpolation_scheme);
+            let face_flux = get_face_flux(
+                mesh,
+                &u,
+                &v,
+                &w,
+                *face_index,
+                *cell_index,
+                velocity_interpolation_scheme,
+            );
             let inward_face_normal = get_inward_face_normal(&face, *cell_index);
             // The net mass flow rate through this face into this cell
-            b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
+            b_p += rho * -face_flux * face.area;
 
             let a_ii = momentum_matrices
                 .get_entry(*cell_index, *cell_index)
