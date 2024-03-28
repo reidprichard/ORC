@@ -42,7 +42,7 @@ pub enum PressureInterpolation {
 
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
-    WeightedLinear,
+    LinearWeighted,
     RhieChow2,
 }
 
@@ -340,7 +340,7 @@ fn get_face_flux(
             })
         }
         FaceConditionTypes::Interior => match interpolation_scheme {
-            VelocityInterpolation::WeightedLinear => {
+            VelocityInterpolation::LinearWeighted => {
                 let c0 = face.cell_indices[0];
                 let c1 = face.cell_indices[1];
                 let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
