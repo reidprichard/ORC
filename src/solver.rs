@@ -10,10 +10,41 @@ use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 // use rayon::prelude::*;
 use std::thread;
 
-const MATRIX_SOLVER_RELAXATION: Float = 0.1;
-const MATRIX_SOLVER_ITERS: Uint = 1000;
 const PARALLELIZE_U_V_W: bool = true;
-const SOLVE_METHOD: SolutionMethod = SolutionMethod::Jacobi;
+
+pub struct NumericalSettings {
+    pub pressure_velocity_coupling: PressureVelocityCoupling,
+    pub momentum: MomentumDiscretization,
+    pub diffusion: DiffusionScheme,
+    pub pressure_interpolation: PressureInterpolation,
+    pub velocity_interpolation: VelocityInterpolation,
+    pub gradient_reconstruction: GradientReconstructionMethods,
+    pub pressure_relaxation: Float,
+    pub momentum_relaxation: Float,
+    pub matrix_solver: SolutionMethod,
+    pub matrix_solver_iterations: Uint,
+    pub matrix_solver_relaxation: Float,
+}
+
+impl Default for NumericalSettings {
+    fn default() -> Self {
+        NumericalSettings {
+            pressure_velocity_coupling: PressureVelocityCoupling::SIMPLE,
+            momentum: MomentumDiscretization::CD,
+            diffusion: DiffusionScheme::CD,
+            pressure_interpolation: PressureInterpolation::LinearWeighted,
+            velocity_interpolation: VelocityInterpolation::LinearWeighted,
+            gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
+                GreenGaussVariants::CellBased,
+            ),
+            pressure_relaxation: 0.25,
+            momentum_relaxation: 0.5,
+            matrix_solver: SolutionMethod::Jacobi,
+            matrix_solver_iterations: 1000,
+            matrix_solver_relaxation: 0.2,
+        }
+    }
+}
 
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
@@ -32,6 +63,7 @@ pub enum MomentumDiscretization {
     CD,
 }
 
+#[derive(Copy, Clone)]
 pub enum DiffusionScheme {
     CD,
 }
@@ -50,6 +82,18 @@ pub enum VelocityInterpolation {
     RhieChow, // Rhie-Chow is expensive!
 }
 
+#[derive(Copy, Clone)]
+pub enum GreenGaussVariants {
+    CellBased,
+    NodeBased,
+}
+
+#[derive(Copy, Clone)]
+pub enum GradientReconstructionMethods {
+    GreenGauss(GreenGaussVariants),
+    LeastSquares,
+}
+
 pub struct LinearSystem {
     a: CsrMatrix<Float>,
     b: DVector<Float>,
@@ -64,17 +108,10 @@ macro_rules! initialize_DVector {
 // TODO: Make struct to encapsulate all settings so I don't have a million args
 pub fn solve_steady(
     mesh: &mut Mesh,
-    pressure_velocity_coupling: PressureVelocityCoupling,
-    momentum_scheme: MomentumDiscretization,
-    diffusion_scheme: DiffusionScheme,
-    pressure_interpolation_scheme: PressureInterpolation,
-    velocity_interpolation_scheme: VelocityInterpolation,
-    gradient_scheme: GradientReconstructionMethods,
+    numerical_settings: &NumericalSettings,
     rho: Float,
     mu: Float,
     iteration_count: Uint,
-    momentum_relaxation_factor: Float,
-    pressure_relaxation_factor: Float, // 0.4 seems to be the upper limit for stability
 ) -> (
     DVector<Float>,
     DVector<Float>,
@@ -90,18 +127,18 @@ pub fn solve_steady(
 
     initialize_pressure_field(mesh, &mut p, 1000);
 
-    let a_di = build_momentum_diffusion_matrix(&mesh, diffusion_scheme, mu);
+    let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
     // let mut a = initialize_momentum_matrix(&mesh);
     let mut b_u = initialize_DVector!(cell_count);
     let mut b_v = initialize_DVector!(cell_count);
     let mut b_w = initialize_DVector!(cell_count);
 
-    if log_enabled!(log::Level::Debug) {
+    if log_enabled!(log::Level::Debug) && a_di.ncols() < 256 {
         println!("\nMomentum diffusion:");
-        // print_matrix(&a_di);
+        print_matrix(&a_di);
     }
-    match pressure_velocity_coupling {
+    match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
                 build_momentum_matrices(
@@ -114,23 +151,12 @@ pub fn solve_steady(
                     &v,
                     &w,
                     &p,
-                    momentum_scheme,
-                    if iter_number > 1 {
-                        pressure_interpolation_scheme
-                    } else {
-                        PressureInterpolation::LinearWeighted
-                    },
-                    if iter_number > 1 {
-                        velocity_interpolation_scheme
-                    } else {
-                        VelocityInterpolation::LinearWeighted
-                    },
-                    gradient_scheme,
+                    numerical_settings,
                     rho,
                 );
                 // WARNING: CHANGE THIS!!!
-                // a = &a + &a_di
-                a = a_di.clone();
+                a = &a + &a_di;
+                // a = a_di.clone();
                 if log_enabled!(log::Level::Debug) {
                     println!("\nMomentum:");
                     print_linear_system(&a, &b_u);
@@ -143,9 +169,9 @@ pub fn solve_steady(
                                 &a,
                                 &b_u,
                                 &mut u,
-                                MATRIX_SOLVER_ITERS,
-                                SOLVE_METHOD,
-                                MATRIX_SOLVER_RELAXATION,
+                                numerical_settings.matrix_solver_iterations,
+                                numerical_settings.matrix_solver,
+                                numerical_settings.matrix_solver_relaxation,
                             );
                         });
                         s.spawn(|| {
@@ -153,9 +179,9 @@ pub fn solve_steady(
                                 &a,
                                 &b_v,
                                 &mut v,
-                                MATRIX_SOLVER_ITERS,
-                                SOLVE_METHOD,
-                                MATRIX_SOLVER_RELAXATION,
+                                numerical_settings.matrix_solver_iterations,
+                                numerical_settings.matrix_solver,
+                                numerical_settings.matrix_solver_relaxation,
                             );
                         });
                         s.spawn(|| {
@@ -163,9 +189,9 @@ pub fn solve_steady(
                                 &a,
                                 &b_w,
                                 &mut w,
-                                MATRIX_SOLVER_ITERS,
-                                SOLVE_METHOD,
-                                MATRIX_SOLVER_RELAXATION,
+                                numerical_settings.matrix_solver_iterations,
+                                numerical_settings.matrix_solver,
+                                numerical_settings.matrix_solver_relaxation,
                             );
                         });
                     });
@@ -174,25 +200,25 @@ pub fn solve_steady(
                         &a,
                         &b_u,
                         &mut u,
-                        MATRIX_SOLVER_ITERS,
-                        SOLVE_METHOD,
-                        MATRIX_SOLVER_RELAXATION,
+                        numerical_settings.matrix_solver_iterations,
+                        numerical_settings.matrix_solver,
+                        numerical_settings.matrix_solver_relaxation,
                     );
                     iterative_solve(
                         &a,
                         &b_v,
                         &mut v,
-                        MATRIX_SOLVER_ITERS,
-                        SOLVE_METHOD,
-                        MATRIX_SOLVER_RELAXATION,
+                        numerical_settings.matrix_solver_iterations,
+                        numerical_settings.matrix_solver,
+                        numerical_settings.matrix_solver_relaxation,
                     );
                     iterative_solve(
                         &a,
                         &b_w,
                         &mut w,
-                        MATRIX_SOLVER_ITERS,
-                        SOLVE_METHOD,
-                        MATRIX_SOLVER_RELAXATION,
+                        numerical_settings.matrix_solver_iterations,
+                        numerical_settings.matrix_solver,
+                        numerical_settings.matrix_solver_relaxation,
                     );
                 }
                 let pressure_correction_matrices = build_pressure_correction_matrices(
@@ -202,16 +228,15 @@ pub fn solve_steady(
                     &w,
                     &p,
                     &a,
-                    velocity_interpolation_scheme,
-                    gradient_scheme,
+                    numerical_settings,
                     rho,
                 );
                 if log_enabled!(log::Level::Debug) {
                     println!("\nPressure:");
-                    // print_linear_system(
-                    //     &pressure_correction_matrices.a,
-                    //     &pressure_correction_matrices.b,
-                    // );
+                    print_linear_system(
+                        &pressure_correction_matrices.a,
+                        &pressure_correction_matrices.b,
+                    );
                 }
 
                 // I think what's happening here is that, if Pe < 1 in all cells, a_nb will all
@@ -224,23 +249,23 @@ pub fn solve_steady(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    MATRIX_SOLVER_ITERS,
-                    SOLVE_METHOD,
-                    MATRIX_SOLVER_RELAXATION,
+                    numerical_settings.matrix_solver_iterations,
+                    numerical_settings.matrix_solver,
+                    numerical_settings.matrix_solver_relaxation,
                 );
 
-                // if log_enabled!(log::Level::Info) {
-                //     print!("u:  ");
-                //     print_vec_scientific(&u);
-                //     print!("v:  ");
-                //     print_vec_scientific(&v);
-                //     print!("w:  ");
-                //     print_vec_scientific(&w);
-                //     print!("p:  ");
-                //     print_vec_scientific(&p);
-                //     print!("p': ");
-                //     print_vec_scientific(&p_prime);
-                // }
+                if log_enabled!(log::Level::Info) {
+                    print!("u:  ");
+                    print_vec_scientific(&u);
+                    print!("v:  ");
+                    print_vec_scientific(&v);
+                    print!("w:  ");
+                    print_vec_scientific(&w);
+                    print!("p:  ");
+                    print_vec_scientific(&p);
+                    print!("p': ");
+                    print_vec_scientific(&p_prime);
+                }
                 apply_pressure_correction(
                     mesh,
                     &a,
@@ -249,8 +274,7 @@ pub fn solve_steady(
                     &mut v,
                     &mut w,
                     &mut p,
-                    pressure_relaxation_factor,
-                    momentum_relaxation_factor,
+                    &numerical_settings,
                 );
 
                 println!(
@@ -261,7 +285,8 @@ pub fn solve_steady(
                     w.iter().sum::<Float>() / (cell_count as Float),
                 );
             }
-        } // _ => panic!("unsupported pressure-velocity coupling"),
+        }
+        _ => panic!("unsupported pressure-velocity coupling"),
     }
     (u, v, w, p)
 }
@@ -644,10 +669,7 @@ fn build_momentum_matrices(
     v: &DVector<Float>,
     w: &DVector<Float>,
     p: &DVector<Float>,
-    momentum_scheme: MomentumDiscretization,
-    pressure_interpolation_scheme: PressureInterpolation,
-    velocity_interpolation_scheme: VelocityInterpolation,
-    gradient_scheme: GradientReconstructionMethods,
+    numerical_settings: &NumericalSettings,
     rho: Float,
 ) {
     // Iterate over all cells in the mesh
@@ -682,8 +704,8 @@ fn build_momentum_matrices(
                 &p,
                 *face_index,
                 *cell_index,
-                velocity_interpolation_scheme,
-                gradient_scheme,
+                numerical_settings.velocity_interpolation,
+                numerical_settings.gradient_reconstruction,
                 &a,
             );
             // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
@@ -696,8 +718,8 @@ fn build_momentum_matrices(
                 mesh,
                 &p,
                 *face_index,
-                pressure_interpolation_scheme,
-                gradient_scheme,
+                numerical_settings.pressure_interpolation,
+                numerical_settings.gradient_reconstruction,
             );
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
@@ -725,7 +747,7 @@ fn build_momentum_matrices(
                 );
             }
 
-            let a_nb: Float = match momentum_scheme {
+            let a_nb: Float = match numerical_settings.momentum {
                 MomentumDiscretization::UD => {
                     // Neighbor only affects this cell if flux is into this
                     // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
@@ -769,8 +791,7 @@ fn build_pressure_correction_matrices(
     w: &DVector<Float>,
     p: &DVector<Float>,
     momentum_matrices: &CsrMatrix<Float>,
-    velocity_interpolation_scheme: VelocityInterpolation,
-    gradient_scheme: GradientReconstructionMethods,
+    numerical_settings: &NumericalSettings,
     rho: Float,
 ) -> LinearSystem {
     let cell_count = mesh.cells.len();
@@ -792,8 +813,8 @@ fn build_pressure_correction_matrices(
                 &p,
                 *face_index,
                 *cell_index,
-                velocity_interpolation_scheme,
-                gradient_scheme,
+                numerical_settings.velocity_interpolation,
+                numerical_settings.gradient_reconstruction,
                 &momentum_matrices,
             );
             // The net mass flow rate through this face into this cell
@@ -841,12 +862,11 @@ fn apply_pressure_correction(
     v: &mut DVector<Float>,
     w: &mut DVector<Float>,
     p: &mut DVector<Float>,
-    pressure_relaxation_factor: Float,
-    momentum_relaxation_factor: Float,
+    numerical_settings: &NumericalSettings,
 ) {
     for (cell_index, cell) in &mut mesh.cells {
         p[*cell_index] = &p[*cell_index]
-            + pressure_relaxation_factor * (*p_prime.get(*cell_index).unwrap_or(&0.));
+            + numerical_settings.pressure_relaxation * (*p_prime.get(*cell_index).unwrap_or(&0.));
         let velocity_correction = cell
             .face_indices
             .iter()
@@ -881,10 +901,10 @@ fn apply_pressure_correction(
 .into_value()
             });
         u[*cell_index] =
-            &u[*cell_index] * (1. - momentum_relaxation_factor) + velocity_correction.x;
+            &u[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.x;
         v[*cell_index] =
-            &v[*cell_index] * (1. - momentum_relaxation_factor) + velocity_correction.y;
+            &v[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.y;
         w[*cell_index] =
-            &w[*cell_index] * (1. - momentum_relaxation_factor) + velocity_correction.z;
+            &w[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.z;
     }
 }

@@ -180,19 +180,14 @@ fn test_2d(iteration_count: Uint) {
         }
     }
 
+    let settings = NumericalSettings::default();
+
     solve_steady(
         &mut mesh,
-        PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::UD,
-        DiffusionScheme::CD,
-        PressureInterpolation::SecondOrder,
-        VelocityInterpolation::LinearWeighted,
-        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        &settings,
         1000.,
         0.001,
         iteration_count,
-        MOMENTUM_RELAXATION,
-        PRESSURE_RELAXATION,
     );
 }
 
@@ -235,20 +230,14 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         }
     }
 
+    let settings = NumericalSettings::default();
     // High viscosity needed to keep Peclet under control
     let (u, v, w, p) = solve_steady(
         &mut mesh,
-        PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::CD,
-        DiffusionScheme::CD,
-        PressureInterpolation::SecondOrder,
-        VelocityInterpolation::LinearWeighted,
-        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        &settings,
         1000.,
         10.,
         iteration_count,
-        momentum_relaxation,
-        pressure_relaxation,
     );
 
     for cell_number in 0..mesh.cells.len() {
@@ -306,19 +295,13 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         }
     }
 
+    let settings = NumericalSettings::default();
     let (u, v, w, p) = solve_steady(
         &mut mesh,
-        PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::CD,
-        DiffusionScheme::CD,
-        PressureInterpolation::SecondOrder,
-        VelocityInterpolation::LinearWeighted,
-        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        &settings,
         1000.,
         100.,
         iteration_count,
-        momentum_relaxation,
-        pressure_relaxation,
     );
 
     let mut avg_velocity = Vector3::zero();
@@ -351,8 +334,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 }
 
 fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
-    // let mut mesh = orc::io::read_mesh("./examples/coutte_flow_8x8x1.msh");
-    let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
+    let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
 
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
@@ -365,19 +347,17 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
+    let settings = NumericalSettings {
+        matrix_solver_iterations: 10,
+        ..NumericalSettings::default()
+    };
+
     let (u, v, w, p) = solve_steady(
         &mut mesh,
-        PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::CD,
-        DiffusionScheme::CD,
-        PressureInterpolation::LinearWeighted,
-        VelocityInterpolation::LinearWeighted,
-        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        &settings,
         1000.,
         100.,
         iteration_count,
-        momentum_relaxation,
-        pressure_relaxation,
     );
     // V = U_top / 2 - a^2 / 12mu * dp/dx
     // a = 0.001; dx = 0.01; mu = 0.001; dp = -0.01

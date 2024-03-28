@@ -122,18 +122,6 @@ impl fmt::Display for FaceConditionTypes {
 // (5, "polygonal (N nodes)"),
 // }
 
-#[derive(Copy, Clone)]
-pub enum GreenGaussVariants {
-    CellBased,
-    NodeBased,
-}
-
-#[derive(Copy, Clone)]
-pub enum GradientReconstructionMethods {
-    GreenGauss(GreenGaussVariants),
-    LeastSquares,
-}
-
 pub struct Cell {
     pub zone_number: Uint,
     pub face_indices: Vec<usize>,
@@ -156,14 +144,8 @@ pub struct Vertex {
     pub position: Vector3,
 }
 impl Vertex {
-    fn interpolate_velocity(&mut self) {}
-
-    fn interpolate_pressure(&mut self, method: GreenGaussVariants) {
-        match method {
-            _ => (),
-        }
-    }
 }
+
 impl Default for Vertex {
     fn default() -> Vertex {
         Vertex {
