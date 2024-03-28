@@ -465,18 +465,12 @@ pub fn iterative_solve(
     match method {
         SolutionMethod::Jacobi => {
             let mut a_prime = a.clone();
-            a_prime.triplet_iter_mut().for_each(|(i, j, v)| {
-                *v = if i == j {
-                    0.
-                } else {
-                    *v / a.get_entry(i, i).unwrap().into_value()
-                }
-            });
+            a_prime
+                .triplet_iter_mut()
+                .for_each(|(i, j, v)| *v = if i == j { 0. } else { *v / a.get(i, i) });
             let b_prime: DVector<Float> = DVector::from_iterator(
                 b.nrows(),
-                b.iter()
-                    .enumerate()
-                    .map(|(i, v)| *v / a.get_entry(i, i).unwrap().into_value()),
+                b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
             for iter_num in 0..iteration_count {
                 if log_enabled!(log::Level::Trace) {
@@ -505,15 +499,9 @@ pub fn iterative_solve(
                                 - solution_vector
                                     .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
                                     .enumerate()
-                                    .map(|(j, x)| {
-                                        if i != j {
-                                            a.get_entry(i, j).unwrap().into_value() * x
-                                        } else {
-                                            0.
-                                        }
-                                    })
+                                    .map(|(j, x)| if i != j { a.get(i, j) * x } else { 0. })
                                     .sum::<Float>())
-                            / a.get_entry(i, i).unwrap().into_value();
+                            / a.get(i, i);
                     if solution_vector[i].is_nan() {
                         panic!("****** Solution diverged ******");
                     }
@@ -806,10 +794,7 @@ fn build_pressure_correction_matrices(
             // The net mass flow rate through this face into this cell
             b_p += rho * -face_flux * face.area;
 
-            let a_ii = momentum_matrices
-                .get_entry(*cell_index, *cell_index)
-                .unwrap()
-                .into_value();
+            let a_ii = momentum_matrices.get(*cell_index, *cell_index);
 
             if face.cell_indices.len() > 1 {
                 let neighbor_cell_index = if face.cell_indices[0] != *cell_index {
@@ -819,10 +804,7 @@ fn build_pressure_correction_matrices(
                 };
                 // NOTE: It would be more rigorous to recalculate the advective coefficients,
                 // but I think this should be sufficient for now.
-                let a_ij = momentum_matrices
-                    .get_entry(*cell_index, neighbor_cell_index)
-                    .unwrap()
-                    .into_value();
+                let a_ij = momentum_matrices.get(*cell_index, neighbor_cell_index);
 
                 let a_interpolated = (a_ij + a_ii) / 2.;
 
