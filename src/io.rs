@@ -561,7 +561,14 @@ pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
         print!("{}: ", i + 1);
         for j in 0..b.len() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
-            print!("{: >9}, ", format!("{coeff:.2e}"));
+            print!(
+                "{: >9}, ",
+                if coeff != 0. {
+                    format!("{coeff:.2e}")
+                } else {
+                    "".to_string()
+                }
+            );
         }
         println!(" | {}", b[i]);
     }

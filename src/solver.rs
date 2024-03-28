@@ -563,16 +563,12 @@ fn build_momentum_diffusion_matrix(
                     panic!("untested");
                 }
                 FaceConditionTypes::Interior => {
-                    let neighbor_cell_index: usize;
-                    if face.cell_indices[0] == *cell_index {
-                        // face normal points to cell 0 by default, so we need to flip it
+                    let mut neighbor_cell_index: usize = face.cell_indices[0];
+                    if neighbor_cell_index == *cell_index {
                         neighbor_cell_index = *face
                             .cell_indices
                             .get(1)
                             .expect("interior faces should have two neighbors");
-                    } else {
-                        // this cell must be cell 1,
-                        neighbor_cell_index = face.cell_indices[0];
                     }
 
                     // Cell centroids vector
