@@ -10,8 +10,8 @@ use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 // use rayon::prelude::*;
 use std::thread;
 
-const MATRIX_SOLVER_RELAXATION: Float = 0.33;
-const MATRIX_SOLVER_ITERS: Uint = 20;
+const MATRIX_SOLVER_RELAXATION: Float = 0.1;
+const MATRIX_SOLVER_ITERS: Uint = 1000;
 const PARALLELIZE_U_V_W: bool = true;
 const SOLVE_METHOD: SolutionMethod = SolutionMethod::Jacobi;
 
@@ -92,6 +92,7 @@ pub fn solve_steady(
 
     let a_di = build_momentum_diffusion_matrix(&mesh, diffusion_scheme, mu);
     let mut a = initialize_momentum_matrix(&mesh);
+    // let mut a = initialize_momentum_matrix(&mesh);
     let mut b_u = initialize_DVector!(cell_count);
     let mut b_v = initialize_DVector!(cell_count);
     let mut b_w = initialize_DVector!(cell_count);
@@ -127,7 +128,9 @@ pub fn solve_steady(
                     gradient_scheme,
                     rho,
                 );
-                a = &a + &a_di;
+                // WARNING: CHANGE THIS!!!
+                // a = &a + &a_di
+                a = a_di.clone();
                 if log_enabled!(log::Level::Debug) {
                     println!("\nMomentum:");
                     print_linear_system(&a, &b_u);

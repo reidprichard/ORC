@@ -28,9 +28,9 @@ pub mod common {
         ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
     };
 
-    pub type Int = i32;
-    pub type Float = f32;
-    pub type Uint = u32;
+    pub type Int = i64;
+    pub type Float = f64;
+    pub type Uint = u64;
 
     #[derive(Copy, Clone, Debug)]
     pub struct Vector3 {
@@ -69,7 +69,7 @@ pub mod common {
         }
 
         pub fn norm(&self) -> Float {
-            (self.x.powf(2 as Float) + self.y.powf(2 as Float) + self.z.powf(2 as Float)).sqrt()
+            (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
         }
 
         pub fn unit(&self) -> Vector3 {

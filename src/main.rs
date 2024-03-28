@@ -351,7 +351,8 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 }
 
 fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
-    let mut mesh = orc::io::read_mesh("./examples/coutte_flow_8x8x1.msh");
+    // let mut mesh = orc::io::read_mesh("./examples/coutte_flow_8x8x1.msh");
+    let mut mesh = orc::io::read_mesh("./examples/coutte_flow.msh");
 
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
@@ -367,7 +368,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::UD,
+        MomentumDiscretization::CD,
         DiffusionScheme::CD,
         PressureInterpolation::LinearWeighted,
         VelocityInterpolation::LinearWeighted,

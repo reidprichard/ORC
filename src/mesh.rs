@@ -68,6 +68,7 @@ macro_rules! bc_types_from {
     };
 }
 
+bc_types_from!(u64);
 bc_types_from!(u32);
 bc_types_from!(u16);
 bc_types_from!(u8);
