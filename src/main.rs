@@ -11,9 +11,6 @@ use orc::mesh::*;
 use orc::solver::*;
 use std::env;
 
-const PRESSURE_RELAXATION: Float = 1.0;
-const MOMENTUM_RELAXATION: Float = 1.0;
-
 fn validate_solvers() {
     const TOL: Float = 1e-6;
 
@@ -23,8 +20,8 @@ fn validate_solvers() {
     // | 2 0 4 |   | 1 |
     //
     // | 1 0 0 |   | 11/6 |   | 1.833 |
-    // | 0 1 0 |   | 10/9 |   | 1.111 |
-    // | 0 0 1 | = | -2/3 | = | -0.67 |
+    // | 0 1 0 | = | 10/9 | = | 1.111 |
+    // | 0 0 1 |   | -2/3 |   | -0.67 |
     let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
     a_coo.push(0, 0, 2.);
     a_coo.push(0, 2, 1.);
@@ -348,7 +345,12 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
     let settings = NumericalSettings {
-        matrix_solver_iterations: 10,
+        momentum_relaxation: 0.2,
+        pressure_relaxation: 0.2,
+        matrix_solver_iterations: 1000,
+        matrix_solver_relaxation: 0.1,
+        pressure_interpolation: PressureInterpolation::LinearWeighted,
+        velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
 

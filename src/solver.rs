@@ -79,7 +79,7 @@ pub enum PressureInterpolation {
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
     LinearWeighted,
-    RhieChow, // Rhie-Chow is expensive!
+    RhieChow, // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
 }
 
 #[derive(Copy, Clone)]
@@ -125,7 +125,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 1000);
+    initialize_pressure_field(mesh, &mut p, 1000, numerical_settings);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -151,12 +151,23 @@ pub fn solve_steady(
                     &v,
                     &w,
                     &p,
-                    numerical_settings,
+                    numerical_settings.momentum,
+                    if iteration_count > 1 {
+                        numerical_settings.velocity_interpolation
+                    } else {
+                        VelocityInterpolation::LinearWeighted
+                    },
+                    if iteration_count > 1 {
+                        numerical_settings.pressure_interpolation
+                    } else {
+                        PressureInterpolation::LinearWeighted
+                    },
+                    numerical_settings.gradient_reconstruction,
                     rho,
                 );
                 // WARNING: CHANGE THIS!!!
-                a = &a + &a_di;
-                // a = a_di.clone();
+                // a = &a + &a_di;
+                a = a_di.clone();
                 if log_enabled!(log::Level::Debug) {
                     println!("\nMomentum:");
                     print_linear_system(&a, &b_u);
@@ -291,7 +302,12 @@ pub fn solve_steady(
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
+fn initialize_pressure_field(
+    mesh: &mut Mesh,
+    p: &mut DVector<Float>,
+    iteration_count: Uint,
+    numerical_settings: &NumericalSettings,
+) {
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
@@ -299,29 +315,16 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_
     // - Outlet: psi = 0
     for _ in 0..iteration_count {
         for cell_index in 0..mesh.cells.len() {
-            let mut p_i = 0.;
             let cell = &mesh.cells[&cell_index];
-            for face_index in &cell.face_indices {
-                // TODO: rewrite face_zone nonsense
-                let face_zone = &mesh.faces[&face_index].zone;
-                p_i += match &mesh.face_zones[face_zone].zone_type {
-                    FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => p[cell_index],
-                    FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-                        mesh.face_zones[face_zone].scalar_value
-                    }
-                    FaceConditionTypes::Interior => {
-                        mesh.faces[&face_index]
-                            .cell_indices
-                            .iter()
-                            .map(|neighbor_cell_index| p[*neighbor_cell_index])
-                            .sum::<Float>()
-                            / 2.
-                    }
-                    _ => panic!("unsupported face zone type for initialization"),
-                }
-            }
-            let cell = mesh.cells.get_mut(&cell_index).unwrap();
-            p[cell_index] = p_i / (cell.face_indices.len() as Float);
+            p[cell_index] = cell.face_indices.iter().map(|face_index| {
+                get_face_pressure(
+                    &mesh,
+                    &p,
+                    *face_index,
+                    PressureInterpolation::LinearWeighted,
+                    numerical_settings.gradient_reconstruction,
+                )
+            }).sum::<Float>() / (cell.face_indices.len() as Float);
         }
     }
     // print!("\n\n");
@@ -669,7 +672,10 @@ fn build_momentum_matrices(
     v: &DVector<Float>,
     w: &DVector<Float>,
     p: &DVector<Float>,
-    numerical_settings: &NumericalSettings,
+    momentum_discretization: MomentumDiscretization,
+    velocity_interpolation: VelocityInterpolation,
+    pressure_interpolation: PressureInterpolation,
+    gradient_reconstruction: GradientReconstructionMethods,
     rho: Float,
 ) {
     // Iterate over all cells in the mesh
@@ -704,8 +710,8 @@ fn build_momentum_matrices(
                 &p,
                 *face_index,
                 *cell_index,
-                numerical_settings.velocity_interpolation,
-                numerical_settings.gradient_reconstruction,
+                velocity_interpolation,
+                gradient_reconstruction,
                 &a,
             );
             // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
@@ -718,8 +724,8 @@ fn build_momentum_matrices(
                 mesh,
                 &p,
                 *face_index,
-                numerical_settings.pressure_interpolation,
-                numerical_settings.gradient_reconstruction,
+                pressure_interpolation,
+                gradient_reconstruction,
             );
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
@@ -747,7 +753,7 @@ fn build_momentum_matrices(
                 );
             }
 
-            let a_nb: Float = match numerical_settings.momentum {
+            let a_nb: Float = match momentum_discretization {
                 MomentumDiscretization::UD => {
                     // Neighbor only affects this cell if flux is into this
                     // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.

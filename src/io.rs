@@ -503,11 +503,10 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 }
 
-pub fn read_data() {}
 
 pub fn read_settings() {}
 
-pub fn write_mesh() {}
+pub fn read_data() {}
 
 pub fn write_data(
     mesh: &Mesh,
