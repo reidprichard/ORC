@@ -16,12 +16,15 @@ pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
     pub momentum: MomentumDiscretization,
     pub diffusion: DiffusionScheme,
+    // LinearWeighted or SecondOrder recommended; LinearWeighted is more stable but less accurate
     pub pressure_interpolation: PressureInterpolation,
+    // LinearWeighted recommended; RhieChow is extremely unstable
     pub velocity_interpolation: VelocityInterpolation,
     pub gradient_reconstruction: GradientReconstructionMethods,
     pub pressure_relaxation: Float,
     pub momentum_relaxation: Float,
     pub matrix_solver: SolutionMethod,
+    // LOTS of iterations (1k+) are needed due to lacking multigrid
     pub matrix_solver_iterations: Uint,
     pub matrix_solver_relaxation: Float,
 }
@@ -166,8 +169,8 @@ pub fn solve_steady(
                     rho,
                 );
                 // WARNING: CHANGE THIS!!!
-                // a = &a + &a_di;
-                a = a_di.clone();
+                a = &a + &a_di;
+                // a = a_di.clone();
                 if log_enabled!(log::Level::Debug) {
                     println!("\nMomentum:");
                     print_linear_system(&a, &b_u);
@@ -316,23 +319,22 @@ fn initialize_pressure_field(
     for _ in 0..iteration_count {
         for cell_index in 0..mesh.cells.len() {
             let cell = &mesh.cells[&cell_index];
-            p[cell_index] = cell.face_indices.iter().map(|face_index| {
-                get_face_pressure(
-                    &mesh,
-                    &p,
-                    *face_index,
-                    PressureInterpolation::LinearWeighted,
-                    numerical_settings.gradient_reconstruction,
-                )
-            }).sum::<Float>() / (cell.face_indices.len() as Float);
+            p[cell_index] = cell
+                .face_indices
+                .iter()
+                .map(|face_index| {
+                    get_face_pressure(
+                        &mesh,
+                        &p,
+                        *face_index,
+                        PressureInterpolation::LinearWeighted,
+                        numerical_settings.gradient_reconstruction,
+                    )
+                })
+                .sum::<Float>()
+                / (cell.face_indices.len() as Float);
         }
     }
-    // print!("\n\n");
-    // for cell_number in 1..=mesh.cells.len() {
-    //     let cell = &mesh.cells[&cell_number];
-    //     println!("{}, {}", cell.centroid, cell.pressure);
-    // }
-    // print!("\n\n");
 }
 
 fn get_velocity_source_term(_location: Vector3) -> Vector3 {

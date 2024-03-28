@@ -349,7 +349,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
         pressure_relaxation: 0.2,
         matrix_solver_iterations: 1000,
         matrix_solver_relaxation: 0.1,
-        pressure_interpolation: PressureInterpolation::LinearWeighted,
+        pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
