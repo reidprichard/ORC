@@ -662,12 +662,6 @@ fn build_momentum_matrices(
     gradient_scheme: GradientReconstructionMethods,
     rho: Float,
 ) {
-    let cell_count = mesh.cells.len();
-    // let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
-    // let mut b_u = initialize_DVector!(cell_count);
-    // let mut b_v = initialize_DVector!(cell_count);
-    // let mut b_v = initialize_DVector!(cell_count);
-
     // Iterate over all cells in the mesh
     for (cell_index, cell) in &mesh.cells {
         // Diffusion of scalar phi from neighbor into this cell
