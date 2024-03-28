@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use crate::io::{dvector_to_str, print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::GetEntry;
@@ -5,7 +7,7 @@ use crate::{common::*, io::print_vec_scientific};
 use log::log_enabled;
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
-use rayon::prelude::*;
+// use rayon::prelude::*;
 use std::thread;
 
 const MATRIX_SOLVER_RELAXATION: Float = 0.33;
@@ -554,11 +556,11 @@ fn build_momentum_diffusion_matrix(
                     )
                 }
                 FaceConditionTypes::VelocityInlet => {
-                    panic!("untested");
                     // Diffusion coefficient
                     // TODO: Add source term contribution to diffusion since there's no cell on the other side
                     let d_i: Float = mu * face.area / (face.centroid - cell.centroid).norm();
-                    (d_i, usize::MAX)
+                    (d_i, usize::MAX);
+                    panic!("untested");
                 }
                 FaceConditionTypes::Interior => {
                     let neighbor_cell_index: usize;
@@ -665,8 +667,8 @@ fn build_momentum_matrices(
 
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         let mut s_u = get_velocity_source_term(cell.centroid); // general source term
-        let mut s_u_dc = Vector3::zero(); // deferred correction source term TODO
-        let mut s_d_cross = Vector3::zero(); // cross diffusion source term TODO
+        let s_u_dc = Vector3::zero(); // deferred correction source term TODO
+        let s_d_cross = Vector3::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = 0.;
@@ -796,7 +798,6 @@ fn build_pressure_correction_matrices(
                 gradient_scheme,
                 &momentum_matrices,
             );
-            let inward_face_normal = get_inward_face_normal(&face, *cell_index);
             // The net mass flow rate through this face into this cell
             b_p += rho * -face_flux * face.area;
 
