@@ -14,6 +14,7 @@ const PARALLELIZE_U_V_W: bool = true;
 
 pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
+    // Setting to 1.0 seems to cause problems
     pub momentum: MomentumDiscretization,
     pub diffusion: DiffusionScheme,
     // LinearWeighted or SecondOrder recommended; LinearWeighted is more stable but less accurate
@@ -291,13 +292,16 @@ pub fn solve_steady(
                     &numerical_settings,
                 );
 
+                let u_avg = u.iter().sum::<Float>() / (cell_count as Float);
+                let v_avg = v.iter().sum::<Float>() / (cell_count as Float);
+                let w_avg = w.iter().sum::<Float>() / (cell_count as Float);
                 println!(
                     "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
-                    iter_number,
-                    u.iter().sum::<Float>() / (cell_count as Float),
-                    v.iter().sum::<Float>() / (cell_count as Float),
-                    w.iter().sum::<Float>() / (cell_count as Float),
+                    iter_number, u_avg, v_avg, w_avg,
                 );
+                if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
+                    panic!("solution diverged");
+                }
             }
         }
         _ => panic!("unsupported pressure-velocity coupling"),

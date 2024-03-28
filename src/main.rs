@@ -77,7 +77,7 @@ fn validate_solvers() {
     let b = DVector::from_column_slice(&vec![3.,2.,1.]);
     let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
 
-    iterative_solve(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.5);
+    iterative_solve(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.7);
 
     for row_num in 0..a.nrows() {
         assert!(
@@ -318,7 +318,6 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         // ));
         avg_velocity += cell_velocity;
     }
-    avg_velocity /= mesh.cells.len();
     // assert!(avg_velocity.approx_equals(
     //     &Vector {
     //         x: -7.54e-2,
@@ -330,7 +329,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     // write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
 }
 
-fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
+fn couette(iteration_count: Uint) {
     let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
 
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
@@ -345,8 +344,8 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
     let settings = NumericalSettings {
-        momentum_relaxation: 0.2,
-        pressure_relaxation: 0.2,
+        momentum_relaxation: 0.1,
+        pressure_relaxation: 0.1,
         matrix_solver_iterations: 1000,
         matrix_solver_relaxation: 0.1,
         pressure_interpolation: PressureInterpolation::SecondOrder,
@@ -358,7 +357,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
         &mut mesh,
         &settings,
         1000.,
-        100.,
+        0.01,
         iteration_count,
     );
     // V = U_top / 2 - a^2 / 12mu * dp/dx
@@ -383,7 +382,7 @@ fn main() {
     // test_3d_1x3(iteration_count, 0.8, 0.5);
     // test_3d_3x3(iteration_count, 1.0, 1.0);
     // test_3d();
-    couette(iteration_count, 0.2, 0.2);
+    couette(iteration_count);
 
     // Interface: allow user to choose from
     // 1. Read mesh
