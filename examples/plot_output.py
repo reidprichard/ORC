@@ -46,7 +46,7 @@ def main():
     axs[0].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
     axs[1].set_ylabel("Y [m]")
-    fig.savefig("./examples/coutte.png", dpi=300)
+    fig.savefig("./examples/couette.png", dpi=300)
     # fig.text(0.04, 0.5, "Y [m]", ha="center", rotation="vertical")
 
     plt.show()
