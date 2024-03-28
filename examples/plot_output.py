@@ -19,7 +19,6 @@ def plot_couette():
                 row_values.append([float(n) for n in match.groups()])
     x, y, _, u, v, _, p = list(zip(*row_values))
 
-
     xi = np.linspace(min(x), max(x), 100)
     yi = np.linspace(min(y), max(y), 100)
     triang = tri.Triangulation(x, y)
@@ -43,6 +42,8 @@ def plot_couette():
     axs[1].set_title(r"$\frac{du}{dy}$")
     axs[1].set_xlabel("X [m]")
     axs[1].set_ylabel("Y [m]")
+    # p_grad = np.gradient(p_interpolated, xi, yi)
+    # axs[1].quiver(xi, yi, p_grad[1]*0, p_grad[0])
 
     fig.colorbar(cm, label="du/dy [1/s]")
     fig.savefig("./examples/couette.png", dpi=300)
@@ -50,11 +51,12 @@ def plot_couette():
     # *** Figure 2 ***
     fig, ax = plt.subplots()
     fig.suptitle("Velocity profile vs analytical")
-    dp_dx = (np.min(p) - np.max(p))/(np.max(x) - np.min(x))
+    dp_dx = (np.min(p) - np.max(p)) / (np.max(x) - np.min(x))
     a = np.max(y) - np.min(y)
-    u_analytical = 1/(2*MU) * dp_dx * (yi**2 - a * yi)
+    u_analytical = 1 / (2 * MU) * dp_dx * (yi**2 - a * yi)
     ax.plot(yi, u_analytical)
     ax.scatter(y, u)
+
 
     plt.show()
 

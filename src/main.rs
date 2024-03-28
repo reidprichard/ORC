@@ -360,10 +360,17 @@ fn couette(iteration_count: Uint) {
         0.01,
         iteration_count,
     );
-    // V = U_top / 2 - a^2 / 12mu * dp/dx
-    // a = 0.001; dx = 0.01; mu = 0.001; dp = -0.01
-    // V = 0.0000833333 = 8.33e-5
-
+    // Initially guessed pressure field is exactly correct, so
+    // this should be able to converge in 1 iteration. With 100k
+    // Gauss-Seidel iterations, it's mostly correct in 1iter, but
+    // consecutive iterations worsen the result. Is it an issue
+    // with pressure-velocity coupling? Not enough mesh? I think
+    // it's pressure-velocity coupling, as lots of inner iterations
+    // produces correct-ish results, while lots of outer iterations
+    // produces a pseudo-turbulent velocity profile. Disabling pressure
+    // correction produces a noisy and inconsistent velocity field,
+    // but it's much closer to correct than with pressure correction
+    // enabled.
     write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
 }
 

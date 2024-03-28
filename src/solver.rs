@@ -129,7 +129,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 1000, numerical_settings);
+    initialize_pressure_field(mesh, &mut p, 10000, numerical_settings);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -315,6 +315,7 @@ fn initialize_pressure_field(
     iteration_count: Uint,
     numerical_settings: &NumericalSettings,
 ) {
+    println!("Initializing pressure field...");
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
@@ -877,8 +878,8 @@ fn apply_pressure_correction(
     numerical_settings: &NumericalSettings,
 ) {
     for (cell_index, cell) in &mut mesh.cells {
-        p[*cell_index] = &p[*cell_index]
-            + numerical_settings.pressure_relaxation * (*p_prime.get(*cell_index).unwrap_or(&0.));
+        // p[*cell_index] = &p[*cell_index]
+        //     + numerical_settings.pressure_relaxation * (*p_prime.get(*cell_index).unwrap_or(&0.));
         let velocity_correction = cell
             .face_indices
             .iter()
@@ -912,11 +913,11 @@ fn apply_pressure_correction(
                 acc + outward_face_normal * (&p_prime[*cell_index] - p_prime_neighbor) * face.area / momentum_matrices.get_entry(*cell_index, *cell_index).expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
 .into_value()
             });
-        u[*cell_index] =
-            &u[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.x;
-        v[*cell_index] =
-            &v[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.y;
-        w[*cell_index] =
-            &w[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.z;
+        // u[*cell_index] =
+        //     &u[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.x;
+        // v[*cell_index] =
+        //     &v[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.y;
+        // w[*cell_index] =
+        //     &w[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.z;
     }
 }
