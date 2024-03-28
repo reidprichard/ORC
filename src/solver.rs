@@ -281,7 +281,7 @@ pub fn solve_steady(
                     print!("p': ");
                     print_vec_scientific(&p_prime);
                 }
-                apply_pressure_correction(
+                let (avg_pressure_correction, avg_vel_correction) = apply_pressure_correction(
                     mesh,
                     &a,
                     &p_prime,
@@ -296,8 +296,8 @@ pub fn solve_steady(
                 let v_avg = v.iter().sum::<Float>() / (cell_count as Float);
                 let w_avg = w.iter().sum::<Float>() / (cell_count as Float);
                 println!(
-                    "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})",
-                    iter_number, u_avg, v_avg, w_avg,
+                    "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tpressure correction: {:.2e}\tvelocity correction: {:.2e}",
+                    iter_number, u_avg, v_avg, w_avg, avg_pressure_correction, avg_vel_correction
                 );
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
                     panic!("solution diverged");
@@ -876,10 +876,14 @@ fn apply_pressure_correction(
     w: &mut DVector<Float>,
     p: &mut DVector<Float>,
     numerical_settings: &NumericalSettings,
-) {
+) -> (Float, Float) {
+    let mut avg_pressure_corr_magnitude = 0.;
+    let mut avg_velocity_corr_magnitude = 0.;
     for (cell_index, cell) in &mut mesh.cells {
-        // p[*cell_index] = &p[*cell_index]
-        //     + numerical_settings.pressure_relaxation * (*p_prime.get(*cell_index).unwrap_or(&0.));
+        let pressure_correction = *p_prime.get(*cell_index).unwrap_or(&0.);
+        p[*cell_index] =
+            &p[*cell_index] + numerical_settings.pressure_relaxation * (pressure_correction);
+        avg_pressure_corr_magnitude += Float::abs(pressure_correction);
         let velocity_correction = cell
             .face_indices
             .iter()
@@ -913,11 +917,16 @@ fn apply_pressure_correction(
                 acc + outward_face_normal * (&p_prime[*cell_index] - p_prime_neighbor) * face.area / momentum_matrices.get_entry(*cell_index, *cell_index).expect("momentum matrix should have nonzero coeffs relating each cell to its neighbors")
 .into_value()
             });
-        // u[*cell_index] =
-        //     &u[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.x;
-        // v[*cell_index] =
-        //     &v[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.y;
-        // w[*cell_index] =
-        //     &w[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.z;
+        u[*cell_index] =
+            &u[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.x;
+        v[*cell_index] =
+            &v[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.y;
+        w[*cell_index] =
+            &w[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.z;
+        avg_velocity_corr_magnitude += velocity_correction.norm();
     }
+    (
+        avg_pressure_corr_magnitude / (mesh.cells.len() as Float),
+        avg_velocity_corr_magnitude / (mesh.cells.len() as Float),
+    )
 }

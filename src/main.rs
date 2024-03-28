@@ -22,7 +22,7 @@ fn validate_solvers() {
     // | 1 0 0 |   | 11/6 |   | 1.833 |
     // | 0 1 0 | = | 10/9 | = | 1.111 |
     // | 0 0 1 |   | -2/3 |   | -0.67 |
-    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3, 3);
     a_coo.push(0, 0, 2.);
     a_coo.push(0, 2, 1.);
 
@@ -34,8 +34,8 @@ fn validate_solvers() {
 
     let a = CsrMatrix::from(&a_coo);
     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = DVector::from_column_slice(&vec![3.,2.,1.]);
-    let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
+    let b = DVector::from_column_slice(&vec![3., 2., 1.]);
+    let mut x = DVector::from_column_slice(&vec![0., 0., 0.]);
 
     iterative_solve(&a, &b, &mut x, 100, SolutionMethod::Jacobi, 0.5);
 
@@ -53,7 +53,6 @@ fn validate_solvers() {
     println!("x = {x:?}");
     println!("*** Jacobi solver validated. ***");
 
-
     println!("*** Testing Gauss-Seidel solver for correctness. ***");
     // | 2 0 1 |   | 3 |
     // | 0 3 2 | = | 2 |
@@ -62,7 +61,7 @@ fn validate_solvers() {
     // | 1 0 0 |   | 11/6 |   | 1.833 |
     // | 0 1 0 |   | 10/9 |   | 1.111 |
     // | 0 0 1 | = | -2/3 | = | -0.67 |
-    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3,3);
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3, 3);
     a_coo.push(0, 0, 2.);
     a_coo.push(0, 2, 1.);
 
@@ -74,8 +73,8 @@ fn validate_solvers() {
 
     let a = CsrMatrix::from(&a_coo);
     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = DVector::from_column_slice(&vec![3.,2.,1.]);
-    let mut x = DVector::from_column_slice(&vec![0.,0.,0.]);
+    let b = DVector::from_column_slice(&vec![3., 2., 1.]);
+    let mut x = DVector::from_column_slice(&vec![0., 0., 0.]);
 
     iterative_solve(&a, &b, &mut x, 100, SolutionMethod::GaussSeidel, 0.7);
 
@@ -179,13 +178,7 @@ fn test_2d(iteration_count: Uint) {
 
     let settings = NumericalSettings::default();
 
-    solve_steady(
-        &mut mesh,
-        &settings,
-        1000.,
-        0.001,
-        iteration_count,
-    );
+    solve_steady(&mut mesh, &settings, 1000., 0.001, iteration_count);
 }
 
 fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -229,13 +222,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 
     let settings = NumericalSettings::default();
     // High viscosity needed to keep Peclet under control
-    let (u, v, w, p) = solve_steady(
-        &mut mesh,
-        &settings,
-        1000.,
-        10.,
-        iteration_count,
-    );
+    let (u, v, w, p) = solve_steady(&mut mesh, &settings, 1000., 10., iteration_count);
 
     for cell_number in 0..mesh.cells.len() {
         let cell_velocity = Vector3 {
@@ -252,7 +239,6 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         //     1e-6
         // ));
     }
-
 }
 
 fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -293,13 +279,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     }
 
     let settings = NumericalSettings::default();
-    let (u, v, w, p) = solve_steady(
-        &mut mesh,
-        &settings,
-        1000.,
-        100.,
-        iteration_count,
-    );
+    let (u, v, w, p) = solve_steady(&mut mesh, &settings, 1000., 100., iteration_count);
 
     let mut avg_velocity = Vector3::zero();
     for cell_number in 0..mesh.cells.len() {
@@ -353,13 +333,7 @@ fn couette(iteration_count: Uint) {
         ..NumericalSettings::default()
     };
 
-    let (u, v, w, p) = solve_steady(
-        &mut mesh,
-        &settings,
-        1000.,
-        0.01,
-        iteration_count,
-    );
+    let (u, v, w, p) = solve_steady(&mut mesh, &settings, 1000., 0.01, iteration_count);
     // Initially guessed pressure field is exactly correct, so
     // this should be able to converge in 1 iteration. With 100k
     // Gauss-Seidel iterations, it's mostly correct in 1iter, but
@@ -367,7 +341,7 @@ fn couette(iteration_count: Uint) {
     // with pressure-velocity coupling? Not enough mesh? I think
     // it's pressure-velocity coupling, as lots of inner iterations
     // produces correct-ish results, while lots of outer iterations
-    // produces a pseudo-turbulent velocity profile. Disabling pressure
+    // produces a pseudo-turbulent velocity profile. Disabling velocity
     // correction produces a noisy and inconsistent velocity field,
     // but it's much closer to correct than with pressure correction
     // enabled.
