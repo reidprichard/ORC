@@ -44,6 +44,7 @@ def main():
     axs[1].set_title(r"$\frac{du}{dy}$")
 
     axs[0].set_xlabel("X [m]")
+    axs[1].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
     axs[1].set_ylabel("Y [m]")
     fig.savefig("./examples/couette.png", dpi=300)
