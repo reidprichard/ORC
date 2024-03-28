@@ -1,6 +1,9 @@
 # <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD
 
-Are you tired of Fluent crashing (I thought so!) and you don't care about features or performance (ok, maybe not)? ORC is a simple finite volume CFD solver implemented in Rust with minimal dependencies. ORC supports arbitrary unstructured grids with any of the following cell types:
+Are you tired of Fluent crashing (I thought so!) and you don't care about
+features or performance (ok, maybe not)? ORC is a simple finite volume CFD
+solver implemented in Rust with minimal dependencies. ORC supports arbitrary
+unstructured grids with any of the following cell types:
 - Supported cell types:
   - Tetrahedron (4 faces, 4 nodes)
   - Pyramid (5 faces, 5 nodes)
@@ -21,7 +24,11 @@ Technical details:
   - Velocity inlet
   - Symmetry (not added yet)
 
-**Pre-alpha** with basic functionality still in the works. ORC is currently capable of loading a mesh, building momentum and pressure correction matrices, and producing a semi-sane solution, but it is definitely not correct and somewhat unstable. I'm unsure whether the incorrectness is due to a bug or whether it's a result of the basic methods that are implemented.
+**Pre-alpha** with basic functionality still in the works. ORC is currently
+capable of loading a mesh, building momentum and pressure correction matrices,
+and producing a semi-sane solution, but it is definitely not correct and
+somewhat unstable. I'm unsure whether the incorrectness is due to a bug or
+whether it's a result of the basic methods that are implemented.
 
 Roadmap:
 - [X] Read TGRID (ANSYS Fluent) mesh into memory
@@ -29,7 +36,7 @@ Roadmap:
 - [ ] Initialize flow (30% complete)
 - [X] Iterate steady
 - [X] Add under-relaxation
-- [ ] Implement Rhie-Chow interpolation
+- [ ] Implement Rhie-Chow interpolation (90% complete; added but not verified)
 - [ ] Add cross diffusion correction
 - [ ] Read/write solution data (20% complete)
 - [ ] Read/write settings?
