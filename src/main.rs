@@ -331,12 +331,17 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 }
 
 fn couette(iteration_count: Uint) {
+    let channel_height = 0.001;
+    let mu = 0.01;
+    let dp = -5.;
+    let dx = 0.01;
+
     let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
 
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 5.;
+    mesh.get_face_zone("INLET").scalar_value = -dp;
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -358,7 +363,7 @@ fn couette(iteration_count: Uint) {
         &mut mesh,
         &settings,
         1000.,
-        0.01,
+        mu,
         iteration_count,
         Uint::max(iteration_count / 1000, 1),
     );
@@ -374,6 +379,15 @@ fn couette(iteration_count: Uint) {
     // but it's much closer to correct than with pressure correction
     // enabled.
     write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
+
+    let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
+    let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
+    if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
+        print!("Couette flow validation failed.");
+    } else {
+        print!("Couette flow validation passed.");
+    }
+    println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
 }
 
 fn main() {
