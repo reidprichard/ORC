@@ -45,7 +45,7 @@ pub enum PressureInterpolation {
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
     LinearWeighted,
-    RhieChow,
+    RhieChow, // Rhie-Chow is expensive!
 }
 
 pub struct LinearSystem {
@@ -87,7 +87,7 @@ pub fn solve_steady(
     let mut p_prime = initialize_DVector!(cell_count);
 
     // TODO: Re-enable before release
-    // initialize_pressure_field(mesh, &mut p, 1000);
+    initialize_pressure_field(mesh, &mut p, 1000);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, diffusion_scheme, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -113,7 +113,11 @@ pub fn solve_steady(
                     &w,
                     &p,
                     momentum_scheme,
-                    pressure_interpolation_scheme,
+                    if iter_number > 1 {
+                        pressure_interpolation_scheme
+                    } else {
+                        PressureInterpolation::LinearWeighted
+                    },
                     if iter_number > 1 {
                         velocity_interpolation_scheme
                     } else {
@@ -303,33 +307,31 @@ fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
-fn calculate_scalar_gradient(
+fn calculate_pressure_gradient(
     mesh: &Mesh,
-    scalar: &DVector<Float>,
+    p: &DVector<Float>,
     cell_index: usize,
     gradient_scheme: GradientReconstructionMethods,
 ) -> Vector3 {
     let cell = &mesh.cells[&cell_index];
     match gradient_scheme {
         GradientReconstructionMethods::GreenGauss(variant) => match variant {
-            GreenGaussVariants::CellBased => cell
-                .face_indices
-                .iter()
-                .map(|f| {
-                    let mut neighbor_count = 0.;
-                    let face = &mesh.faces[f];
-                    let face_value: Float = face
-                        .cell_indices
-                        .iter()
-                        .map(|c| {
-                            neighbor_count += 1.;
-                            &scalar[*c]
-                        })
-                        .sum::<Float>()
-                        / neighbor_count;
-                    face_value * (face.centroid - cell.centroid)
-                })
-                .fold(Vector3::zero(), |acc, v| acc + v),
+            GreenGaussVariants::CellBased => {
+                cell.face_indices
+                    .iter()
+                    .map(|face_index| {
+                        let face_value: Float = get_face_pressure(
+                            &mesh,
+                            &p,
+                            *face_index,
+                            PressureInterpolation::Linear,
+                            gradient_scheme,
+                        );
+                        face_value * (mesh.faces[face_index].centroid - cell.centroid)
+                    })
+                    .fold(Vector3::zero(), |acc, v| acc + v)
+                    / cell.volume
+            }
             _ => panic!("unsupported Green-Gauss scheme"),
         },
         _ => panic!("unsupported gradient scheme"),
@@ -356,6 +358,7 @@ fn get_face_flux(
         FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => 0.,
         FaceConditionTypes::VelocityInlet => face_zone.vector_value.dot(&outward_face_normal),
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+            // TODO: optimize
             outward_face_normal.dot(&Vector3 {
                 x: u[cell_index],
                 y: v[cell_index],
@@ -385,15 +388,15 @@ fn get_face_flux(
                 }
                 VelocityInterpolation::RhieChow => {
                     // WARNING: Something is wrong here
-                    let xi =
-                        mesh.cells[&neighbor_index].centroid - mesh.cells[&cell_index].centroid;
-                    // let a0 = momentum_matrices.get_entry(cell_index, cell_index).unwrap().into_value();
+                    let xi = (mesh.cells[&neighbor_index].centroid
+                        - mesh.cells[&cell_index].centroid)
+                        .unit();
                     let a0 = momentum_matrices.get(cell_index, cell_index);
                     let a1 = momentum_matrices.get(neighbor_index, neighbor_index);
                     let p_grad_0 =
-                        calculate_scalar_gradient(&mesh, &p, cell_index, gradient_scheme);
+                        calculate_pressure_gradient(&mesh, &p, cell_index, gradient_scheme);
                     let p_grad_1 =
-                        calculate_scalar_gradient(&mesh, &p, neighbor_index, gradient_scheme);
+                        calculate_pressure_gradient(&mesh, &p, neighbor_index, gradient_scheme);
                     let v0 = mesh.cells[&cell_index].volume;
                     let v1 = mesh.cells[&neighbor_index].volume;
                     0.5 * (outward_face_normal.dot(&(vel0 + vel1))
@@ -441,8 +444,10 @@ fn get_face_pressure(
                     panic!("`standard` pressure interpolation unsupported");
                 }
                 PressureInterpolation::SecondOrder => {
-                    let c0_grad = calculate_scalar_gradient(&mesh, &p, c0, gradient_scheme);
-                    let c1_grad = calculate_scalar_gradient(&mesh, &p, c1, gradient_scheme);
+                    let c0_grad = calculate_pressure_gradient(&mesh, &p, c0, gradient_scheme);
+                    println!("Pressure gradient: {c0_grad}");
+                    println!("Cell volume: {}", &mesh.cells[&c0].volume);
+                    let c1_grad = calculate_pressure_gradient(&mesh, &p, c1, gradient_scheme);
                     let r_c0 = face.centroid - mesh.cells[&c0].centroid;
                     let r_c1 = face.centroid - mesh.cells[&c1].centroid;
                     0.5 * ((&p[c0] + &p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
