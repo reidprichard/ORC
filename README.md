@@ -1,5 +1,7 @@
 # <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD
 
+![Couette flow results](./examples/couette.png)
+
 Are you tired of Fluent crashing (I thought so!) and you don't care about
 features or performance (ok, maybe not)? ORC is a simple finite volume CFD
 solver implemented in Rust with minimal dependencies. ORC supports arbitrary
@@ -24,11 +26,9 @@ Technical details:
   - Velocity inlet
   - Symmetry (not added yet)
 
-**Pre-alpha** with basic functionality still in the works. ORC is currently
-capable of loading a mesh, building momentum and pressure correction matrices,
-and producing a semi-sane solution, but it is definitely not correct and
-somewhat unstable. I'm unsure whether the incorrectness is due to a bug or
-whether it's a result of the basic methods that are implemented.
+**Alpha state** with major functionality still in the works. Stability is lacking, but per the
+header image ORC can produce a parabolic laminar velocity profile in Couette flow. MPI is desperately 
+needed.
 
 Roadmap:
 - [X] Read TGRID (ANSYS Fluent) mesh into memory
@@ -38,10 +38,10 @@ Roadmap:
 - [X] Add under-relaxation
 - [ ] Implement Rhie-Chow interpolation (90% complete; added but not verified)
 - [ ] Add cross diffusion correction
+- [ ] Multigrid
 - [ ] Read/write solution data (20% complete)
 - [ ] Read/write settings?
 - [ ] CLI
-- [ ] Multigrid
 - [ ] Iterate transient
 - [ ] Standard k-epsilon turbulence model?
 - [ ] Add other mesh formats?
