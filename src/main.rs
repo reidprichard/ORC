@@ -369,7 +369,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::UD,
         DiffusionScheme::CD,
-        PressureInterpolation::SecondOrder,
+        PressureInterpolation::LinearWeighted,
         VelocityInterpolation::LinearWeighted,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         1000.,
