@@ -88,7 +88,6 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    // TODO: Re-enable before release
     initialize_pressure_field(mesh, &mut p, 1000);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, diffusion_scheme, mu);
@@ -99,7 +98,7 @@ pub fn solve_steady(
 
     if log_enabled!(log::Level::Debug) {
         println!("\nMomentum diffusion:");
-        print_matrix(&a_di);
+        // print_matrix(&a_di);
     }
     match pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
@@ -227,18 +226,18 @@ pub fn solve_steady(
                     MATRIX_SOLVER_RELAXATION,
                 );
 
-                if log_enabled!(log::Level::Info) {
-                    print!("u:  ");
-                    print_vec_scientific(&u);
-                    print!("v:  ");
-                    print_vec_scientific(&v);
-                    print!("w:  ");
-                    print_vec_scientific(&w);
-                    print!("p:  ");
-                    print_vec_scientific(&p);
-                    print!("p': ");
-                    print_vec_scientific(&p_prime);
-                }
+                // if log_enabled!(log::Level::Info) {
+                //     print!("u:  ");
+                //     print_vec_scientific(&u);
+                //     print!("v:  ");
+                //     print_vec_scientific(&v);
+                //     print!("w:  ");
+                //     print_vec_scientific(&w);
+                //     print!("p:  ");
+                //     print_vec_scientific(&p);
+                //     print!("p': ");
+                //     print_vec_scientific(&p_prime);
+                // }
                 apply_pressure_correction(
                     mesh,
                     &a,

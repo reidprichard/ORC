@@ -529,6 +529,19 @@ pub fn write_data(
 
 pub fn write_settings() {}
 
+pub fn dvector_to_str(a: &DVector<Float>) -> String {
+    let mut output = String::from("[");
+    for i in 0..a.nrows() {
+        let coeff = a[i];
+        output += &format!(
+            "{: >9.2e}{}",
+            coeff,
+            if i < a.nrows() - 1 { ", " } else { "" }
+        );
+    }
+    output + "]"
+}
+
 pub fn print_matrix(a: &CsrMatrix<Float>) {
     for i in 0..a.nrows() {
         print!("{}: ", i + 1);
@@ -541,36 +554,26 @@ pub fn print_matrix(a: &CsrMatrix<Float>) {
     }
 }
 
-pub fn dvector_to_str(a: &DVector<Float>) -> String {
-    let mut output = String::from("[");
-    for i in 0..a.nrows() {
-        let coeff = a[i];
-        let formatted_number = format!("{coeff:.2e}");
-        output += &format!(
-            "{: >9.2e}{}",
-            coeff,
-            if i < a.nrows() - 1 { ", " } else { "" }
-        );
-    }
-    output += "]";
-    output
-}
-
 pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
-    for i in 0..b.len() {
-        print!("{}: ", i + 1);
-        for j in 0..b.len() {
+    for i in 0..a.nrows() {
+        print!("{}: ", i);
+        let mut s: String = String::from("");
+        for j in 0..a.ncols() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
-            print!(
-                "{: >9}, ",
-                if coeff != 0. {
-                    format!("{coeff:.2e}")
+            if a.ncols() < 16 {
+                if coeff == 0. {
+                    s += "          , ";
                 } else {
-                    "".to_string()
+                    s += &format!("{: >9}, ", format!("{coeff:.2e}"));
                 }
-            );
+            } else if coeff != 0. {
+                if i == j {
+                    s += "*";
+                }
+                s += &format!("{}={: >9}, ", j, format!("{coeff:.2e}"));
+            }
         }
-        println!(" | {}", b[i]);
+        println!("{}: {} | {}", i, s, b[i]);
     }
 }
 
