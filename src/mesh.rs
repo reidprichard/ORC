@@ -230,14 +230,14 @@ impl Mesh {
     // }
 }
 
-pub fn get_outward_face_normal(face: &Face, cell_number: usize) -> Vector3 {
-    if cell_number == face.cell_indices[0] {
+pub fn get_outward_face_normal(face: &Face, cell_index: usize) -> Vector3 {
+    if cell_index == face.cell_indices[0] {
         face.normal
     } else {
         -face.normal
     }
 }
 
-pub fn get_inward_face_normal(face: &Face, cell_number: usize) -> Vector3 {
-    get_outward_face_normal(face, cell_number) * -1.
+pub fn get_inward_face_normal(face: &Face, cell_index: usize) -> Vector3 {
+    get_outward_face_normal(face, cell_index) * -1.
 }

@@ -1,19 +1,31 @@
-#![allow(dead_code)]
-#![allow(unused)]
+// #![allow(dead_code)]
+// #![allow(unused)]
 
 // I need to store a list of cells
 // Each cell has an associated list of faces & nodes
 // Each cell has scalars & vectors
 
+use nalgebra_sparse::CsrMatrix;
+
 pub mod io;
 pub mod mesh;
 pub mod solver;
+
+trait GetEntry<T> {
+    fn get(&self, i:usize, j:usize) -> T;
+}
+
+use common::Float;
+impl GetEntry<Float> for CsrMatrix<Float> {
+    fn get(&self, i: usize, j: usize) -> Float {
+        self.get_entry(i, j).unwrap().into_value()
+    }
+}
 
 pub mod common {
     use std::{
         fmt,
         ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
-        iter::Sum
     };
 
     pub type Int = i32;
