@@ -113,7 +113,11 @@ pub fn solve_steady(
                     &p,
                     momentum_scheme,
                     pressure_interpolation_scheme,
-                    velocity_interpolation_scheme,
+                    if iter_number > 1 {
+                        velocity_interpolation_scheme
+                    } else {
+                        VelocityInterpolation::LinearWeighted
+                    },
                     gradient_scheme,
                     rho,
                 );
@@ -341,13 +345,13 @@ fn get_face_flux(
     cell_index: usize,
     interpolation_scheme: VelocityInterpolation,
     gradient_scheme: GradientReconstructionMethods,
-    // momentum_matrices: &CsrMatrix<Float>,
+    momentum_matrices: &CsrMatrix<Float>,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
     let outward_face_normal = get_outward_face_normal(face, cell_index);
     let face_zone = &mesh.face_zones[&face.zone];
-    let c0 = face.cell_indices[0];
+    let c0 = cell_index;
     match face_zone.zone_type {
         FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => 0.,
         FaceConditionTypes::VelocityInlet => face_zone.vector_value.dot(&outward_face_normal),
@@ -359,29 +363,37 @@ fn get_face_flux(
             })
         }
         FaceConditionTypes::Interior => {
-            let c1 = face.cell_indices[1];
-            let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-            let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-            let v0 = Vector3 {
+            let mut c1 = face.cell_indices[0];
+            if c1 == cell_index {
+                c1 = face.cell_indices[1];
+            }
+            let vel0 = Vector3 {
                 x: u[c0],
                 y: v[c0],
                 z: w[c0],
             };
-            let v1 = Vector3 {
+            let vel1 = Vector3 {
                 x: u[c1],
                 y: v[c1],
                 z: w[c1],
             };
             match interpolation_scheme {
                 VelocityInterpolation::LinearWeighted => {
-                    outward_face_normal.dot(&(v0 + (v1 - v0) * x0 / (x0 + x1)))
+                    let dx0 = (mesh.cells[&c0].centroid - face.centroid).norm();
+                    let dx1 = (mesh.cells[&c1].centroid - face.centroid).norm();
+                    outward_face_normal.dot(&(vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)))
                 }
                 VelocityInterpolation::RhieChow => {
-                    // let a0 = momentum_matrices.get_entry(c0, c0).unwrap().into_value();
-                    // let a1 = momentum_matrices.get_entry(c1, c1).unwrap().into_value();
-                    // let p_grad_1 = calculate_scalar_gradient(&mesh, &p, cell_index, gradient_scheme);
-                    // 0.5 * (outward_face_normal.dot(&(v0+v1)) + (mesh.cells[&c0].volume / a0 + mesh.cells[&c1].volume / a1))
-                    0.
+                    let delta_xi = (mesh.cells[&c1].centroid - mesh.cells[&c0].centroid);
+                    let a0 = momentum_matrices.get_entry(c0, c0).unwrap().into_value();
+                    let a1 = momentum_matrices.get_entry(c1, c1).unwrap().into_value();
+                    let p_grad_0 = calculate_scalar_gradient(&mesh, &p, c0, gradient_scheme);
+                    let p_grad_1 = calculate_scalar_gradient(&mesh, &p, c1, gradient_scheme);
+                    let v0 = mesh.cells[&c0].volume;
+                    let v1 = mesh.cells[&c1].volume;
+                    0.5 * (outward_face_normal.dot(&(vel0 + vel1))
+                        + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / delta_xi.norm()
+                        - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&delta_xi))
                 }
             }
         }
@@ -659,6 +671,7 @@ fn build_momentum_matrices(
                 *cell_index,
                 velocity_interpolation_scheme,
                 gradient_scheme,
+                &a,
             );
             // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
             // TODO: Consider flipping convention of face normal direction and/or potentially
@@ -768,6 +781,7 @@ fn build_pressure_correction_matrices(
                 *cell_index,
                 velocity_interpolation_scheme,
                 gradient_scheme,
+                &momentum_matrices,
             );
             let inward_face_normal = get_inward_face_normal(&face, *cell_index);
             // The net mass flow rate through this face into this cell

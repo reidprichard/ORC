@@ -242,7 +242,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         MomentumDiscretization::CD,
         DiffusionScheme::CD,
         PressureInterpolation::SecondOrder,
-        VelocityInterpolation::LinearWeighted,
+        VelocityInterpolation::RhieChow,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         1000.,
         10.,
@@ -400,7 +400,7 @@ fn main() {
     // test_3d_1x3(iteration_count, 0.8, 0.5);
     // test_3d_3x3(iteration_count, 1.0, 0.1);
     // test_3d();
-    couette(iteration_count, 0.2, 0.2);
+    couette(iteration_count, 0.1, 0.1);
 
     // Interface: allow user to choose from
     // 1. Read mesh
