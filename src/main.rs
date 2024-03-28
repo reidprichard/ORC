@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![allow(unused)]
 
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
@@ -188,7 +187,7 @@ fn test_2d(iteration_count: Uint) {
     );
 }
 
-fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
+fn test_3d_1x3(iteration_count: Uint) {
     let cell_length = 1.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -229,7 +228,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 
     let settings = NumericalSettings::default();
     // High viscosity needed to keep Peclet under control
-    let (u, v, w, p) = solve_steady(
+    let (u, v, w, _) = solve_steady(
         &mut mesh,
         &settings,
         1000.,
@@ -238,24 +237,24 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         Uint::max(iteration_count / 1000, 1),
     );
 
-    for cell_number in 0..mesh.cells.len() {
-        let cell_velocity = Vector3 {
-            x: u[cell_number],
-            y: v[cell_number],
-            z: w[cell_number],
-        };
-        // assert!(cell_velocity.approx_equals(
-        //     &Vector3 {
-        //         x: 0.005,
-        //         y: 0.,
-        //         z: 0.
-        //     },
-        //     1e-6
-        // ));
-    }
+    // for cell_number in 0..mesh.cells.len() {
+    // let cell_velocity = Vector3 {
+    //     x: u[cell_number],
+    //     y: v[cell_number],
+    //     z: w[cell_number],
+    // };
+    // assert!(cell_velocity.approx_equals(
+    //     &Vector3 {
+    //         x: 0.005,
+    //         y: 0.,
+    //         z: 0.
+    //     },
+    //     1e-6
+    // ));
+    // }
 }
 
-fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
+fn test_3d_3x3(iteration_count: Uint) {
     let cell_length = 1. / 3.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -293,7 +292,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     }
 
     let settings = NumericalSettings::default();
-    let (u, v, w, p) = solve_steady(
+    let (u, v, w, _) = solve_steady(
         &mut mesh,
         &settings,
         1000.,
@@ -330,7 +329,7 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     // write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
 }
 
-fn couette(iteration_count: Uint) {
+fn couette(iteration_count: Uint, reporting_interval: Uint) {
     let channel_height = 0.001;
     let mu = 0.01;
     let dp = -5.;
@@ -365,7 +364,7 @@ fn couette(iteration_count: Uint) {
         1000.,
         mu,
         iteration_count,
-        Uint::max(iteration_count / 1000, 1),
+        if reporting_interval == 0 {Uint::max(iteration_count / 1000, 1)} else {reporting_interval},
     );
     // Initially guessed pressure field is exactly correct, so
     // this should be able to converge in 1 iteration. With 100k
@@ -393,19 +392,23 @@ fn couette(iteration_count: Uint) {
 fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
-    let reporting_interval: Uint = 10;
     let iteration_count: Uint = args
         .get(1)
         .unwrap_or(&"10".to_string())
         .parse()
         .expect("arg 1 should be an integer");
+    let reporting_interval: Uint = args
+        .get(2)
+        .unwrap_or(&"0".to_string())
+        .parse()
+        .expect("arg 2 should be an integer");
     validate_solvers();
     // test_gauss_seidel();
     // test_2d();
     // test_3d_1x3(iteration_count, 0.8, 0.5);
     // test_3d_3x3(iteration_count, 1.0, 1.0);
     // test_3d();
-    couette(iteration_count);
+    couette(iteration_count, reporting_interval);
 
     // Interface: allow user to choose from
     // 1. Read mesh

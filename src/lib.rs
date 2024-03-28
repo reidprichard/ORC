@@ -1,10 +1,3 @@
-// #![allow(dead_code)]
-// #![allow(unused)]
-
-// I need to store a list of cells
-// Each cell has an associated list of faces & nodes
-// Each cell has scalars & vectors
-
 use nalgebra_sparse::CsrMatrix;
 
 pub mod io;
