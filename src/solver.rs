@@ -320,6 +320,7 @@ fn calculate_pressure_gradient(
                 cell.face_indices
                     .iter()
                     .map(|face_index| {
+                        let face = &mesh.faces[&face_index];
                         let face_value: Float = get_face_pressure(
                             &mesh,
                             &p,
@@ -327,7 +328,7 @@ fn calculate_pressure_gradient(
                             PressureInterpolation::Linear,
                             gradient_scheme,
                         );
-                        face_value * (mesh.faces[face_index].centroid - cell.centroid)
+                        face_value * face.area * get_outward_face_normal(face, cell_index)
                     })
                     .fold(Vector3::zero(), |acc, v| acc + v)
                     / cell.volume
@@ -445,8 +446,8 @@ fn get_face_pressure(
                 }
                 PressureInterpolation::SecondOrder => {
                     let c0_grad = calculate_pressure_gradient(&mesh, &p, c0, gradient_scheme);
-                    println!("Pressure gradient: {c0_grad}");
-                    println!("Cell volume: {}", &mesh.cells[&c0].volume);
+                    // println!("Pressure gradient: {c0_grad}");
+                    // println!("Cell volume: {}", &mesh.cells[&c0].volume);
                     let c1_grad = calculate_pressure_gradient(&mesh, &p, c1, gradient_scheme);
                     let r_c0 = face.centroid - mesh.cells[&c0].centroid;
                     let r_c1 = face.centroid - mesh.cells[&c1].centroid;

@@ -367,10 +367,10 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     let (u, v, w, p) = solve_steady(
         &mut mesh,
         PressureVelocityCoupling::SIMPLE,
-        MomentumDiscretization::CD,
+        MomentumDiscretization::UD,
         DiffusionScheme::CD,
         PressureInterpolation::SecondOrder,
-        VelocityInterpolation::RhieChow,
+        VelocityInterpolation::LinearWeighted,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         1000.,
         0.001,
