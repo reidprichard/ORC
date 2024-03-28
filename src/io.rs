@@ -556,7 +556,6 @@ pub fn print_matrix(a: &CsrMatrix<Float>) {
 
 pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
     for i in 0..a.nrows() {
-        print!("{}: ", i);
         let mut s: String = String::from("");
         for j in 0..a.ncols() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
@@ -564,16 +563,16 @@ pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
                 if coeff == 0. {
                     s += "          , ";
                 } else {
-                    s += &format!("{: >9}, ", format!("{coeff:.2e}"));
+                    s += &format!("{: <9}, ", format!("{coeff:.2e}"));
                 }
             } else if coeff != 0. {
                 if i == j {
                     s += "*";
                 }
-                s += &format!("{}={: >9}, ", j, format!("{coeff:.2e}"));
+                s += &format!("{}={: <9}, ", j, format!("{coeff:.2e}"));
             }
         }
-        println!("{}: {} | {}", i, s, b[i]);
+        println!("{: >3}: {} | {:.2e}", i, s, b[i]);
     }
 }
 

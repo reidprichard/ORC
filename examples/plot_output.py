@@ -17,19 +17,30 @@ def main():
                 row_values.append([float(n) for n in match.groups()])
     x, y, z, u, v, w, p = list(zip(*row_values))
 
-    fig, ax = plt.subplots()
+    fig, axs = plt.subplots(nrows=2, layout="constrained")
 
     xi = np.linspace(min(x), max(x), 100)
     yi = np.linspace(min(y), max(y), 100)
     triang = tri.Triangulation(x, y)
-    interpolator = tri.LinearTriInterpolator(triang, p)
     Xi, Yi = np.meshgrid(xi, yi)
-    zi = interpolator(Xi, Yi)
-    cm = ax.contourf(xi,yi,zi)
 
+    p_interpolator = tri.LinearTriInterpolator(triang, p)
+    p_interpolated = p_interpolator(Xi, Yi)
+
+    u_interpolator = tri.LinearTriInterpolator(triang, u)
+    u_interpolated = u_interpolator(Xi, Yi)
+
+
+    du_dy = np.gradient(u_interpolated,axis=0) 
+
+    cm = axs[0].contourf(xi,yi,p_interpolated)
     fig.colorbar(cm, label="Gage Pressure [Pa]")
 
-    ax.quiver(x, y, u, v)
+    cm = axs[1].contourf(xi,yi,du_dy, cmap="inferno")
+    fig.colorbar(cm, label="du/dy [1/s]")
+
+    axs[0].quiver(x, y, u, v)
+
     plt.show()
 
 

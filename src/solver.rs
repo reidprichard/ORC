@@ -205,10 +205,10 @@ pub fn solve_steady(
                 );
                 if log_enabled!(log::Level::Debug) {
                     println!("\nPressure:");
-                    print_linear_system(
-                        &pressure_correction_matrices.a,
-                        &pressure_correction_matrices.b,
-                    );
+                    // print_linear_system(
+                    //     &pressure_correction_matrices.a,
+                    //     &pressure_correction_matrices.b,
+                    // );
                 }
 
                 // I think what's happening here is that, if Pe < 1 in all cells, a_nb will all
