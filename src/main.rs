@@ -356,7 +356,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 1.;
+    mesh.get_face_zone("INLET").scalar_value = 5.;
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
@@ -369,7 +369,7 @@ fn couette(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxatio
         PressureVelocityCoupling::SIMPLE,
         MomentumDiscretization::CD,
         DiffusionScheme::CD,
-        PressureInterpolation::LinearWeighted,
+        PressureInterpolation::Linear,
         VelocityInterpolation::LinearWeighted,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         1000.,
@@ -400,7 +400,7 @@ fn main() {
     // test_3d_1x3(iteration_count, 0.8, 0.5);
     // test_3d_3x3(iteration_count, 1.0, 0.1);
     // test_3d();
-    couette(iteration_count, 0.1, 0.1);
+    couette(iteration_count, 0.2, 0.2);
 
     // Interface: allow user to choose from
     // 1. Read mesh
