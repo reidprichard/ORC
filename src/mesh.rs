@@ -143,8 +143,7 @@ impl Default for Cell {
 pub struct Vertex {
     pub position: Vector3,
 }
-impl Vertex {
-}
+impl Vertex {}
 
 impl Default for Vertex {
     fn default() -> Vertex {
@@ -188,7 +187,7 @@ impl Mesh {
     pub fn get_face_zone(&mut self, zone_name: &str) -> &mut FaceZone {
         self.face_zones
             .iter_mut()
-            .map(|(zone_num, fz)| fz)
+            .map(|(_zone_num, fz)| fz)
             .filter(|fz| fz.name == zone_name)
             .next()
             .expect(&format!("face zone '{zone_name}' should exist in mesh"))
