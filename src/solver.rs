@@ -379,21 +379,10 @@ fn get_face_flux(
             };
             match interpolation_scheme {
                 VelocityInterpolation::LinearWeighted => {
-                    let c0 = face.cell_indices[0];
-                    let c1 = face.cell_indices[1];
-                    let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-                    let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                    outward_face_normal.dot(&Vector3 {
-                        x: &u[c0] + (&u[c1] - &u[c0]) * x0 / (x0 + x1),
-                        y: &v[c0] + (&v[c1] - &v[c0]) * x0 / (x0 + x1),
-                        z: &w[c0] + (&w[c1] - &w[c0]) * x0 / (x0 + x1),
-                    })
+                    let dx0 = (mesh.cells[&c0].centroid - face.centroid).norm();
+                    let dx1 = (mesh.cells[&c1].centroid - face.centroid).norm();
+                    outward_face_normal.dot(&(vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)))
                 }
-                // VelocityInterpolation::LinearWeighted => {
-                //     let dx0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-                //     let dx1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                //     outward_face_normal.dot(&(vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)))
-                // }
                 VelocityInterpolation::RhieChow => {
                     let delta_xi = (mesh.cells[&c1].centroid - mesh.cells[&c0].centroid);
                     let a0 = momentum_matrices.get_entry(c0, c0).unwrap().into_value();
