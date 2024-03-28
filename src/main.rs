@@ -178,7 +178,14 @@ fn test_2d(iteration_count: Uint) {
 
     let settings = NumericalSettings::default();
 
-    solve_steady(&mut mesh, &settings, 1000., 0.001, iteration_count);
+    solve_steady(
+        &mut mesh,
+        &settings,
+        1000.,
+        0.001,
+        iteration_count,
+        Uint::max(iteration_count / 1000, 1),
+    );
 }
 
 fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relaxation: Float) {
@@ -222,7 +229,14 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
 
     let settings = NumericalSettings::default();
     // High viscosity needed to keep Peclet under control
-    let (u, v, w, p) = solve_steady(&mut mesh, &settings, 1000., 10., iteration_count);
+    let (u, v, w, p) = solve_steady(
+        &mut mesh,
+        &settings,
+        1000.,
+        10.,
+        iteration_count,
+        Uint::max(iteration_count / 1000, 1),
+    );
 
     for cell_number in 0..mesh.cells.len() {
         let cell_velocity = Vector3 {
@@ -279,7 +293,14 @@ fn test_3d_3x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
     }
 
     let settings = NumericalSettings::default();
-    let (u, v, w, p) = solve_steady(&mut mesh, &settings, 1000., 100., iteration_count);
+    let (u, v, w, p) = solve_steady(
+        &mut mesh,
+        &settings,
+        1000.,
+        100.,
+        iteration_count,
+        Uint::max(iteration_count / 1000, 1),
+    );
 
     let mut avg_velocity = Vector3::zero();
     for cell_number in 0..mesh.cells.len() {
@@ -333,7 +354,14 @@ fn couette(iteration_count: Uint) {
         ..NumericalSettings::default()
     };
 
-    let (u, v, w, p) = solve_steady(&mut mesh, &settings, 1000., 0.01, iteration_count);
+    let (u, v, w, p) = solve_steady(
+        &mut mesh,
+        &settings,
+        1000.,
+        0.01,
+        iteration_count,
+        Uint::max(iteration_count / 1000, 1),
+    );
     // Initially guessed pressure field is exactly correct, so
     // this should be able to converge in 1 iteration. With 100k
     // Gauss-Seidel iterations, it's mostly correct in 1iter, but

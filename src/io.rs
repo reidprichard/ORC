@@ -1,3 +1,5 @@
+#![allow(unused_labels)]
+
 use crate::common::*;
 use crate::mesh::*;
 use itertools::Itertools;
@@ -57,27 +59,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let mut face_zones: HashMap<Uint, FaceZone> = HashMap::new();
     let mut cell_zones: HashMap<Uint, CellZone> = HashMap::new();
 
-    let mut node_indices: Vec<usize> = Vec::new();
-    let mut face_indices: Vec<usize> = Vec::new();
-    let mut cell_indices: Vec<usize> = Vec::new();
-
     let mut dimensions: u8 = 0;
-
-    struct CellType {
-        id: i8,
-        node_count: i16,
-        face_count: i16,
-    }
-    let tet = CellType {
-        id: 2,
-        node_count: 4,
-        face_count: 4,
-    };
-    let hex = CellType {
-        id: 3,
-        node_count: 8,
-        face_count: 6,
-    };
 
     let mut zone_name: String = String::new();
 
@@ -109,7 +91,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         .expect("second item ends with )")
                         .parse()
                         .expect("second item is integer dimension count");
-                    if (dimensions != 2 && dimensions != 3) {
+                    if dimensions != 2 && dimensions != 3 {
                         panic!("Mesh is not 2D or 3D.");
                     }
                 }
@@ -117,7 +99,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     skip_zone_zero!('read_nodes, section_header_blocks);
                     info!("section: {section_header_line}");
                     let items = read_section_header_common(&section_header_line);
-                    let (_, zone_id, start_index, end_index, node_type, dims) = items
+                    let (_, _, start_index, end_index, _, _) = items
                         .iter()
                         .map(|n| *n)
                         .collect_tuple()
@@ -149,7 +131,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 line_blocks[1]
                             ));
                             let mut z = 0.;
-                            if (dimensions == 3) {
+                            if dimensions == 3 {
                                 z = line_blocks[2].parse::<Float>().expect(&format!(
                                     "{} should be a string representation of a float",
                                     line_blocks[2]
@@ -186,7 +168,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 "(12" => 'read_cells: {
                     skip_zone_zero!('read_cells, section_header_blocks);
                     let items = read_section_header_common(&section_header_line);
-                    let (_, zone_id, start_index, end_index, zone_type, element_type) = items
+                    let (_, zone_id, _, _, zone_type, _) = items
                         .iter()
                         .map(|n| *n)
                         .collect_tuple()
@@ -200,7 +182,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 "(13" => 'read_faces: {
                     skip_zone_zero!('read_faces, section_header_blocks);
                     let items = read_section_header_common(&section_header_line);
-                    let (_, zone_id, start_index, end_index, boundary_type, face_type) = items
+                    let (_, zone_id, start_index, _, boundary_type, face_type) = items
                         .iter()
                         .map(|n| *n)
                         .collect_tuple()
@@ -295,7 +277,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         panic!("Unable to open mesh file for reading.");
     }
 
-    for (face_index, mut face) in &mut faces {
+    for (face_index, face) in &mut faces {
         if face.node_indices.len() < dimensions.into() {
             println!("dimensions: {}", face.node_indices.len());
             panic!("face has too few nodes");
@@ -384,7 +366,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 .norm(),
                         ) / 2.
                     };
-                let mut area: Float = face.node_indices.windows(2).fold(0., |acc, w| {
+                let area: Float = face.node_indices.windows(2).fold(0., |acc, w| {
                     acc + calculate_triangle_area(
                         &face.centroid,
                         &nodes[&w[0]].position,
@@ -392,7 +374,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     )
                 });
                 let first = face.node_indices[0];
-                let last = face.node_indices[face.node_indices.len() - 1];
+                let last = face.node_indices[node_count - 1];
                 area + calculate_triangle_area(
                     &face.centroid,
                     &nodes[&first].position,
@@ -410,7 +392,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             if *cell_index == usize::MAX {
                 continue;
             }
-            let mut cell = cells.entry(*cell_index).or_insert(Cell::default());
+            let cell = cells.entry(*cell_index).or_insert(Cell::default());
             cell.face_indices.push(*face_index);
             // TODO: more rigorous centroid calc
             cell.centroid += face.centroid;
@@ -418,14 +400,14 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         }
     }
 
-    for (cell_index, mut cell) in &mut cells {
+    for (cell_index, cell) in &mut cells {
         cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
             .face_indices
             .iter()
             .map(|n| faces.get(n).unwrap())
             .collect();
-        if (cell_faces.len() < (dimensions + 1) as usize) {
+        if cell_faces.len() < (dimensions + 1) as usize {
             panic!("cell has too few faces");
         }
         // 1/2 * b * h (area of triangle) for 2D
@@ -503,7 +485,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 }
 
-
 pub fn read_settings() {}
 
 pub fn read_data() {}
@@ -522,7 +503,8 @@ pub fn write_data(
             file,
             "{},\t({}, {}, {}),\t{}\n",
             cell.centroid, u[*cell_index], v[*cell_index], w[*cell_index], p[*cell_index]
-        );
+        )
+        .unwrap();
     }
 }
 

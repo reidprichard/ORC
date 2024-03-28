@@ -116,6 +116,7 @@ pub fn solve_steady(
     rho: Float,
     mu: Float,
     iteration_count: Uint,
+    reporting_interval: Uint,
 ) -> (
     DVector<Float>,
     DVector<Float>,
@@ -295,10 +296,12 @@ pub fn solve_steady(
                 let u_avg = u.iter().sum::<Float>() / (cell_count as Float);
                 let v_avg = v.iter().sum::<Float>() / (cell_count as Float);
                 let w_avg = w.iter().sum::<Float>() / (cell_count as Float);
-                println!(
-                    "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tpressure correction: {:.2e}\tvelocity correction: {:.2e}",
-                    iter_number, u_avg, v_avg, w_avg, avg_pressure_correction, avg_vel_correction
-                );
+                if (iter_number) % reporting_interval == 0 {
+                    println!(
+                        "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tpressure correction: {:.2e}\tvelocity correction: {:.2e}",
+                        iter_number, u_avg, v_avg, w_avg, avg_pressure_correction, avg_vel_correction
+                    );
+                }
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
                     panic!("solution diverged");
                 }
