@@ -1,4 +1,4 @@
-# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD
+# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD: A 3D, unstructured CFD solver
 
 ![Couette flow results](./examples/couette.png)
 
