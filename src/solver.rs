@@ -1,5 +1,6 @@
 use crate::io::{dvector_to_str, print_linear_system, print_matrix};
 use crate::mesh::*;
+use crate::GetEntry;
 use crate::{common::*, io::print_vec_scientific};
 use log::log_enabled;
 use nalgebra::DVector;
@@ -351,49 +352,53 @@ fn get_face_flux(
     let face = &mesh.faces[&face_index];
     let outward_face_normal = get_outward_face_normal(face, cell_index);
     let face_zone = &mesh.face_zones[&face.zone];
-    let c0 = cell_index;
     match face_zone.zone_type {
         FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => 0.,
         FaceConditionTypes::VelocityInlet => face_zone.vector_value.dot(&outward_face_normal),
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
             outward_face_normal.dot(&Vector3 {
-                x: u[c0],
-                y: v[c0],
-                z: w[c0],
+                x: u[cell_index],
+                y: v[cell_index],
+                z: w[cell_index],
             })
         }
         FaceConditionTypes::Interior => {
-            let mut c1 = face.cell_indices[0];
-            if c1 == cell_index {
-                c1 = face.cell_indices[1];
+            let mut neighbor_index = face.cell_indices[0];
+            if neighbor_index == cell_index {
+                neighbor_index = face.cell_indices[1];
             }
             let vel0 = Vector3 {
-                x: u[c0],
-                y: v[c0],
-                z: w[c0],
+                x: u[cell_index],
+                y: v[cell_index],
+                z: w[cell_index],
             };
             let vel1 = Vector3 {
-                x: u[c1],
-                y: v[c1],
-                z: w[c1],
+                x: u[neighbor_index],
+                y: v[neighbor_index],
+                z: w[neighbor_index],
             };
             match interpolation_scheme {
                 VelocityInterpolation::LinearWeighted => {
-                    let dx0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-                    let dx1 = (mesh.cells[&c1].centroid - face.centroid).norm();
+                    let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
+                    let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
                     outward_face_normal.dot(&(vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)))
                 }
                 VelocityInterpolation::RhieChow => {
-                    let delta_xi = (mesh.cells[&c1].centroid - mesh.cells[&c0].centroid);
-                    let a0 = momentum_matrices.get_entry(c0, c0).unwrap().into_value();
-                    let a1 = momentum_matrices.get_entry(c1, c1).unwrap().into_value();
-                    let p_grad_0 = calculate_scalar_gradient(&mesh, &p, c0, gradient_scheme);
-                    let p_grad_1 = calculate_scalar_gradient(&mesh, &p, c1, gradient_scheme);
-                    let v0 = mesh.cells[&c0].volume;
-                    let v1 = mesh.cells[&c1].volume;
+                    // WARNING: Something is wrong here
+                    let xi =
+                        mesh.cells[&neighbor_index].centroid - mesh.cells[&cell_index].centroid;
+                    // let a0 = momentum_matrices.get_entry(cell_index, cell_index).unwrap().into_value();
+                    let a0 = momentum_matrices.get(cell_index, cell_index);
+                    let a1 = momentum_matrices.get(neighbor_index, neighbor_index);
+                    let p_grad_0 =
+                        calculate_scalar_gradient(&mesh, &p, cell_index, gradient_scheme);
+                    let p_grad_1 =
+                        calculate_scalar_gradient(&mesh, &p, neighbor_index, gradient_scheme);
+                    let v0 = mesh.cells[&cell_index].volume;
+                    let v1 = mesh.cells[&neighbor_index].volume;
                     0.5 * (outward_face_normal.dot(&(vel0 + vel1))
-                        + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / delta_xi.norm()
-                        - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&delta_xi))
+                        + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / xi.norm()
+                        - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&xi))
                 }
             }
         }
