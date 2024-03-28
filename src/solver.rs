@@ -664,6 +664,7 @@ fn build_momentum_matrices_old(
     let mut u_source = initialize_DVector!(cell_count);
     let mut v_source = initialize_DVector!(cell_count);
     let mut w_source = initialize_DVector!(cell_count);
+    let test = CsrMatrix::from(&a);
 
     // Iterate over all cells in the mesh
     for (cell_index, cell) in &mesh.cells {
@@ -699,7 +700,7 @@ fn build_momentum_matrices_old(
                 *cell_index,
                 velocity_interpolation_scheme,
                 gradient_scheme,
-                &CsrMatrix::from(&a)
+                &test
             );
             // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
             // TODO: Consider flipping convention of face normal direction and/or potentially
