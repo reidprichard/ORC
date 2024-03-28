@@ -242,7 +242,7 @@ fn test_3d_1x3(iteration_count: Uint, momentum_relaxation: Float, pressure_relax
         MomentumDiscretization::CD,
         DiffusionScheme::CD,
         PressureInterpolation::SecondOrder,
-        VelocityInterpolation::RhieChow,
+        VelocityInterpolation::LinearWeighted,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         1000.,
         10.,
