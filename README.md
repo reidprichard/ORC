@@ -1,4 +1,4 @@
-# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD
+# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD: A 3D, unstructured CFD solver
 
 ![Couette flow results](./examples/couette.png)
 
@@ -27,8 +27,8 @@ Technical details:
   - Symmetry (not added yet)
 
 **Alpha state** with major functionality still in the works. Stability is lacking, but per the
-header image ORC can produce a parabolic laminar velocity profile in Couette flow. MPI is desperately 
-needed.
+header image ORC can produce a roughly parabolic laminar velocity profile in Couette flow. Multigrid
+is desperately needed.
 
 Roadmap:
 - [X] Read TGRID (ANSYS Fluent) mesh into memory
