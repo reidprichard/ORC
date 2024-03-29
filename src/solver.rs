@@ -13,6 +13,7 @@ use std::thread;
 
 const PARALLELIZE_U_V_W: bool = false;
 
+// TODO: make this hierarchical
 pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
     // Setting to 1.0 seems to cause problems
@@ -29,6 +30,7 @@ pub struct NumericalSettings {
     // LOTS of iterations (1k+) are needed due to lacking multigrid
     pub matrix_solver_iterations: Uint,
     pub matrix_solver_relaxation: Float,
+    pub matrix_solver_convergence_threshold: Float,
 }
 
 impl Default for NumericalSettings {
@@ -45,8 +47,9 @@ impl Default for NumericalSettings {
             pressure_relaxation: 0.25,
             momentum_relaxation: 0.5,
             matrix_solver: SolutionMethod::Jacobi,
-            matrix_solver_iterations: 1000,
+            matrix_solver_iterations: 100,
             matrix_solver_relaxation: 0.2,
+            matrix_solver_convergence_threshold: 1e-3,
         }
     }
 }
@@ -177,10 +180,8 @@ pub fn solve_steady(
                     numerical_settings.gradient_reconstruction,
                     rho,
                 );
-                // WARNING: CHANGE THIS!!!
                 a = &a + &a_di;
-                // a = a_di.clone();
-                if log_enabled!(log::Level::Debug) {
+                if log_enabled!(log::Level::Debug) && a.nrows() < 256 {
                     println!("\nMomentum:");
                     print_linear_system(&a, &b_u);
                 }
@@ -195,6 +196,7 @@ pub fn solve_steady(
                                 numerical_settings.matrix_solver_iterations,
                                 numerical_settings.matrix_solver,
                                 numerical_settings.matrix_solver_relaxation,
+                                numerical_settings.matrix_solver_convergence_threshold,
                             );
                         });
                         s.spawn(|| {
@@ -205,6 +207,7 @@ pub fn solve_steady(
                                 numerical_settings.matrix_solver_iterations,
                                 numerical_settings.matrix_solver,
                                 numerical_settings.matrix_solver_relaxation,
+                                numerical_settings.matrix_solver_convergence_threshold,
                             );
                         });
                         s.spawn(|| {
@@ -215,10 +218,12 @@ pub fn solve_steady(
                                 numerical_settings.matrix_solver_iterations,
                                 numerical_settings.matrix_solver,
                                 numerical_settings.matrix_solver_relaxation,
+                                numerical_settings.matrix_solver_convergence_threshold,
                             );
                         });
                     });
                 } else {
+                    println!("solving u");
                     iterative_solve(
                         &a,
                         &b_u,
@@ -226,7 +231,9 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_iterations,
                         numerical_settings.matrix_solver,
                         numerical_settings.matrix_solver_relaxation,
+                        numerical_settings.matrix_solver_convergence_threshold,
                     );
+                    println!("solving v");
                     iterative_solve(
                         &a,
                         &b_v,
@@ -234,7 +241,9 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_iterations,
                         numerical_settings.matrix_solver,
                         numerical_settings.matrix_solver_relaxation,
+                        numerical_settings.matrix_solver_convergence_threshold,
                     );
+                    println!("solving w");
                     iterative_solve(
                         &a,
                         &b_w,
@@ -242,6 +251,7 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_iterations,
                         numerical_settings.matrix_solver,
                         numerical_settings.matrix_solver_relaxation,
+                        numerical_settings.matrix_solver_convergence_threshold,
                     );
                 }
                 let pressure_correction_matrices = build_pressure_correction_matrices(
@@ -254,7 +264,7 @@ pub fn solve_steady(
                     numerical_settings,
                     rho,
                 );
-                if log_enabled!(log::Level::Debug) {
+                if log_enabled!(log::Level::Debug) && a.nrows() < 256 {
                     println!("\nPressure:");
                     print_linear_system(
                         &pressure_correction_matrices.a,
@@ -268,6 +278,7 @@ pub fn solve_steady(
                 // requires that sum(abs(a_nb)) < a_p for at least one row.
                 // What's the solution? Skip pressure correction if max Pe < 1?
                 // Reducing the iteration count (10k -> 10) seems to have fixed the issue for now.
+                println!("solving p");
                 iterative_solve(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
@@ -275,9 +286,10 @@ pub fn solve_steady(
                     numerical_settings.matrix_solver_iterations,
                     numerical_settings.matrix_solver,
                     numerical_settings.matrix_solver_relaxation,
+                    numerical_settings.matrix_solver_convergence_threshold,
                 );
 
-                if log_enabled!(log::Level::Info) {
+                if log_enabled!(log::Level::Info) && u.nrows() < 64 {
                     print!("u:  ");
                     print_vec_scientific(&u);
                     print!("v:  ");
@@ -305,8 +317,8 @@ pub fn solve_steady(
                 let w_avg = w.iter().sum::<Float>() / (cell_count as Float);
                 if (iter_number) % reporting_interval == 0 {
                     println!(
-                        "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tpressure correction: {:.2e}\tvelocity correction: {:.2e}",
-                        iter_number, u_avg, v_avg, w_avg, avg_pressure_correction, avg_vel_correction
+                        "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tvelocity correction: {:.2e}\tpressure correction: {:.2e}",
+                        iter_number, u_avg, v_avg, w_avg, avg_vel_correction, avg_pressure_correction
                     );
                 }
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
@@ -552,9 +564,9 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
                         }
                     });
                 assert_ne!(strongest_unmerged_neighbor, usize::MAX);
+                combined_cells.insert(strongest_unmerged_neighbor);
                 restriction_matrix_coo.push(i / 2, i, 1.0);
                 restriction_matrix_coo.push(i / 2, strongest_unmerged_neighbor, 1.0);
-                combined_cells.insert(strongest_unmerged_neighbor);
             });
         }
     }
@@ -569,6 +581,7 @@ fn multigrid_solve(
     smooth_method: SolutionMethod,
     smooth_iter_count: Uint,
     smooth_relaxation: Float,
+    smooth_convergence_threshold: Float,
     restriction_method: RestrictionMethods,
 ) -> DVector<Float> {
     // 1. Build restriction matrix R
@@ -587,10 +600,17 @@ fn multigrid_solve(
         smooth_iter_count,
         smooth_method,
         smooth_relaxation,
+        smooth_convergence_threshold,
     );
+    if log_enabled!(log::Level::Trace) {
+        println!(
+            "Multigrid level {}: |e| = {:.2e}",
+            multigrid_level, e_prime.norm()
+        );
+    }
 
     if multigrid_level < max_levels {
-        e_prime = multigrid_solve(
+        e_prime += multigrid_solve(
             &a_prime,
             &r_prime,
             multigrid_level + 1,
@@ -598,7 +618,24 @@ fn multigrid_solve(
             smooth_method,
             smooth_iter_count,
             smooth_relaxation,
+            smooth_convergence_threshold,
             restriction_method,
+        );
+    }
+    iterative_solve(
+        &a_prime,
+        &r_prime,
+        &mut e_prime,
+        smooth_iter_count,
+        smooth_method,
+        smooth_relaxation,
+        smooth_convergence_threshold,
+    );
+    if log_enabled!(log::Level::Trace) {
+        println!(
+            "Multigrid level {}: |e| = {:.2e}",
+            multigrid_level,
+            e_prime.norm()
         );
     }
     &restriction_matrix.transpose() * e_prime
@@ -611,7 +648,9 @@ pub fn iterative_solve(
     iteration_count: Uint,
     method: SolutionMethod,
     relaxation_factor: Float,
+    convergence_threshold: Float,
 ) {
+    let mut initial_residual:Float = 0.;
     match method {
         SolutionMethod::Jacobi => {
             let mut a_prime = a.clone();
@@ -623,25 +662,31 @@ pub fn iterative_solve(
                 b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
             for iter_num in 0..iteration_count {
-                if log_enabled!(log::Level::Trace) {
-                    println!(
-                        "[{:?}] Jacobi iteration {iter_num} = {}",
-                        std::thread::current().id(),
-                        dvector_to_str(&solution_vector)
-                    );
-                }
+                // if log_enabled!(log::Level::Trace) {
+                //     println!(
+                //         "[{:?}] Jacobi iteration {iter_num} = {}",
+                //         std::thread::current().id(),
+                //         dvector_to_str(&solution_vector)
+                //     );
+                // }
                 // It seems like there must be a way to avoid cloning solution_vector, even if that
                 // turns this into Gauss-Seidel
                 let prev_guess = solution_vector.clone();
-                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess)
-                    + prev_guess * (1. - relaxation_factor);
+                let residual = &b_prime - &a_prime * &prev_guess;
+                *solution_vector =
+                    relaxation_factor * &residual + prev_guess * (1. - relaxation_factor);
+                if iter_num == 0 {
+                    initial_residual = residual.norm();
+                } else if residual.norm() / initial_residual < convergence_threshold {
+                    break;
+                }
             }
         }
         SolutionMethod::GaussSeidel => {
             for iter_num in 0..iteration_count {
-                if log_enabled!(log::Level::Trace) {
-                    println!("Gauss-Seidel iteration {iter_num} = {solution_vector:?}");
-                }
+                // if log_enabled!(log::Level::Trace) {
+                //     println!("Gauss-Seidel iteration {iter_num} = {solution_vector:?}");
+                // }
                 for i in 0..a.nrows() {
                     solution_vector[i] = solution_vector[i] * (1. - relaxation_factor)
                         + relaxation_factor
@@ -657,10 +702,10 @@ pub fn iterative_solve(
                     }
                 }
             }
+            panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::Multigrid => {
-            let pre_smoothing_iters: Uint = iteration_count / 4;
-            let post_smoothing_iters: Uint = iteration_count / 2;
+            let pre_smoothing_iters: Uint = iteration_count;
             const COARSENING_LEVELS: Uint = 2;
             iterative_solve(
                 a,
@@ -669,6 +714,7 @@ pub fn iterative_solve(
                 pre_smoothing_iters,
                 SolutionMethod::Jacobi,
                 relaxation_factor,
+                convergence_threshold,
             );
             // TODO: find a way not to have to clone
             let r = b - a * solution_vector.clone();
@@ -680,15 +726,8 @@ pub fn iterative_solve(
                 SolutionMethod::Jacobi,
                 iteration_count,
                 1.0,
+                convergence_threshold,
                 RestrictionMethods::Strongest,
-            );
-            iterative_solve(
-                a,
-                b,
-                solution_vector,
-                post_smoothing_iters,
-                SolutionMethod::Jacobi,
-                relaxation_factor,
             );
         }
         _ => panic!("unsupported solution method"),
@@ -767,12 +806,12 @@ fn build_momentum_diffusion_matrix(
                     panic!("BC not supported");
                 }
             }; // end BC match
-            if log_enabled!(log::Level::Trace) {
-                println!(
-                    "cell {: >3}, face {: >3}: D_i = {: >9}",
-                    cell_index, face_index, d_i
-                );
-            }
+               // if log_enabled!(log::Level::Trace) {
+               //     println!(
+               //         "cell {: >3}, face {: >3}: D_i = {: >9}",
+               //         cell_index, face_index, d_i
+               //     );
+               // }
 
             let face_contribution = d_i;
             a_p += face_contribution;
@@ -884,19 +923,19 @@ fn build_momentum_matrices(
                 face.cell_indices[0]
             };
 
-            if log_enabled!(log::Level::Trace) {
-                println!(
-                    "cell {: >3}, face {: >3}: F_i = {: >9} {}",
-                    cell_index,
-                    face_index,
-                    f_i,
-                    if neighbor_cell_index == usize::MAX {
-                        "(boundary)"
-                    } else {
-                        ""
-                    }
-                );
-            }
+            // if log_enabled!(log::Level::Trace) {
+            //     println!(
+            //         "cell {: >3}, face {: >3}: F_i = {: >9} {}",
+            //         cell_index,
+            //         face_index,
+            //         f_i,
+            //         if neighbor_cell_index == usize::MAX {
+            //             "(boundary)"
+            //         } else {
+            //             ""
+            //         }
+            //     );
+            // }
 
             let a_nb: Float = match momentum_discretization {
                 MomentumDiscretization::UD => {
