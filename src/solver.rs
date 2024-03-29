@@ -508,7 +508,22 @@ fn get_face_pressure(
     }
 }
 
-pub fn multigrid_solve(
+fn build_restriction_matrix(a: &CsrMatrix<Float>) -> CsrMatrix<Float> {
+    let n = a.ncols() / 2 + a.ncols() % 2;
+    let mut restriction_matrix_coo = CooMatrix::<Float>::new(n, a.ncols());
+    for row_num in 0..n - 1 {
+        restriction_matrix_coo.push(row_num, 2 * row_num, 1.);
+        restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
+    }
+    // Must treat the last row separately since a.ncols() could be odd
+    restriction_matrix_coo.push(n - 1, 2 * (n - 1), 1.);
+    if 2 * (n - 1) + 1 < a.ncols() {
+        restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
+    }
+    CsrMatrix::from(&restriction_matrix_coo)
+}
+
+fn multigrid_solve(
     a: &CsrMatrix<Float>,
     r: &DVector<Float>,
     multigrid_level: Uint,
@@ -522,19 +537,8 @@ pub fn multigrid_solve(
     // 3. Create a' = R * a * R.⊺
     // 4. Solve a' * e' = r'
     // 5. If multigrid_level < max_level, recurse
-    let n = a.ncols() / 2 + a.ncols() % 2;
-    let mut restriction_matrix_coo = CooMatrix::<Float>::new(n, a.ncols());
-    for row_num in 0..n - 1 {
-        restriction_matrix_coo.push(row_num, 2 * row_num, 1.);
-        restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
-    }
-    // Must treat the last row separately since a.ncols() could be odd
-    restriction_matrix_coo.push(n - 1, 2 * (n - 1), 1.);
-    if 2 * (n - 1) + 1 < a.ncols() {
-        restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
-    }
-    let restriction_matrix = CsrMatrix::from(&restriction_matrix_coo);
-    let mut e_prime: DVector<Float> = initialize_DVector!(n);
+    let restriction_matrix = build_restriction_matrix(&a);
+    let mut e_prime: DVector<Float> = initialize_DVector!(a.ncols());
     let r_prime = &restriction_matrix * r;
     let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
     iterative_solve(
