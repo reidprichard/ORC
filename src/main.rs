@@ -351,6 +351,7 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
     let settings = NumericalSettings {
         momentum_relaxation: 0.1,
         pressure_relaxation: 0.1,
+        matrix_solver: SolutionMethod::Multigrid,
         matrix_solver_iterations: 1000,
         matrix_solver_relaxation: 0.1,
         pressure_interpolation: PressureInterpolation::SecondOrder,

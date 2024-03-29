@@ -10,7 +10,7 @@ use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 // use rayon::prelude::*;
 use std::thread;
 
-const PARALLELIZE_U_V_W: bool = true;
+const PARALLELIZE_U_V_W: bool = false;
 
 pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
@@ -529,9 +529,9 @@ pub fn multigrid_solve(
         restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
     }
     // Must treat the last row separately since a.ncols() could be odd
-    restriction_matrix_coo.push(n, 2 * (n - 1), 1.);
+    restriction_matrix_coo.push(n - 1, 2 * (n - 1), 1.);
     if 2 * (n - 1) + 1 < a.ncols() {
-        restriction_matrix_coo.push(n, 2 * (n - 1) + 1, 1.);
+        restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
     }
     let restriction_matrix = CsrMatrix::from(&restriction_matrix_coo);
     let mut e_prime: DVector<Float> = initialize_DVector!(n);
@@ -557,7 +557,7 @@ pub fn multigrid_solve(
             smooth_relaxation,
         );
     }
-    e_prime
+    &restriction_matrix.transpose() * e_prime
 }
 
 pub fn iterative_solve(
@@ -615,9 +615,9 @@ pub fn iterative_solve(
             }
         }
         SolutionMethod::Multigrid => {
-            const PRE_SMOOTHING: Uint = 10;
-            const POST_SMOOTHING: Uint = 20;
-            const COARSENING_LEVELS: Uint = 2;
+            const PRE_SMOOTHING: Uint = 20;
+            const POST_SMOOTHING: Uint = 50;
+            const COARSENING_LEVELS: Uint = 3;
             iterative_solve(
                 a,
                 b,
@@ -628,7 +628,15 @@ pub fn iterative_solve(
             );
             // TODO: find a way not to have to clone
             let r = b - a * solution_vector.clone();
-            *solution_vector += multigrid_solve(&a, &r, 1, COARSENING_LEVELS, SolutionMethod::Jacobi, 20, 0.5);
+            *solution_vector += multigrid_solve(
+                &a,
+                &r,
+                1,
+                COARSENING_LEVELS,
+                SolutionMethod::Jacobi,
+                50,
+                1.0,
+            );
             iterative_solve(
                 a,
                 b,
