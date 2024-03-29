@@ -34,7 +34,7 @@ impl Default for NumericalSettings {
     fn default() -> Self {
         NumericalSettings {
             pressure_velocity_coupling: PressureVelocityCoupling::SIMPLE,
-            momentum: MomentumDiscretization::CD,
+            momentum: MomentumDiscretization::CD1,
             diffusion: DiffusionScheme::CD,
             pressure_interpolation: PressureInterpolation::LinearWeighted,
             velocity_interpolation: VelocityInterpolation::LinearWeighted,
@@ -54,6 +54,7 @@ impl Default for NumericalSettings {
 pub enum SolutionMethod {
     GaussSeidel,
     Jacobi,
+    Multigrid,
 }
 
 #[derive(Copy, Clone)]
@@ -63,8 +64,12 @@ pub enum PressureVelocityCoupling {
 
 #[derive(Copy, Clone)]
 pub enum MomentumDiscretization {
+    // First-order upwind
     UD,
-    CD,
+    // Basic CD; first-order on arbitrary grid and second-order with even spacing
+    CD1,
+    // CD incorporating cell gradients; second-order on arbitrary grid
+    CD2,
 }
 
 #[derive(Copy, Clone)]
@@ -83,7 +88,8 @@ pub enum PressureInterpolation {
 #[derive(Copy, Clone)]
 pub enum VelocityInterpolation {
     LinearWeighted,
-    RhieChow, // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
+    // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
+    RhieChow,
 }
 
 #[derive(Copy, Clone)]
@@ -502,6 +508,58 @@ fn get_face_pressure(
     }
 }
 
+pub fn multigrid_solve(
+    a: &CsrMatrix<Float>,
+    r: &DVector<Float>,
+    multigrid_level: Uint,
+    max_levels: Uint,
+    smooth_method: SolutionMethod,
+    smooth_iter_count: Uint,
+    smooth_relaxation: Float,
+) -> DVector<Float> {
+    // 1. Build restriction matrix R
+    // 2. Restrict r to r'
+    // 3. Create a' = R * a * R.⊺
+    // 4. Solve a' * e' = r'
+    // 5. If multigrid_level < max_level, recurse
+    let n = a.ncols() / 2 + a.ncols() % 2;
+    let mut restriction_matrix_coo = CooMatrix::<Float>::new(n, a.ncols());
+    for row_num in 0..n - 1 {
+        restriction_matrix_coo.push(row_num, 2 * row_num, 1.);
+        restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
+    }
+    // Must treat the last row separately since a.ncols() could be odd
+    restriction_matrix_coo.push(n, 2 * (n - 1), 1.);
+    if 2 * (n - 1) + 1 < a.ncols() {
+        restriction_matrix_coo.push(n, 2 * (n - 1) + 1, 1.);
+    }
+    let restriction_matrix = CsrMatrix::from(&restriction_matrix_coo);
+    let mut e_prime: DVector<Float> = initialize_DVector!(n);
+    let r_prime = &restriction_matrix * r;
+    let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
+    iterative_solve(
+        &a_prime,
+        &r_prime,
+        &mut e_prime,
+        smooth_iter_count,
+        smooth_method,
+        smooth_relaxation,
+    );
+
+    if multigrid_level < max_levels {
+        e_prime = multigrid_solve(
+            &a_prime,
+            &r_prime,
+            multigrid_level + 1,
+            max_levels,
+            smooth_method,
+            smooth_iter_count,
+            smooth_relaxation,
+        );
+    }
+    e_prime
+}
+
 pub fn iterative_solve(
     a: &CsrMatrix<Float>,
     b: &DVector<Float>,
@@ -555,6 +613,30 @@ pub fn iterative_solve(
                     }
                 }
             }
+        }
+        SolutionMethod::Multigrid => {
+            const PRE_SMOOTHING: Uint = 10;
+            const POST_SMOOTHING: Uint = 20;
+            const COARSENING_LEVELS: Uint = 2;
+            iterative_solve(
+                a,
+                b,
+                solution_vector,
+                PRE_SMOOTHING,
+                SolutionMethod::Jacobi,
+                relaxation_factor,
+            );
+            // TODO: find a way not to have to clone
+            let r = b - a * solution_vector.clone();
+            *solution_vector += multigrid_solve(&a, &r, 1, COARSENING_LEVELS, SolutionMethod::Jacobi, 20, 0.5);
+            iterative_solve(
+                a,
+                b,
+                solution_vector,
+                POST_SMOOTHING,
+                SolutionMethod::Jacobi,
+                relaxation_factor,
+            );
         }
         _ => panic!("unsupported solution method"),
     }
@@ -769,7 +851,10 @@ fn build_momentum_matrices(
                     // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
                     Float::min(f_i, 0.)
                 }
-                MomentumDiscretization::CD => f_i / 2.,
+                MomentumDiscretization::CD1 => f_i / 2.,
+                // MomentumDiscretization::CD2 => {
+                //
+                // }
                 _ => panic!("unsupported momentum scheme"),
             };
 
@@ -812,7 +897,7 @@ fn build_pressure_correction_matrices(
 ) -> LinearSystem {
     let cell_count = mesh.cells.len();
     // The coefficients of the pressure correction matrix
-    let mut a = CooMatrix::new(cell_count, cell_count);
+    let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
     // This is the net mass flow rate into each cell
     let mut b = initialize_DVector!(cell_count);
 

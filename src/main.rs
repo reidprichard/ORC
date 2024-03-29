@@ -237,21 +237,21 @@ fn test_3d_1x3(iteration_count: Uint) {
         Uint::max(iteration_count / 1000, 1),
     );
 
-    // for cell_number in 0..mesh.cells.len() {
-    // let cell_velocity = Vector3 {
-    //     x: u[cell_number],
-    //     y: v[cell_number],
-    //     z: w[cell_number],
-    // };
-    // assert!(cell_velocity.approx_equals(
-    //     &Vector3 {
-    //         x: 0.005,
-    //         y: 0.,
-    //         z: 0.
-    //     },
-    //     1e-6
-    // ));
-    // }
+    for cell_number in 0..mesh.cells.len() {
+        let cell_velocity = Vector3 {
+            x: u[cell_number],
+            y: v[cell_number],
+            z: w[cell_number],
+        };
+        assert!(cell_velocity.approx_equals(
+            &Vector3 {
+                x: 0.005,
+                y: 0.,
+                z: 0.
+            },
+            1e-6
+        ));
+    }
 }
 
 fn test_3d_3x3(iteration_count: Uint) {
@@ -364,7 +364,11 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
         1000.,
         mu,
         iteration_count,
-        if reporting_interval == 0 {Uint::max(iteration_count / 1000, 1)} else {reporting_interval},
+        if reporting_interval == 0 {
+            Uint::max(iteration_count / 1000, 1)
+        } else {
+            reporting_interval
+        },
     );
     // Initially guessed pressure field is exactly correct, so
     // this should be able to converge in 1 iteration. With 100k
