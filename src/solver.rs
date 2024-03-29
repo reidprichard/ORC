@@ -577,9 +577,9 @@ fn multigrid_solve(
     // 4. Solve a' * e' = r'
     // 5. If multigrid_level < max_level, recurse
     let restriction_matrix = build_restriction_matrix(&a, restriction_method);
-    let mut e_prime: DVector<Float> = initialize_DVector!(a.ncols());
     let r_prime = &restriction_matrix * r;
     let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
+    let mut e_prime: DVector<Float> = initialize_DVector!(a_prime.ncols());
     iterative_solve(
         &a_prime,
         &r_prime,
