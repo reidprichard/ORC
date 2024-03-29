@@ -7,6 +7,7 @@ use crate::{common::*, io::print_vec_scientific};
 use log::log_enabled;
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
+use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
 
@@ -508,17 +509,54 @@ fn get_face_pressure(
     }
 }
 
-fn build_restriction_matrix(a: &CsrMatrix<Float>) -> CsrMatrix<Float> {
+#[derive(Copy, Clone)]
+enum RestrictionMethods {
+    Injection,
+    Strongest,
+}
+
+fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) -> CsrMatrix<Float> {
     let n = a.ncols() / 2 + a.ncols() % 2;
     let mut restriction_matrix_coo = CooMatrix::<Float>::new(n, a.ncols());
-    for row_num in 0..n - 1 {
-        restriction_matrix_coo.push(row_num, 2 * row_num, 1.);
-        restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
-    }
-    // Must treat the last row separately since a.ncols() could be odd
-    restriction_matrix_coo.push(n - 1, 2 * (n - 1), 1.);
-    if 2 * (n - 1) + 1 < a.ncols() {
-        restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
+    match method {
+        RestrictionMethods::Injection => {
+            for row_num in 0..n - 1 {
+                restriction_matrix_coo.push(row_num, 2 * row_num, 1.);
+                restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
+            }
+            // Must treat the last row separately since a.ncols() could be odd
+            restriction_matrix_coo.push(n - 1, 2 * (n - 1), 1.);
+            if 2 * (n - 1) + 1 < a.ncols() {
+                restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
+            }
+        }
+        RestrictionMethods::Strongest => {
+            // For each row, find the largest off-diagonal value
+            // If that cell hasn't already been combined, combine it with diagonal
+            // If it *has* been combined, find the next largest and so on.
+            let mut combined_cells = HashSet::<usize>::new();
+            a.row_iter().enumerate().for_each(|(i, row)| {
+                let mut largest_coefficient: Float = 0.;
+                let strongest_unmerged_neighbor =
+                    row.col_indices().iter().fold(usize::MAX, |acc, j| {
+                        if combined_cells.contains(j) {
+                            acc
+                        } else {
+                            let entry_abs = Float::abs(row.get_entry(*j).unwrap().into_value());
+                            if entry_abs > largest_coefficient {
+                                largest_coefficient = entry_abs;
+                                *j
+                            } else {
+                                acc
+                            }
+                        }
+                    });
+                assert_ne!(strongest_unmerged_neighbor, usize::MAX);
+                restriction_matrix_coo.push(i / 2, i, 1.0);
+                restriction_matrix_coo.push(i / 2, strongest_unmerged_neighbor, 1.0);
+                combined_cells.insert(strongest_unmerged_neighbor);
+            });
+        }
     }
     CsrMatrix::from(&restriction_matrix_coo)
 }
@@ -531,13 +569,14 @@ fn multigrid_solve(
     smooth_method: SolutionMethod,
     smooth_iter_count: Uint,
     smooth_relaxation: Float,
+    restriction_method: RestrictionMethods,
 ) -> DVector<Float> {
     // 1. Build restriction matrix R
     // 2. Restrict r to r'
     // 3. Create a' = R * a * R.⊺
     // 4. Solve a' * e' = r'
     // 5. If multigrid_level < max_level, recurse
-    let restriction_matrix = build_restriction_matrix(&a);
+    let restriction_matrix = build_restriction_matrix(&a, restriction_method);
     let mut e_prime: DVector<Float> = initialize_DVector!(a.ncols());
     let r_prime = &restriction_matrix * r;
     let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
@@ -559,6 +598,7 @@ fn multigrid_solve(
             smooth_method,
             smooth_iter_count,
             smooth_relaxation,
+            restriction_method,
         );
     }
     &restriction_matrix.transpose() * e_prime
@@ -640,6 +680,7 @@ pub fn iterative_solve(
                 SolutionMethod::Jacobi,
                 iteration_count,
                 1.0,
+                RestrictionMethods::Strongest,
             );
             iterative_solve(
                 a,
