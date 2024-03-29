@@ -136,7 +136,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 10000, numerical_settings);
+    initialize_pressure_field(mesh, &mut p, 10, numerical_settings);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -615,14 +615,14 @@ pub fn iterative_solve(
             }
         }
         SolutionMethod::Multigrid => {
-            const PRE_SMOOTHING: Uint = 20;
-            const POST_SMOOTHING: Uint = 50;
-            const COARSENING_LEVELS: Uint = 3;
+            let pre_smoothing_iters: Uint = iteration_count / 4;
+            let post_smoothing_iters: Uint = iteration_count / 2;
+            const COARSENING_LEVELS: Uint = 2;
             iterative_solve(
                 a,
                 b,
                 solution_vector,
-                PRE_SMOOTHING,
+                pre_smoothing_iters,
                 SolutionMethod::Jacobi,
                 relaxation_factor,
             );
@@ -634,14 +634,14 @@ pub fn iterative_solve(
                 1,
                 COARSENING_LEVELS,
                 SolutionMethod::Jacobi,
-                50,
+                iteration_count,
                 1.0,
             );
             iterative_solve(
                 a,
                 b,
                 solution_vector,
-                POST_SMOOTHING,
+                post_smoothing_iters,
                 SolutionMethod::Jacobi,
                 relaxation_factor,
             );
