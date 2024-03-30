@@ -11,8 +11,6 @@ use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
 
-const PARALLELIZE_U_V_W: bool = true;
-
 // TODO: make this hierarchical
 pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
@@ -185,9 +183,10 @@ pub fn solve_steady(
                     print_linear_system(&a, &b_u);
                 }
 
-                if PARALLELIZE_U_V_W {
+                if !log_enabled!(log::Level::Trace) {
                     thread::scope(|s| {
                         s.spawn(|| {
+                            trace!("solving u");
                             iterative_solve(
                                 &a,
                                 &b_u,
@@ -199,6 +198,7 @@ pub fn solve_steady(
                             );
                         });
                         s.spawn(|| {
+                            trace!("solving v");
                             iterative_solve(
                                 &a,
                                 &b_v,
@@ -210,6 +210,7 @@ pub fn solve_steady(
                             );
                         });
                         s.spawn(|| {
+                            trace!("solving w");
                             iterative_solve(
                                 &a,
                                 &b_w,
@@ -222,6 +223,7 @@ pub fn solve_steady(
                         });
                     });
                 } else {
+                    trace!("solving u");
                     iterative_solve(
                         &a,
                         &b_u,
@@ -231,6 +233,7 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_relaxation,
                         numerical_settings.matrix_solver_convergence_threshold,
                     );
+                    trace!("solving v");
                     iterative_solve(
                         &a,
                         &b_v,
@@ -240,6 +243,7 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_relaxation,
                         numerical_settings.matrix_solver_convergence_threshold,
                     );
+                    trace!("solving w");
                     iterative_solve(
                         &a,
                         &b_w,
@@ -268,6 +272,7 @@ pub fn solve_steady(
                     );
                 }
 
+                trace!("solving p");
                 // Zero the pressure correction for a reasonable initial guess
                 p_prime = p_prime * 0.;
                 iterative_solve(
@@ -618,7 +623,8 @@ fn multigrid_solve(
     }
 
     // 5. Recurse to max desired coarsening level
-    if multigrid_level < max_levels && a_prime.nrows() > 1 {
+    // Only coarsen if the matrix is bigger than 16x16 because come on
+    if multigrid_level < max_levels && a_prime.nrows() > 16 {
         e_prime += multigrid_solve(
             &a_prime,
             &r_prime,
@@ -683,7 +689,7 @@ pub fn iterative_solve(
                 if iter_num == 1 {
                     initial_residual = r;
                 } else if r / initial_residual < convergence_threshold {
-                    // trace!("Converged in {} iters", iter_num);
+                    trace!("Converged in {} iters", iter_num);
                     break;
                 }
             }
@@ -711,6 +717,8 @@ pub fn iterative_solve(
             panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::Multigrid => {
+            // It seems that too many coarsening levels can cause stability issues.
+            // I wonder if this is why Fluent has more complex AMG cycles.
             const COARSENING_LEVELS: Uint = 4;
             iterative_solve(
                 a,
