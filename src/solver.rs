@@ -63,6 +63,10 @@ impl Default for MatrixSolverSettings {
     }
 }
 
+pub struct MultigridSettings {
+    pub smoother: SolutionMethod
+}
+
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
     GaussSeidel,
