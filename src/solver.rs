@@ -140,7 +140,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    // initialize_pressure_field(mesh, &mut p, 1000, numerical_settings);
+    initialize_pressure_field(mesh, &mut p, 1000, numerical_settings);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -278,9 +278,9 @@ pub fn solve_steady(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    numerical_settings.matrix_solver_iterations * 10,
+                    numerical_settings.matrix_solver_iterations,
                     numerical_settings.matrix_solver,
-                    numerical_settings.matrix_solver_relaxation / 2.,
+                    numerical_settings.matrix_solver_relaxation,
                     numerical_settings.matrix_solver_convergence_threshold,
                 );
 
@@ -596,13 +596,13 @@ fn multigrid_solve(
     restriction_method: RestrictionMethods,
 ) -> DVector<Float> {
     // 1. Build restriction matrix R
-    // 2. Restrict r to r'
-    // 3. Create a' = R * a * R.⊺
-    // 4. Solve a' * e' = r'
     // 5. If multigrid_level < max_level, recurse
     let restriction_matrix = build_restriction_matrix(&a, restriction_method);
+    // 2. Restrict r to r'
     let r_prime = &restriction_matrix * r;
+    // 3. Create a' = R * a * R.⊺
     let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
+    // 4. Solve a' * e' = r'
     let mut e_prime: DVector<Float> = initialize_DVector!(a_prime.ncols());
     iterative_solve(
         &a_prime,
@@ -621,7 +621,8 @@ fn multigrid_solve(
         );
     }
 
-    if multigrid_level < max_levels {
+    // 5. Recurse to max desired coarsening level
+    if multigrid_level < max_levels && a_prime.nrows() > 1 {
         e_prime += multigrid_solve(
             &a_prime,
             &r_prime,
@@ -633,6 +634,7 @@ fn multigrid_solve(
             smooth_convergence_threshold,
             restriction_method,
         );
+        // Smooth after incorporating corrections from coarser grid
         iterative_solve(
             &a_prime,
             &r_prime,
@@ -640,7 +642,7 @@ fn multigrid_solve(
             smooth_iter_count,
             smooth_method,
             smooth_relaxation,
-            smooth_convergence_threshold,
+            smooth_convergence_threshold / 10.,
         );
         if log_enabled!(log::Level::Trace) {
             println!(
