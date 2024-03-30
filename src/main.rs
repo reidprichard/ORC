@@ -108,7 +108,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     let mu = 0.1;
     let rho = 1000.;
     let dp = -10.;
-    let dx = 0.01;
+    let dx = 0.002;
 
     // *********** Read mesh ************
     let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
@@ -152,26 +152,15 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         iteration_count,
         Uint::max(reporting_interval, 1),
     );
-    // Initially guessed pressure field is exactly correct, so
-    // this should be able to converge in 1 iteration. With 100k
-    // Gauss-Seidel iterations, it's mostly correct in 1iter, but
-    // consecutive iterations worsen the result. Is it an issue
-    // with pressure-velocity coupling? Not enough mesh? I think
-    // it's pressure-velocity coupling, as lots of inner iterations
-    // produces correct-ish results, while lots of outer iterations
-    // produces a pseudo-turbulent velocity profile. Disabling velocity
-    // correction produces a noisy and inconsistent velocity field,
-    // but it's much closer to correct than with pressure correction
-    // enabled.
     write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into());
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
-    // if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
-    //     print!("channel_flow flow validation failed.");
-    // } else {
-    //     print!("channel_flow flow validation passed.");
-    // }
+    if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
+        print!("channel_flow flow validation failed.");
+    } else {
+        print!("channel_flow flow validation passed.");
+    }
     println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
 }
 
