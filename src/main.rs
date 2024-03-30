@@ -129,7 +129,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     let settings = NumericalSettings {
         // This needs to be EXTREMELY low (~0.01)
         // What is causing the solution to oscillate?
-        momentum_relaxation: 0.01,
+        momentum_relaxation: 0.8,
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings {
             solver_type: SolutionMethod::Multigrid,
