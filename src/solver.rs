@@ -764,7 +764,7 @@ pub fn iterative_solve(
         SolutionMethod::Multigrid => {
             // It seems that too many coarsening levels can cause stability issues.
             // I wonder if this is why Fluent has more complex AMG cycles.
-            const COARSENING_LEVELS: Uint = 4;
+            const COARSENING_LEVELS: Uint = 3;
             iterative_solve(
                 a,
                 b,
