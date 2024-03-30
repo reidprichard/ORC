@@ -14,11 +14,9 @@ unstructured grids with the following numerical schemes and details:
 - Pressure interpolation: linear and second-order
 - Velocity interpolation: linear and Rhie-Chow distance-based
 
-**Alpha state** with major stability issues. Relaxation factors must be very
+**Alpha state** with major stability issues. Pressure relaxation factor must be very
 small to converge to the correct solution. As the pressure relaxation factor
-increases, the solution fields become extremely spurious. Increasing momentum
-relaxation produces a reasonable laminar velocity field but with lower velocities
-than should be seen.
+increases, the solution fields become extremely spurious. 
 
 Supported cell types:
 - Tetrahedron (4 faces, 4 nodes)
