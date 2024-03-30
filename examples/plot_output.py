@@ -142,12 +142,13 @@ def plot_channel_flow():
 
     # *** Figure 1 ***
     fig, axs = plt.subplots(nrows=2, layout="constrained", sharex=True, sharey=True)
+    fig.suptitle("Pressure-Driven Channel Flow")
     p_interpolator = tri.LinearTriInterpolator(triang, p)
     p_interpolated = p_interpolator(Xi, Yi)
     cm = axs[0].contourf(xi, yi, p_interpolated, levels=10)
     fig.colorbar(cm, label="Gage Pressure [Pa]")
     axs[0].quiver(x, y, u, v)
-    axs[0].set_title("Velocity vectors; pressure contours")
+    axs[0].set_title("Velocity Vectors; Pressure Contours")
     axs[0].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
 
@@ -161,16 +162,18 @@ def plot_channel_flow():
     # p_grad = np.gradient(p_interpolated, xi, yi)
     # axs[1].quiver(xi, yi, p_grad[1]*0, p_grad[0])
 
-    fig.colorbar(cm, label="du/dy [1/s]")
+    fig.colorbar(cm, label="Velocity gradient [1/s]")
     fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
     fig, ax = plt.subplots()
-    fig.suptitle("Velocity profile vs analytical")
+    fig.suptitle("Pressure-Driven Channel Flow")
     a = CHANNEL_HEIGHT
     u_analytical = 1 / (2 * MU) * DP / DX * (yi**2 - a * yi)
     ax.plot(yi, u_analytical)
     ax.scatter(y, u)
+    ax.set_xlabel("Y [m]")
+    ax.set_ylabel("U [m/s]")
     fig.savefig("./examples/channel_flow_velocity_profile.png")
 
     tile_all_matplotlib_figures()
