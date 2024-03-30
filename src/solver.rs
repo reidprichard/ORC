@@ -68,6 +68,7 @@ pub enum SolutionMethod {
     GaussSeidel,
     Jacobi,
     Multigrid,
+    BiCGSTAB,
 }
 
 #[derive(Copy, Clone)]
@@ -706,11 +707,10 @@ pub fn iterative_solve(
             for iter_num in 0..iteration_count {
                 // It seems like there must be a way to avoid cloning solution_vector, even if that
                 // turns this into Gauss-Seidel
-                let prev_guess = solution_vector.clone();
-                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess)
-                    + &prev_guess * (1. - relaxation_factor);
+                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &*solution_vector)
+                    + &*solution_vector * (1. - relaxation_factor);
 
-                let r = (b - a * prev_guess).norm();
+                let r = (b - a * &*solution_vector).norm();
                 if iter_num == 1 {
                     initial_residual = r;
                 } else if r / initial_residual < convergence_threshold {
@@ -741,6 +741,18 @@ pub fn iterative_solve(
             }
             panic!("Gauss-Seidel out for maintenance :)");
         }
+        SolutionMethod::BiCGSTAB => {
+            let x = solution_vector.clone();
+            let mut r = b - a * x;
+            let mut r_hat = DVector::from_column_slice(&vec![1.; r.nrows()]);
+            let mut rho = &r.dot(&r_hat);
+            let mut p = r.clone();
+            for iter_num in 0..iteration_count {
+                let nu = a * &p;
+                let alpha = rho / r_hat.dot(&nu);
+                let h = &*solution_vector + alpha * &p;
+            }
+        }
         SolutionMethod::Multigrid => {
             // It seems that too many coarsening levels can cause stability issues.
             // I wonder if this is why Fluent has more complex AMG cycles.
@@ -755,7 +767,7 @@ pub fn iterative_solve(
                 convergence_threshold,
             );
             // TODO: find a way not to have to clone
-            let r = b - a * solution_vector.clone();
+            let r = b - a * &*solution_vector;
             *solution_vector += multigrid_solve(
                 &a,
                 &r,
