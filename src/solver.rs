@@ -268,12 +268,8 @@ pub fn solve_steady(
                     );
                 }
 
-                // I think what's happening here is that, if Pe < 1 in all cells, a_nb will all
-                // have the same sign in each row of the pressure correction system. This means
-                // that sum(abs(a_nb)) == a_p for each row, whereas the boundedness criterion
-                // requires that sum(abs(a_nb)) < a_p for at least one row.
-                // What's the solution? Skip pressure correction if max Pe < 1?
-                // Reducing the iteration count (10k -> 10) seems to have fixed the issue for now.
+                // Zero the pressure correction for a reasonable initial guess
+                p_prime = p_prime * 0.;
                 iterative_solve(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
