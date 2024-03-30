@@ -344,6 +344,8 @@ pub fn solve_steady(
                     );
                 }
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
+                    // TODO: Some undefined behavior seems to be causing this to trigger
+                    // intermittently
                     panic!("solution diverged");
                 }
             }
@@ -353,11 +355,7 @@ pub fn solve_steady(
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(
-    mesh: &mut Mesh,
-    p: &mut DVector<Float>,
-    iteration_count: Uint,
-) {
+fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
     println!("Initializing pressure field...");
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
@@ -395,7 +393,15 @@ fn initialize_pressure_field(
         a_coo.push(*i, *i, a_ii);
     }
     let a = &CsrMatrix::from(&a_coo);
-    iterative_solve(&a, &b, p, iteration_count, SolutionMethod::Jacobi, 0.5, 1e-6);
+    iterative_solve(
+        &a,
+        &b,
+        p,
+        iteration_count,
+        SolutionMethod::Jacobi,
+        0.5,
+        1e-6,
+    );
     println!("Done!");
 }
 
@@ -742,6 +748,7 @@ pub fn iterative_solve(
             panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::BiCGSTAB => {
+            // TODO: Optimize this
             let mut r = b - a * &*solution_vector;
             let r_hat_0 = DVector::from_column_slice(&vec![1.; r.nrows()]);
             let mut rho = r.dot(&r_hat_0);
@@ -1156,11 +1163,11 @@ fn apply_pressure_correction(
 .into_value()
             });
         u[*cell_index] =
-            &u[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.x;
+            &u[*cell_index] + velocity_correction.x * numerical_settings.momentum_relaxation;
         v[*cell_index] =
-            &v[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.y;
+            &v[*cell_index] + velocity_correction.y * numerical_settings.momentum_relaxation;
         w[*cell_index] =
-            &w[*cell_index] * (1. - numerical_settings.momentum_relaxation) + velocity_correction.z;
+            &w[*cell_index] + velocity_correction.z * numerical_settings.momentum_relaxation;
         avg_velocity_corr_magnitude += velocity_correction.norm();
     }
     (
