@@ -127,12 +127,16 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
+        // This needs to be EXTREMELY low (~0.01)
+        // What is causing the solution to oscillate?
         momentum_relaxation: 0.01,
-        pressure_relaxation: 0.01,
-        matrix_solver: SolutionMethod::Multigrid,
-        matrix_solver_iterations: 100,
-        matrix_solver_relaxation: 0.6, // ~0.5 seems like roughly upper limit
-        matrix_solver_convergence_threshold: 1e-3,
+        pressure_relaxation: 0.02,
+        matrix_solver: MatrixSolverSettings {
+            solver_type: SolutionMethod::Multigrid,
+            iterations: 100,
+            relaxation: 0.6, // ~0.5 seems like roughly upper limit
+            relative_convergence_threshold: 1e-3,
+        },
         momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
@@ -146,7 +150,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         rho,
         mu,
         iteration_count,
-        Uint::max(reporting_interval,1)
+        Uint::max(reporting_interval, 1),
     );
     // Initially guessed pressure field is exactly correct, so
     // this should be able to converge in 1 iteration. With 100k

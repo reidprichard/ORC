@@ -24,11 +24,7 @@ pub struct NumericalSettings {
     pub gradient_reconstruction: GradientReconstructionMethods,
     pub pressure_relaxation: Float,
     pub momentum_relaxation: Float,
-    pub matrix_solver: SolutionMethod,
-    // It seems like too many iterations cause pv coupling to go crazy
-    pub matrix_solver_iterations: Uint,
-    pub matrix_solver_relaxation: Float,
-    pub matrix_solver_convergence_threshold: Float,
+    pub matrix_solver: MatrixSolverSettings,
 }
 
 impl Default for NumericalSettings {
@@ -44,10 +40,25 @@ impl Default for NumericalSettings {
             ),
             pressure_relaxation: 0.25,
             momentum_relaxation: 0.5,
-            matrix_solver: SolutionMethod::Jacobi,
-            matrix_solver_iterations: 100,
-            matrix_solver_relaxation: 0.2,
-            matrix_solver_convergence_threshold: 1e-3,
+            matrix_solver: MatrixSolverSettings::default(),
+        }
+    }
+}
+
+pub struct MatrixSolverSettings {
+    pub solver_type: SolutionMethod,
+    // It seems like too many iterations can cause pv coupling to go crazy
+    pub iterations: Uint,
+    pub relaxation: Float,
+    pub relative_convergence_threshold: Float,
+}
+impl Default for MatrixSolverSettings {
+    fn default() -> Self {
+        MatrixSolverSettings {
+            solver_type: SolutionMethod::Multigrid,
+            iterations: 50,
+            relaxation: 0.5,
+            relative_convergence_threshold: 0.001,
         }
     }
 }
@@ -191,10 +202,12 @@ pub fn solve_steady(
                                 &a,
                                 &b_u,
                                 &mut u,
-                                numerical_settings.matrix_solver_iterations,
-                                numerical_settings.matrix_solver,
-                                numerical_settings.matrix_solver_relaxation,
-                                numerical_settings.matrix_solver_convergence_threshold,
+                                numerical_settings.matrix_solver.iterations,
+                                numerical_settings.matrix_solver.solver_type,
+                                numerical_settings.matrix_solver.relaxation,
+                                numerical_settings
+                                    .matrix_solver
+                                    .relative_convergence_threshold,
                             );
                         });
                         s.spawn(|| {
@@ -203,10 +216,12 @@ pub fn solve_steady(
                                 &a,
                                 &b_v,
                                 &mut v,
-                                numerical_settings.matrix_solver_iterations,
-                                numerical_settings.matrix_solver,
-                                numerical_settings.matrix_solver_relaxation,
-                                numerical_settings.matrix_solver_convergence_threshold,
+                                numerical_settings.matrix_solver.iterations,
+                                numerical_settings.matrix_solver.solver_type,
+                                numerical_settings.matrix_solver.relaxation,
+                                numerical_settings
+                                    .matrix_solver
+                                    .relative_convergence_threshold,
                             );
                         });
                         s.spawn(|| {
@@ -215,10 +230,12 @@ pub fn solve_steady(
                                 &a,
                                 &b_w,
                                 &mut w,
-                                numerical_settings.matrix_solver_iterations,
-                                numerical_settings.matrix_solver,
-                                numerical_settings.matrix_solver_relaxation,
-                                numerical_settings.matrix_solver_convergence_threshold,
+                                numerical_settings.matrix_solver.iterations,
+                                numerical_settings.matrix_solver.solver_type,
+                                numerical_settings.matrix_solver.relaxation,
+                                numerical_settings
+                                    .matrix_solver
+                                    .relative_convergence_threshold,
                             );
                         });
                     });
@@ -228,30 +245,36 @@ pub fn solve_steady(
                         &a,
                         &b_u,
                         &mut u,
-                        numerical_settings.matrix_solver_iterations,
-                        numerical_settings.matrix_solver,
-                        numerical_settings.matrix_solver_relaxation,
-                        numerical_settings.matrix_solver_convergence_threshold,
+                        numerical_settings.matrix_solver.iterations,
+                        numerical_settings.matrix_solver.solver_type,
+                        numerical_settings.matrix_solver.relaxation,
+                        numerical_settings
+                            .matrix_solver
+                            .relative_convergence_threshold,
                     );
                     trace!("solving v");
                     iterative_solve(
                         &a,
                         &b_v,
                         &mut v,
-                        numerical_settings.matrix_solver_iterations,
-                        numerical_settings.matrix_solver,
-                        numerical_settings.matrix_solver_relaxation,
-                        numerical_settings.matrix_solver_convergence_threshold,
+                        numerical_settings.matrix_solver.iterations,
+                        numerical_settings.matrix_solver.solver_type,
+                        numerical_settings.matrix_solver.relaxation,
+                        numerical_settings
+                            .matrix_solver
+                            .relative_convergence_threshold,
                     );
                     trace!("solving w");
                     iterative_solve(
                         &a,
                         &b_w,
                         &mut w,
-                        numerical_settings.matrix_solver_iterations,
-                        numerical_settings.matrix_solver,
-                        numerical_settings.matrix_solver_relaxation,
-                        numerical_settings.matrix_solver_convergence_threshold,
+                        numerical_settings.matrix_solver.iterations,
+                        numerical_settings.matrix_solver.solver_type,
+                        numerical_settings.matrix_solver.relaxation,
+                        numerical_settings
+                            .matrix_solver
+                            .relative_convergence_threshold,
                     );
                 }
                 let pressure_correction_matrices = build_pressure_correction_matrices(
@@ -279,10 +302,12 @@ pub fn solve_steady(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    numerical_settings.matrix_solver_iterations,
-                    numerical_settings.matrix_solver,
-                    numerical_settings.matrix_solver_relaxation,
-                    numerical_settings.matrix_solver_convergence_threshold,
+                    numerical_settings.matrix_solver.iterations,
+                    numerical_settings.matrix_solver.solver_type,
+                    numerical_settings.matrix_solver.relaxation,
+                    numerical_settings
+                        .matrix_solver
+                        .relative_convergence_threshold,
                 );
 
                 if log_enabled!(log::Level::Info) && u.nrows() < 64 {
