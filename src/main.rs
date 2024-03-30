@@ -128,10 +128,10 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
         momentum_relaxation: 0.01,
-        pressure_relaxation: 0.01, // 0.25 converges, 0.5 diverges
+        pressure_relaxation: 0.01,
         matrix_solver: SolutionMethod::Multigrid,
-        matrix_solver_iterations: 20,
-        matrix_solver_relaxation: 0.5,
+        matrix_solver_iterations: 100,
+        matrix_solver_relaxation: 0.5, // 0.5 seems like roughly upper limit
         matrix_solver_convergence_threshold: 1e-3,
         momentum: MomentumDiscretization::CD1,
         pressure_interpolation: PressureInterpolation::SecondOrder,
@@ -146,11 +146,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         rho,
         mu,
         iteration_count,
-        if reporting_interval == 0 {
-            Uint::max(iteration_count / 1000, 1)
-        } else {
-            reporting_interval
-        },
+        Uint::max(reporting_interval,1)
     );
     // Initially guessed pressure field is exactly correct, so
     // this should be able to converge in 1 iteration. With 100k
