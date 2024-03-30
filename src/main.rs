@@ -37,7 +37,15 @@ fn validate_solvers() {
     let b = DVector::from_column_slice(&vec![3., 2., 1.]);
     let mut x = DVector::from_column_slice(&vec![0., 0., 0.]);
 
-    iterative_solve(&a, &b, &mut x, 10000, SolutionMethod::Jacobi, 0.5, TOL/10.);
+    iterative_solve(
+        &a,
+        &b,
+        &mut x,
+        10000,
+        SolutionMethod::Jacobi,
+        0.5,
+        TOL / 10.,
+    );
 
     for row_num in 0..a.nrows() {
         assert!(
@@ -94,48 +102,108 @@ fn validate_solvers() {
     // TODO: Validate multigrid
 }
 
-// fn test_gauss_seidel() {
-//     println!("*** Testing Gauss-Seidel for correctness. ***");
-//     const TOL: Float = 1e-6;
-//     // | 2 0 1 |   | 3 |
-//     // | 0 3 2 | = | 2 |
-//     // | 2 0 4 |   | 1 |
-//     //
-//     // | 1 0 0 |   | 11/6 |   | 1.833 |
-//     // | 0 1 0 |   | 10/9 |   | 1.111 |
-//     // | 0 0 1 | = | -2/3 | = | -0.67 |
-//     let mut a_tri: TriMat<Float> = TriMat::new((3, 3));
-//     a_tri.push(0, 0, 2.);
-//     a_tri.push(0, 2, 1.);
-//
-//     a_tri.push(1, 1, 3.);
-//     a_tri.push(1, 2, 2.);
-//
-//     a_tri.push(2, 0, 2.);
-//     a_tri.push(2, 2, 4.);
-//
-//     let a = a_tri.to_csr();
-//     // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-//     let b = CsVec::new(3, vec![0,1,2], vec![3., 2., 1.]);
-//
-//     let mut x = CsVec::new(3, vec![0,1,2], vec![0., 0., 0.]);
-//
-//     solve_linear_system(&a, &b, &mut x, 20, SolutionMethod::GaussSeidel, 1.0);
-//
-//     for row_num in 0..a.rows() {
-//         assert!(
-//             Float::abs(
-//                 a.get(row_num, 0).unwrap_or(&0.) * x[0]
-//                     + a.get(row_num, 1).unwrap_or(&0.) * x[1]
-//                     + a.get(row_num, 2).unwrap_or(&0.) * x[2]
-//                     - b[row_num]
-//             ) < TOL
-//         );
-//     }
-//
-//     println!("x = {x:?}");
-//     println!("*** Gauss-Seidel test passed. ***");
-// }
+fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
+    // ************ Constants ********
+    let channel_height = 0.001;
+    let mu = 0.1;
+    let rho = 1000.;
+    let dp = -10.;
+    let dx = 0.01;
+
+    // *********** Read mesh ************
+    let mut mesh = orc::io::read_mesh("./examples/channel_flow_flow.msh");
+
+    // ************ Set boundary conditions **********
+    mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
+
+    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    mesh.get_face_zone("INLET").scalar_value = -dp;
+
+    mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+    mesh.get_face_zone("OUTLET").scalar_value = 0.;
+
+    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
+    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
+
+    // ************* Set numerical methods ***************
+    let settings = NumericalSettings {
+        momentum_relaxation: 0.01,
+        pressure_relaxation: 0.01, // 0.25 converges, 0.5 diverges
+        matrix_solver: SolutionMethod::Multigrid,
+        matrix_solver_iterations: 20,
+        matrix_solver_relaxation: 0.5,
+        matrix_solver_convergence_threshold: 1e-3,
+        momentum: MomentumDiscretization::CD1,
+        pressure_interpolation: PressureInterpolation::SecondOrder,
+        velocity_interpolation: VelocityInterpolation::LinearWeighted,
+        ..NumericalSettings::default()
+    };
+
+    // ************ Solve **************
+    let (u, v, w, p) = solve_steady(
+        &mut mesh,
+        &settings,
+        rho,
+        mu,
+        iteration_count,
+        if reporting_interval == 0 {
+            Uint::max(iteration_count / 1000, 1)
+        } else {
+            reporting_interval
+        },
+    );
+    // Initially guessed pressure field is exactly correct, so
+    // this should be able to converge in 1 iteration. With 100k
+    // Gauss-Seidel iterations, it's mostly correct in 1iter, but
+    // consecutive iterations worsen the result. Is it an issue
+    // with pressure-velocity coupling? Not enough mesh? I think
+    // it's pressure-velocity coupling, as lots of inner iterations
+    // produces correct-ish results, while lots of outer iterations
+    // produces a pseudo-turbulent velocity profile. Disabling velocity
+    // correction produces a noisy and inconsistent velocity field,
+    // but it's much closer to correct than with pressure correction
+    // enabled.
+    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into());
+
+    let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
+    let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
+    // if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
+    //     print!("channel_flow flow validation failed.");
+    // } else {
+    //     print!("channel_flow flow validation passed.");
+    // }
+    println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
+}
+
+fn main() {
+    env_logger::init();
+    let start = Instant::now();
+    let args: Vec<String> = env::args().collect();
+    let iteration_count: Uint = args
+        .get(1)
+        .unwrap_or(&"10".to_string())
+        .parse()
+        .expect("arg 1 should be an integer");
+    let reporting_interval: Uint = args
+        .get(2)
+        .unwrap_or(&"0".to_string())
+        .parse()
+        .expect("arg 2 should be an integer");
+    validate_solvers();
+    channel_flow(iteration_count, reporting_interval);
+
+    // Interface: allow user to choose from
+    // 1. Read mesh
+    // 2. Read data
+    // 3. Read settings
+    // 4. Write mesh
+    // 5. Write data
+    // 6. Write settings
+    // 7. Run solver
+    println!("Complete in {}.", start.elapsed().as_secs());
+}
+
+// ************** old cases *************
 
 fn test_2d(iteration_count: Uint) {
     let domain_height = 1.;
@@ -329,110 +397,4 @@ fn test_3d_3x3(iteration_count: Uint) {
     //     1e-3
     // ));
     // write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
-}
-
-fn couette(iteration_count: Uint, reporting_interval: Uint) {
-    // ************ Constants ********
-    let channel_height = 0.001;
-    let mu = 0.1;
-    let rho = 1000.;
-    let dp = -10.;
-    let dx = 0.01;
-
-    // *********** Read mesh ************
-    let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
-
-    // ************ Set boundary conditions **********
-    mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
-
-    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = -dp;
-
-    mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
-    mesh.get_face_zone("OUTLET").scalar_value = 0.;
-
-    mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
-    mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
-
-    // ************* Set numerical methods ***************
-    let settings = NumericalSettings {
-        momentum_relaxation: 0.01,
-        pressure_relaxation: 0.01, // 0.25 converges, 0.5 diverges
-        matrix_solver: SolutionMethod::Multigrid,
-        matrix_solver_iterations: 20,
-        matrix_solver_relaxation: 0.5,
-        matrix_solver_convergence_threshold: 1e-3,
-        momentum: MomentumDiscretization::CD1,
-        pressure_interpolation: PressureInterpolation::SecondOrder,
-        velocity_interpolation: VelocityInterpolation::LinearWeighted,
-        ..NumericalSettings::default()
-    };
-
-    // ************ Solve **************
-    let (u, v, w, p) = solve_steady(
-        &mut mesh,
-        &settings,
-        rho,
-        mu,
-        iteration_count,
-        if reporting_interval == 0 {
-            Uint::max(iteration_count / 1000, 1)
-        } else {
-            reporting_interval
-        },
-    );
-    // Initially guessed pressure field is exactly correct, so
-    // this should be able to converge in 1 iteration. With 100k
-    // Gauss-Seidel iterations, it's mostly correct in 1iter, but
-    // consecutive iterations worsen the result. Is it an issue
-    // with pressure-velocity coupling? Not enough mesh? I think
-    // it's pressure-velocity coupling, as lots of inner iterations
-    // produces correct-ish results, while lots of outer iterations
-    // produces a pseudo-turbulent velocity profile. Disabling velocity
-    // correction produces a noisy and inconsistent velocity field,
-    // but it's much closer to correct than with pressure correction
-    // enabled.
-    write_data(&mesh, &u, &v, &w, &p, "./examples/couette.csv".into());
-
-    let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
-    let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
-    // if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
-    //     print!("Couette flow validation failed.");
-    // } else {
-    //     print!("Couette flow validation passed.");
-    // }
-    println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
-}
-
-fn main() {
-    env_logger::init();
-    let start = Instant::now();
-    let args: Vec<String> = env::args().collect();
-    let iteration_count: Uint = args
-        .get(1)
-        .unwrap_or(&"10".to_string())
-        .parse()
-        .expect("arg 1 should be an integer");
-    let reporting_interval: Uint = args
-        .get(2)
-        .unwrap_or(&"0".to_string())
-        .parse()
-        .expect("arg 2 should be an integer");
-    validate_solvers();
-    // test_gauss_seidel();
-    // test_2d();
-    // test_3d_1x3(iteration_count, 0.8, 0.5);
-    // test_3d_3x3(iteration_count, 1.0, 1.0);
-    // test_3d();
-    couette(iteration_count, reporting_interval);
-
-    // Interface: allow user to choose from
-    // 1. Read mesh
-    // 2. Read data
-    // 3. Read settings
-    // 4. Write mesh
-    // 5. Write data
-    // 6. Write settings
-    // 7. Run solver
-    println!("Complete in {}.", start.elapsed().as_secs());
 }

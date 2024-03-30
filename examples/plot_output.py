@@ -117,17 +117,17 @@ def tile_all_matplotlib_figures() -> None:
         plt.show()
 
 
-def plot_couette():
-    MU = 0.01
+def plot_channel_flow():
+    MU = 0.1
     DP = -10
-    DX = 0.01
+    DX = 0.002
     CHANNEL_HEIGHT = 0.001
 
     FLOAT = "[\\d|\\.|e|\\-]+"
     VECTOR = f"\\(({FLOAT}),\\s+({FLOAT}),\\s+({FLOAT})\\)"
     datafile_pattern = re.compile(f"{VECTOR},\\s+{VECTOR},\\s+({FLOAT})")
     row_values = []
-    with open("./examples/couette.csv") as simulation_data:
+    with open("./examples/channel_flow.csv") as simulation_data:
         lines = simulation_data.readlines()
         for line in lines:
             match = datafile_pattern.match(line)
@@ -162,7 +162,7 @@ def plot_couette():
     # axs[1].quiver(xi, yi, p_grad[1]*0, p_grad[0])
 
     fig.colorbar(cm, label="du/dy [1/s]")
-    fig.savefig("./examples/couette.png", dpi=300)
+    fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
     fig, ax = plt.subplots()
@@ -171,9 +171,10 @@ def plot_couette():
     u_analytical = 1 / (2 * MU) * DP / DX * (yi**2 - a * yi)
     ax.plot(yi, u_analytical)
     ax.scatter(y, u)
+    fig.savefig("./examples/channel_flow_velocity_profile.png")
 
     tile_all_matplotlib_figures()
 
 
 if __name__ == "__main__":
-    plot_couette()
+    plot_channel_flow()
