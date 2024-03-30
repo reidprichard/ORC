@@ -52,5 +52,7 @@ Roadmap:
 - [ ] Optimize performance (10%; preliminary profiling and adjustment has been done)
 
 Validation:
-Only very preliminary validation has been performed. As seen below, the velocity profile for steady, pressure-driven channel flow matches the analytical profile reasonably well.
+Only very preliminary validation has been performed. As seen below, the
+velocity profile for steady, pressure-driven channel flow exactly matches the
+analytical profile.
 ![Channel flow velocity profile](./examples/channel_flow_velocity_profile.png)
