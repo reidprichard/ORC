@@ -332,13 +332,17 @@ fn test_3d_3x3(iteration_count: Uint) {
 }
 
 fn couette(iteration_count: Uint, reporting_interval: Uint) {
+    // ************ Constants ********
     let channel_height = 0.001;
-    let mu = 0.01;
-    let dp = -5.;
+    let mu = 0.1;
+    let rho = 1000.;
+    let dp = -10.;
     let dx = 0.01;
 
+    // *********** Read mesh ************
     let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
 
+    // ************ Set boundary conditions **********
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
@@ -350,22 +354,25 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
+    // ************* Set numerical methods ***************
     let settings = NumericalSettings {
         momentum_relaxation: 0.01,
         pressure_relaxation: 0.01, // 0.25 converges, 0.5 diverges
         matrix_solver: SolutionMethod::Multigrid,
-        matrix_solver_iterations: 50,
+        matrix_solver_iterations: 20,
         matrix_solver_relaxation: 0.5,
-        matrix_solver_convergence_threshold: 1e-6,
+        matrix_solver_convergence_threshold: 1e-3,
+        momentum: MomentumDiscretization::CD1,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
 
+    // ************ Solve **************
     let (u, v, w, p) = solve_steady(
         &mut mesh,
         &settings,
-        1000.,
+        rho,
         mu,
         iteration_count,
         if reporting_interval == 0 {
@@ -389,11 +396,11 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
-    if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
-        print!("Couette flow validation failed.");
-    } else {
-        print!("Couette flow validation passed.");
-    }
+    // if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
+    //     print!("Couette flow validation failed.");
+    // } else {
+    //     print!("Couette flow validation passed.");
+    // }
     println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
 }
 

@@ -5,28 +5,14 @@ import matplotlib.tri as tri
 from matplotlib.figure import Figure
 import numpy as np
 import re
-from typing import Literal
 import win32api
 
-def tile_all_matplotlib_figures(
-    resize_figs: bool = False, show: bool = True, show_mode: Literal["basic", "enhanced"] = "enhanced"
-) -> None:
+
+def tile_all_matplotlib_figures() -> None:
     """Moves all active matplotlib figures into a rectangular grid.
     If only one figure exists, it will be moved to the center of the screen.
     Must be called after figure creation and before calling plt.show(). Only
     works in Windows, but should not be hard to make it work on other OS's.
-
-    Parameters
-    ----------
-    1. resize_figs : bool, (default False)
-            - If True, figures will be both moved and resized so that all
-              figures fit display area.
-    2. show : bool (default True)
-            - If True, figures will be shown.
-    3. show_mode : Literal["basic", "enhanced"] (default "basic")
-            - If "enhanced", plots will be shown in a manner where pressing
-              `enter` in the console closes them all. If "basic", `plt.show()`
-              will simply be called.
     """
 
     def move_figure(
@@ -106,25 +92,6 @@ def tile_all_matplotlib_figures(
         fig_y = int((monitor_coords[0][3] - fig_height) / 2)
         move_figure(fig, xy=(fig_x, fig_y))
         # return
-    elif resize_figs:
-        print("WARNING: `resize_figs` is not working as intended.")
-        col_count = math.floor(math.sqrt(monitor_coords[0][2] / monitor_coords[0][3]) * math.ceil(math.sqrt(fig_count)))
-
-        row_count = math.ceil(fig_count / col_count)
-        print(f"{col_count=},{row_count=}")
-
-        fig_width = int((monitor_coords[0][2] - (col_count + 1) * HORIZONTAL_PADDING) / col_count)
-        fig_height = int(
-            (monitor_coords[0][3] - (row_count + 1) * VERTICAL_PADDING) / row_count
-        )  # TODO: Make pairs (height/width) lists
-
-        for n in fignums:
-            i = (n - 1) % col_count
-            j = int((n - 1) / col_count)
-            x_start = HORIZONTAL_PADDING * (i + 1) + i * fig_width
-            y_start = VERTICAL_PADDING * (j + 1) + j * fig_height
-            print(f"{x_start}-{x_start+fig_width}, {y_start}-{y_start+fig_height}")
-            move_figure(plt.figure(n), (x_start, y_start), (fig_width, fig_height))
     else:
         window_x = HORIZONTAL_PADDING
         window_y = VERTICAL_PADDING
@@ -146,18 +113,15 @@ def tile_all_matplotlib_figures(
                         window_y = monitor_coords[monitor_index][1] + VERTICAL_PADDING
             move_figure(fig, xy=(window_x, window_y))
             window_x += fig_width + HORIZONTAL_PADDING
-    if show:
-        if len(plt.get_fignums()) > 0:
-            if show_mode == "enhanced":
-                plt.show(block=False)
-                input("Press [enter] to close all plots.")
-                plt.close("all")
-            else:
-                plt.show()
+    if len(plt.get_fignums()) > 0:
+        plt.show()
 
 
 def plot_couette():
     MU = 0.01
+    DP = -10
+    DX = 0.01
+    CHANNEL_HEIGHT = 0.001
 
     FLOAT = "[\\d|\\.|e|\\-]+"
     VECTOR = f"\\(({FLOAT}),\\s+({FLOAT}),\\s+({FLOAT})\\)"
@@ -203,9 +167,8 @@ def plot_couette():
     # *** Figure 2 ***
     fig, ax = plt.subplots()
     fig.suptitle("Velocity profile vs analytical")
-    dp_dx = (np.min(p) - np.max(p)) / (np.max(x) - np.min(x))
-    a = np.max(y) - np.min(y)
-    u_analytical = 1 / (2 * MU) * dp_dx * (yi**2 - a * yi)
+    a = CHANNEL_HEIGHT
+    u_analytical = 1 / (2 * MU) * DP / DX * (yi**2 - a * yi)
     ax.plot(yi, u_analytical)
     ax.scatter(y, u)
 
