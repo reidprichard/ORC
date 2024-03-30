@@ -788,7 +788,7 @@ pub fn iterative_solve(
                 &r,
                 1,
                 COARSENING_LEVELS,
-                SolutionMethod::Jacobi,
+                SolutionMethod::BiCGSTAB,
                 iteration_count,
                 relaxation_factor,
                 convergence_threshold,
