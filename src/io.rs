@@ -144,13 +144,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                     ..Vertex::default()
                                 },
                             );
-                            debug!(
-                                "Node {}: {} {} {}",
-                                node_number,
-                                format_pos_padded(x),
-                                format_pos_padded(y),
-                                format_pos_padded(z)
-                            );
+                            // debug!(
+                            //     "Node {}: {} {} {}",
+                            //     node_number,
+                            //     format_pos_padded(x),
+                            //     format_pos_padded(y),
+                            //     format_pos_padded(z)
+                            // );
                         }
                         match mesh_file_lines.next() {
                             Some(line_contents) => {
@@ -211,7 +211,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         if current_line.starts_with(")") {
                             break 'face_loop;
                         }
-                        debug!("Face {face_number}: {current_line}");
+                        // debug!("Face {face_number}: {current_line}");
                         let line_blocks: Vec<&str> =
                             current_line.split_ascii_whitespace().collect();
                         if line_blocks.len() < 2 {
@@ -383,10 +383,10 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             }
         };
         // I don't really understand the reference semantics here
-        info!(
-            "Face {}: centroid={}, area={:.2e}",
-            face_index, face.centroid, face.area
-        );
+        // info!(
+        //     "Face {}: centroid={}, area={:.2e}",
+        //     face_index, face.centroid, face.area
+        // );
         for cell_index in &face.cell_indices {
             // Could this check be done with a filter or something?
             if *cell_index == usize::MAX {
@@ -416,10 +416,10 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             acc + f.area * Float::abs((f.centroid - cell.centroid).dot(&f.normal))
                 / (dimensions as Float)
         });
-        info!(
-            "Cell {}: centroid={}, volume={:.2e}",
-            cell_index, cell.centroid, cell.volume
-        );
+        // info!(
+        //     "Cell {}: centroid={}, volume={:.2e}",
+        //     cell_index, cell.centroid, cell.volume
+        // );
     }
 
     println!(

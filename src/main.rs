@@ -9,6 +9,7 @@ use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
 use std::env;
+use std::time::Instant;
 
 fn validate_solvers() {
     const TOL: Float = 1e-6;
@@ -36,7 +37,7 @@ fn validate_solvers() {
     let b = DVector::from_column_slice(&vec![3., 2., 1.]);
     let mut x = DVector::from_column_slice(&vec![0., 0., 0.]);
 
-    iterative_solve(&a, &b, &mut x, 10000, SolutionMethod::Jacobi, 0.5, 1e-3);
+    iterative_solve(&a, &b, &mut x, 10000, SolutionMethod::Jacobi, 0.5, TOL/10.);
 
     for row_num in 0..a.nrows() {
         assert!(
@@ -90,7 +91,7 @@ fn validate_solvers() {
     //
     // println!("x = {x:?}");
     // println!("*** Gauss-Seidel solver validated. ***");
-    // TODO: Multigrid validation
+    // TODO: Validate multigrid
 }
 
 // fn test_gauss_seidel() {
@@ -350,12 +351,13 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
     let settings = NumericalSettings {
-        momentum_relaxation: 0.1,
-        pressure_relaxation: 0.1,
+        momentum_relaxation: 0.2,
+        pressure_relaxation: 0.2,
         matrix_solver: SolutionMethod::Multigrid,
-        matrix_solver_iterations: 100,
+        matrix_solver_iterations: 20,
         matrix_solver_relaxation: 0.1,
-        pressure_interpolation: PressureInterpolation::SecondOrder,
+        matrix_solver_convergence_threshold: 1e-5,
+        pressure_interpolation: PressureInterpolation::LinearWeighted,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
@@ -397,6 +399,7 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
 
 fn main() {
     env_logger::init();
+    let start = Instant::now();
     let args: Vec<String> = env::args().collect();
     let iteration_count: Uint = args
         .get(1)
@@ -424,5 +427,5 @@ fn main() {
     // 5. Write data
     // 6. Write settings
     // 7. Run solver
-    println!("Complete.");
+    println!("Complete in {}.", start.elapsed().as_secs());
 }

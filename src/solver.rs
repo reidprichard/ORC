@@ -4,7 +4,7 @@ use crate::io::{dvector_to_str, print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::GetEntry;
 use crate::{common::*, io::print_vec_scientific};
-use log::log_enabled;
+use log::{log_enabled, trace};
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 use std::collections::HashSet;
@@ -140,11 +140,10 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 10, numerical_settings);
+    initialize_pressure_field(mesh, &mut p, 10000, numerical_settings);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
-    // let mut a = initialize_momentum_matrix(&mesh);
     let mut b_u = initialize_DVector!(cell_count);
     let mut b_v = initialize_DVector!(cell_count);
     let mut b_w = initialize_DVector!(cell_count);
@@ -223,7 +222,6 @@ pub fn solve_steady(
                         });
                     });
                 } else {
-                    println!("solving u");
                     iterative_solve(
                         &a,
                         &b_u,
@@ -233,7 +231,6 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_relaxation,
                         numerical_settings.matrix_solver_convergence_threshold,
                     );
-                    println!("solving v");
                     iterative_solve(
                         &a,
                         &b_v,
@@ -243,7 +240,6 @@ pub fn solve_steady(
                         numerical_settings.matrix_solver_relaxation,
                         numerical_settings.matrix_solver_convergence_threshold,
                     );
-                    println!("solving w");
                     iterative_solve(
                         &a,
                         &b_w,
@@ -278,14 +274,13 @@ pub fn solve_steady(
                 // requires that sum(abs(a_nb)) < a_p for at least one row.
                 // What's the solution? Skip pressure correction if max Pe < 1?
                 // Reducing the iteration count (10k -> 10) seems to have fixed the issue for now.
-                println!("solving p");
                 iterative_solve(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
                     &mut p_prime,
-                    numerical_settings.matrix_solver_iterations,
+                    numerical_settings.matrix_solver_iterations * 10,
                     numerical_settings.matrix_solver,
-                    numerical_settings.matrix_solver_relaxation,
+                    numerical_settings.matrix_solver_relaxation / 2.,
                     numerical_settings.matrix_solver_convergence_threshold,
                 );
 
@@ -343,25 +338,38 @@ fn initialize_pressure_field(
     // - Wall: d/dn (psi) = 0
     // - Inlet: d/dn (psi) = V
     // - Outlet: psi = 0
-    for _ in 0..iteration_count {
-        for cell_index in 0..mesh.cells.len() {
-            let cell = &mesh.cells[&cell_index];
-            p[cell_index] = cell
-                .face_indices
-                .iter()
-                .map(|face_index| {
-                    get_face_pressure(
-                        &mesh,
-                        &p,
-                        *face_index,
-                        PressureInterpolation::LinearWeighted,
-                        numerical_settings.gradient_reconstruction,
-                    )
-                })
-                .sum::<Float>()
-                / (cell.face_indices.len() as Float);
+    let n = mesh.cells.len();
+    let mut a_coo = CooMatrix::<Float>::new(n, n);
+    let mut b = initialize_DVector!(a_coo.nrows());
+
+    for (i, cell) in &mesh.cells {
+        let mut a_ii = 0.;
+        for face in cell
+            .face_indices
+            .iter()
+            .map(|face_index| &mesh.faces[face_index])
+        {
+            match mesh.face_zones[&face.zone].zone_type {
+                FaceConditionTypes::Interior => {
+                    let neighbor_cell_index = if face.cell_indices[0] == *i {
+                        face.cell_indices[1]
+                    } else {
+                        face.cell_indices[0]
+                    };
+                    a_coo.push(*i, neighbor_cell_index, 1.0);
+                    a_ii -= 1.0;
+                }
+                FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+                    a_ii -= 1e2;
+                    b[*i] -= mesh.face_zones[&face.zone].scalar_value * 1e2;
+                }
+                _ => (),
+            }
         }
+        a_coo.push(*i, *i, a_ii);
     }
+    let a = &CsrMatrix::from(&a_coo);
+    iterative_solve(&a, &b, p, 100000, SolutionMethod::Multigrid, 0.25, 1e-3);
 }
 
 fn get_velocity_source_term(_location: Vector3) -> Vector3 {
@@ -548,25 +556,28 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
             // If it *has* been combined, find the next largest and so on.
             let mut combined_cells = HashSet::<usize>::new();
             a.row_iter().enumerate().for_each(|(i, row)| {
-                let mut largest_coefficient: Float = 0.;
+                let mut largest_coefficient: Float = Float::MAX;
                 let strongest_unmerged_neighbor =
                     row.col_indices().iter().fold(usize::MAX, |acc, j| {
-                        if combined_cells.contains(j) {
+                        // not efficient to look this up each time
+                        if combined_cells.contains(j) || i == *j {
                             acc
                         } else {
-                            let entry_abs = Float::abs(row.get_entry(*j).unwrap().into_value());
-                            if entry_abs > largest_coefficient {
-                                largest_coefficient = entry_abs;
+                            let entry = a.get(i, *j);
+                            if entry < largest_coefficient {
+                                largest_coefficient = entry;
                                 *j
                             } else {
                                 acc
                             }
                         }
                     });
-                assert_ne!(strongest_unmerged_neighbor, usize::MAX);
-                combined_cells.insert(strongest_unmerged_neighbor);
-                restriction_matrix_coo.push(i / 2, i, 1.0);
-                restriction_matrix_coo.push(i / 2, strongest_unmerged_neighbor, 1.0);
+                if strongest_unmerged_neighbor != usize::MAX {
+                    // panic!("Multigrid failed. It is likely the solution has diverged.");
+                    combined_cells.insert(strongest_unmerged_neighbor);
+                    restriction_matrix_coo.push(i / 2, i, 1.0);
+                    restriction_matrix_coo.push(i / 2, strongest_unmerged_neighbor, 1.0);
+                }
             });
         }
     }
@@ -605,7 +616,8 @@ fn multigrid_solve(
     if log_enabled!(log::Level::Trace) {
         println!(
             "Multigrid level {}: |e| = {:.2e}",
-            multigrid_level, e_prime.norm()
+            multigrid_level,
+            (&r_prime - &a_prime * &e_prime).norm()
         );
     }
 
@@ -621,23 +633,24 @@ fn multigrid_solve(
             smooth_convergence_threshold,
             restriction_method,
         );
-    }
-    iterative_solve(
-        &a_prime,
-        &r_prime,
-        &mut e_prime,
-        smooth_iter_count,
-        smooth_method,
-        smooth_relaxation,
-        smooth_convergence_threshold,
-    );
-    if log_enabled!(log::Level::Trace) {
-        println!(
-            "Multigrid level {}: |e| = {:.2e}",
-            multigrid_level,
-            e_prime.norm()
+        iterative_solve(
+            &a_prime,
+            &r_prime,
+            &mut e_prime,
+            smooth_iter_count,
+            smooth_method,
+            smooth_relaxation,
+            smooth_convergence_threshold,
         );
+        if log_enabled!(log::Level::Trace) {
+            println!(
+                "Multigrid level {}: |e| = {:.2e}",
+                multigrid_level,
+                (&r_prime - &a_prime * &e_prime).norm() // e_prime.norm()
+            );
+        }
     }
+    // Prolong correction vector
     &restriction_matrix.transpose() * e_prime
 }
 
@@ -650,7 +663,7 @@ pub fn iterative_solve(
     relaxation_factor: Float,
     convergence_threshold: Float,
 ) {
-    let mut initial_residual:Float = 0.;
+    let mut initial_residual: Float = 0.;
     match method {
         SolutionMethod::Jacobi => {
             let mut a_prime = a.clone();
@@ -661,26 +674,25 @@ pub fn iterative_solve(
                 b.nrows(),
                 b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
+            let mut r = 0.;
             for iter_num in 0..iteration_count {
-                // if log_enabled!(log::Level::Trace) {
-                //     println!(
-                //         "[{:?}] Jacobi iteration {iter_num} = {}",
-                //         std::thread::current().id(),
-                //         dvector_to_str(&solution_vector)
-                //     );
-                // }
                 // It seems like there must be a way to avoid cloning solution_vector, even if that
                 // turns this into Gauss-Seidel
                 let prev_guess = solution_vector.clone();
-                let residual = &b_prime - &a_prime * &prev_guess;
-                *solution_vector =
-                    relaxation_factor * &residual + prev_guess * (1. - relaxation_factor);
-                if iter_num == 0 {
-                    initial_residual = residual.norm();
-                } else if residual.norm() / initial_residual < convergence_threshold {
+                *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess)
+                    + &prev_guess * (1. - relaxation_factor);
+
+                r = (b - a * prev_guess).norm();
+                if iter_num == 1 {
+                    initial_residual = r;
+                    println!("initial residual = {}", initial_residual);
+                } else if r / initial_residual < convergence_threshold {
+                    println!("Converged in {} iters", iter_num);
                     break;
                 }
+                println!("Iter {}: Residual = {}", iter_num, r);
             }
+            println!("final residual = {}", r);
         }
         SolutionMethod::GaussSeidel => {
             for iter_num in 0..iteration_count {
@@ -706,7 +718,7 @@ pub fn iterative_solve(
         }
         SolutionMethod::Multigrid => {
             let pre_smoothing_iters: Uint = iteration_count;
-            const COARSENING_LEVELS: Uint = 2;
+            const COARSENING_LEVELS: Uint = 3;
             iterative_solve(
                 a,
                 b,
@@ -725,7 +737,7 @@ pub fn iterative_solve(
                 COARSENING_LEVELS,
                 SolutionMethod::Jacobi,
                 iteration_count,
-                1.0,
+                relaxation_factor,
                 convergence_threshold,
                 RestrictionMethods::Strongest,
             );
