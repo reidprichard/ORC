@@ -127,14 +127,15 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
+        momentum_relaxation: 0.8,
         // This needs to be EXTREMELY low (~0.01)
         // What is causing the solution to oscillate?
-        momentum_relaxation: 0.8,
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings {
             solver_type: SolutionMethod::Multigrid,
             iterations: 100,
-            relaxation: 0.6, // ~0.5 seems like roughly upper limit
+            relaxation: 0., // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
+            // BiCGSTAB
             relative_convergence_threshold: 1e-3,
         },
         momentum: MomentumDiscretization::UD,
@@ -156,10 +157,13 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
-    if Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) > 1.05 {
-        print!("channel_flow flow validation failed.");
-    } else {
+    let bulk_velocity_correct =
+        Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) < 1.01;
+    let max_velocity_correct = Float::abs(u.iter().max_by(|a, b| a.total_cmp(b)).unwrap() / u_avg - 1.5) < 0.01;
+    if bulk_velocity_correct && max_velocity_correct {
         print!("channel_flow flow validation passed.");
+    } else {
+        print!("channel_flow flow validation failed.");
     }
     println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
 }
