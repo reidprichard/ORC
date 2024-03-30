@@ -132,7 +132,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         momentum_relaxation: 0.01,
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings {
-            solver_type: SolutionMethod::Multigrid,
+            solver_type: SolutionMethod::BiCGSTAB,
             iterations: 100,
             relaxation: 0.6, // ~0.5 seems like roughly upper limit
             relative_convergence_threshold: 1e-3,

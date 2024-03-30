@@ -742,15 +742,23 @@ pub fn iterative_solve(
             panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::BiCGSTAB => {
-            let x = solution_vector.clone();
-            let mut r = b - a * x;
-            let mut r_hat = DVector::from_column_slice(&vec![1.; r.nrows()]);
-            let mut rho = &r.dot(&r_hat);
+            let mut r = b - a * &*solution_vector;
+            let r_hat_0 = DVector::from_column_slice(&vec![1.; r.nrows()]);
+            let mut rho = r.dot(&r_hat_0);
             let mut p = r.clone();
-            for iter_num in 0..iteration_count {
-                let nu = a * &p;
-                let alpha = rho / r_hat.dot(&nu);
-                let h = &*solution_vector + alpha * &p;
+            for _iter_num in 0..iteration_count {
+                let nu: DVector<Float> = a * &p;
+                let alpha: Float = rho / &r_hat_0.dot(&nu);
+                let h: DVector<Float> = &*solution_vector + alpha * &p;
+                let s: DVector<Float> = &r - alpha * &nu;
+                let t: DVector<Float> = a * &s;
+                let omega: Float = &t.dot(&s) / &t.dot(&t);
+                *solution_vector = &h + omega * &s;
+                r = &s - omega * &t;
+                let rho_prev: Float = rho;
+                rho = r_hat_0.dot(&r);
+                let beta: Float = rho / rho_prev * alpha / omega;
+                p = &r + beta * (p - omega * &nu);
             }
         }
         SolutionMethod::Multigrid => {
