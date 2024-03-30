@@ -7,7 +7,7 @@ features or performance (ok, maybe not)? ORC is a simple finite volume CFD
 solver implemented in Rust with minimal dependencies. ORC supports arbitrary
 unstructured grids with the following numerical schemes and details:
 - Co-located grid
-- Algebraic multigrid solver with Jacobi or Gauss-Seidel smoothing
+- Algebraic multigrid solver with Jacobi or Gauss-Seidel smoothing (GMRES and BiCGSTAB will be evaluated)
 - Pressure-velocity coupling: SIMPLE (coupled solver may be added later)
 - Momentum discretization: first-order upwind differencing and central differencing
 - Gradient reconstruction: Green-Gauss cell-based (least squares may be added)
