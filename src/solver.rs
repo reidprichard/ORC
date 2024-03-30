@@ -150,7 +150,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 1000, numerical_settings);
+    initialize_pressure_field(mesh, &mut p, 10000);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -357,7 +357,6 @@ fn initialize_pressure_field(
     mesh: &mut Mesh,
     p: &mut DVector<Float>,
     iteration_count: Uint,
-    numerical_settings: &NumericalSettings,
 ) {
     println!("Initializing pressure field...");
     // TODO
@@ -396,7 +395,8 @@ fn initialize_pressure_field(
         a_coo.push(*i, *i, a_ii);
     }
     let a = &CsrMatrix::from(&a_coo);
-    iterative_solve(&a, &b, p, 100000, SolutionMethod::Multigrid, 0.5, 1e-6);
+    iterative_solve(&a, &b, p, iteration_count, SolutionMethod::Jacobi, 0.5, 1e-6);
+    println!("Done!");
 }
 
 fn get_velocity_source_term(_location: Vector3) -> Vector3 {
@@ -770,7 +770,7 @@ pub fn iterative_solve(
                 b,
                 solution_vector,
                 iteration_count,
-                SolutionMethod::Jacobi,
+                SolutionMethod::BiCGSTAB,
                 relaxation_factor,
                 convergence_threshold,
             );
