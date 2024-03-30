@@ -1122,13 +1122,11 @@ fn apply_pressure_correction(
     p: &mut DVector<Float>,
     numerical_settings: &NumericalSettings,
 ) -> (Float, Float) {
-    let mut avg_pressure_corr_magnitude = 0.;
-    let mut avg_velocity_corr_magnitude = 0.;
+    let mut velocity_corr_sum = 0.;
     for (cell_index, cell) in &mut mesh.cells {
         let pressure_correction = *p_prime.get(*cell_index).unwrap_or(&0.);
         p[*cell_index] =
-            &p[*cell_index] + numerical_settings.pressure_relaxation * (pressure_correction);
-        avg_pressure_corr_magnitude += Float::abs(pressure_correction);
+            &p[*cell_index] + numerical_settings.pressure_relaxation * pressure_correction;
         let velocity_correction = cell
             .face_indices
             .iter()
@@ -1168,10 +1166,10 @@ fn apply_pressure_correction(
             &v[*cell_index] + velocity_correction.y * numerical_settings.momentum_relaxation;
         w[*cell_index] =
             &w[*cell_index] + velocity_correction.z * numerical_settings.momentum_relaxation;
-        avg_velocity_corr_magnitude += velocity_correction.norm();
+        velocity_corr_sum += velocity_correction.norm().powi(2);
     }
     (
-        avg_pressure_corr_magnitude / (mesh.cells.len() as Float),
-        avg_velocity_corr_magnitude / (mesh.cells.len() as Float),
+        p_prime.norm(),
+        velocity_corr_sum.sqrt(),
     )
 }
