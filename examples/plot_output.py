@@ -159,6 +159,7 @@ def plot_channel_flow():
     axs[1].set_title(r"$\frac{du}{dy}$")
     axs[1].set_xlabel("X [m]")
     axs[1].set_ylabel("Y [m]")
+    axs[1].ticklabel_format(style="scientific", scilimits=(0,0))
     # p_grad = np.gradient(p_interpolated, xi, yi)
     # axs[1].quiver(xi, yi, p_grad[1]*0, p_grad[0])
 
