@@ -11,7 +11,7 @@ use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
 
-const PARALLELIZE_U_V_W: bool = false;
+const PARALLELIZE_U_V_W: bool = true;
 
 // TODO: make this hierarchical
 pub struct NumericalSettings {
@@ -27,7 +27,7 @@ pub struct NumericalSettings {
     pub pressure_relaxation: Float,
     pub momentum_relaxation: Float,
     pub matrix_solver: SolutionMethod,
-    // LOTS of iterations (1k+) are needed due to lacking multigrid
+    // It seems like too many iterations cause pv coupling to go crazy
     pub matrix_solver_iterations: Uint,
     pub matrix_solver_relaxation: Float,
     pub matrix_solver_convergence_threshold: Float,
@@ -140,7 +140,7 @@ pub fn solve_steady(
     let mut p = initialize_DVector!(cell_count);
     let mut p_prime = initialize_DVector!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 10000, numerical_settings);
+    // initialize_pressure_field(mesh, &mut p, 1000, numerical_settings);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
@@ -369,7 +369,7 @@ fn initialize_pressure_field(
         a_coo.push(*i, *i, a_ii);
     }
     let a = &CsrMatrix::from(&a_coo);
-    iterative_solve(&a, &b, p, 100000, SolutionMethod::Multigrid, 0.25, 1e-3);
+    iterative_solve(&a, &b, p, 100000, SolutionMethod::Multigrid, 0.5, 1e-6);
 }
 
 fn get_velocity_source_term(_location: Vector3) -> Vector3 {
@@ -674,7 +674,6 @@ pub fn iterative_solve(
                 b.nrows(),
                 b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
-            let mut r = 0.;
             for iter_num in 0..iteration_count {
                 // It seems like there must be a way to avoid cloning solution_vector, even if that
                 // turns this into Gauss-Seidel
@@ -682,20 +681,17 @@ pub fn iterative_solve(
                 *solution_vector = relaxation_factor * (&b_prime - &a_prime * &prev_guess)
                     + &prev_guess * (1. - relaxation_factor);
 
-                r = (b - a * prev_guess).norm();
+                let r = (b - a * prev_guess).norm();
                 if iter_num == 1 {
                     initial_residual = r;
-                    println!("initial residual = {}", initial_residual);
                 } else if r / initial_residual < convergence_threshold {
-                    println!("Converged in {} iters", iter_num);
+                    // trace!("Converged in {} iters", iter_num);
                     break;
                 }
-                println!("Iter {}: Residual = {}", iter_num, r);
             }
-            println!("final residual = {}", r);
         }
         SolutionMethod::GaussSeidel => {
-            for iter_num in 0..iteration_count {
+            for _iter_num in 0..iteration_count {
                 // if log_enabled!(log::Level::Trace) {
                 //     println!("Gauss-Seidel iteration {iter_num} = {solution_vector:?}");
                 // }
@@ -717,13 +713,12 @@ pub fn iterative_solve(
             panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::Multigrid => {
-            let pre_smoothing_iters: Uint = iteration_count;
-            const COARSENING_LEVELS: Uint = 3;
+            const COARSENING_LEVELS: Uint = 4;
             iterative_solve(
                 a,
                 b,
                 solution_vector,
-                pre_smoothing_iters,
+                iteration_count,
                 SolutionMethod::Jacobi,
                 relaxation_factor,
                 convergence_threshold,

@@ -351,13 +351,13 @@ fn couette(iteration_count: Uint, reporting_interval: Uint) {
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
     let settings = NumericalSettings {
-        momentum_relaxation: 0.2,
-        pressure_relaxation: 0.2,
+        momentum_relaxation: 0.01,
+        pressure_relaxation: 0.01, // 0.25 converges, 0.5 diverges
         matrix_solver: SolutionMethod::Multigrid,
-        matrix_solver_iterations: 20,
-        matrix_solver_relaxation: 0.1,
-        matrix_solver_convergence_threshold: 1e-5,
-        pressure_interpolation: PressureInterpolation::LinearWeighted,
+        matrix_solver_iterations: 50,
+        matrix_solver_relaxation: 0.5,
+        matrix_solver_convergence_threshold: 1e-6,
+        pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
