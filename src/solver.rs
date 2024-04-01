@@ -1,6 +1,6 @@
 #![allow(unreachable_patterns)]
 
-use crate::io::{dvector_to_str, print_linear_system, print_matrix};
+use crate::io::{print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::GetEntry;
 use crate::{common::*, io::print_vec_scientific};
@@ -984,7 +984,6 @@ fn build_momentum_matrices(
                 gradient_reconstruction,
                 &a,
             );
-            // println!("cell {cell_number}, face {face_number}: velocity = {face_velocity:?}");
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
             let outward_face_normal = get_outward_face_normal(&face, *cell_index);
@@ -1008,20 +1007,6 @@ fn build_momentum_matrices(
             } else {
                 face.cell_indices[0]
             };
-
-            // if log_enabled!(log::Level::Trace) {
-            //     println!(
-            //         "cell {: >3}, face {: >3}: F_i = {: >9} {}",
-            //         cell_index,
-            //         face_index,
-            //         f_i,
-            //         if neighbor_cell_index == usize::MAX {
-            //             "(boundary)"
-            //         } else {
-            //             ""
-            //         }
-            //     );
-            // }
 
             let a_nb: Float = match momentum_discretization {
                 MomentumDiscretization::UD => {
