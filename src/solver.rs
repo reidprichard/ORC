@@ -11,6 +11,8 @@ use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
 
+
+// ****** Solver numerical settings structs ******
 // TODO: make this hierarchical
 pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
@@ -25,6 +27,18 @@ pub struct NumericalSettings {
     pub pressure_relaxation: Float,
     pub momentum_relaxation: Float,
     pub matrix_solver: MatrixSolverSettings,
+}
+
+pub struct TurbulenceModelSettings {
+
+}
+
+pub struct MatrixSolverSettings {
+    pub solver_type: SolutionMethod,
+    // It seems like too many iterations can cause pv coupling to go crazy
+    pub iterations: Uint,
+    pub relaxation: Float,
+    pub relative_convergence_threshold: Float,
 }
 
 impl Default for NumericalSettings {
@@ -45,13 +59,6 @@ impl Default for NumericalSettings {
     }
 }
 
-pub struct MatrixSolverSettings {
-    pub solver_type: SolutionMethod,
-    // It seems like too many iterations can cause pv coupling to go crazy
-    pub iterations: Uint,
-    pub relaxation: Float,
-    pub relative_convergence_threshold: Float,
-}
 impl Default for MatrixSolverSettings {
     fn default() -> Self {
         MatrixSolverSettings {
@@ -64,17 +71,11 @@ impl Default for MatrixSolverSettings {
 }
 
 pub struct MultigridSettings {
-    pub smoother: SolutionMethod
+    pub smoother: SolutionMethod,
 }
 
-#[derive(Copy, Clone)]
-pub enum SolutionMethod {
-    GaussSeidel,
-    Jacobi,
-    Multigrid,
-    BiCGSTAB,
-}
 
+// ****** Solver numerical settings enums ******
 #[derive(Copy, Clone)]
 pub enum PressureVelocityCoupling {
     SIMPLE,
@@ -122,12 +123,26 @@ pub enum GradientReconstructionMethods {
     LeastSquares,
 }
 
+#[derive(Copy, Clone)]
+pub enum TurbulenceModel {
+    None,
+    StandardKEpsilon
+}
+
+#[derive(Copy, Clone)]
+pub enum SolutionMethod {
+    GaussSeidel,
+    Jacobi,
+    Multigrid,
+    BiCGSTAB,
+}
+
 pub struct LinearSystem {
     a: CsrMatrix<Float>,
     b: DVector<Float>,
 }
 
-macro_rules! initialize_DVector {
+macro_rules! dvector_zeros {
     ($n:expr) => {
         DVector::from_column_slice(&vec![0.; $n])
     };
@@ -148,19 +163,19 @@ pub fn solve_steady(
     DVector<Float>,
 ) {
     let cell_count: usize = mesh.cells.len();
-    let mut u = initialize_DVector!(cell_count);
-    let mut v = initialize_DVector!(cell_count);
-    let mut w = initialize_DVector!(cell_count);
-    let mut p = initialize_DVector!(cell_count);
-    let mut p_prime = initialize_DVector!(cell_count);
+    let mut u = dvector_zeros!(cell_count);
+    let mut v = dvector_zeros!(cell_count);
+    let mut w = dvector_zeros!(cell_count);
+    let mut p = dvector_zeros!(cell_count);
+    let mut p_prime = dvector_zeros!(cell_count);
 
     initialize_pressure_field(mesh, &mut p, 10000);
 
     let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
     let mut a = initialize_momentum_matrix(&mesh);
-    let mut b_u = initialize_DVector!(cell_count);
-    let mut b_v = initialize_DVector!(cell_count);
-    let mut b_w = initialize_DVector!(cell_count);
+    let mut b_u = dvector_zeros!(cell_count);
+    let mut b_v = dvector_zeros!(cell_count);
+    let mut b_w = dvector_zeros!(cell_count);
 
     if log_enabled!(log::Level::Debug) && a_di.ncols() < 256 {
         println!("\nMomentum diffusion:");
@@ -368,7 +383,7 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_
     // - Outlet: psi = 0
     let n = mesh.cells.len();
     let mut a_coo = CooMatrix::<Float>::new(n, n);
-    let mut b = initialize_DVector!(a_coo.nrows());
+    let mut b = dvector_zeros!(a_coo.nrows());
 
     for (i, cell) in &mesh.cells {
         let mut a_ii = 0.;
@@ -640,7 +655,7 @@ fn multigrid_solve(
     // 3. Create a' = R * a * R.⊺
     let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
     // 4. Solve a' * e' = r'
-    let mut e_prime: DVector<Float> = initialize_DVector!(a_prime.ncols());
+    let mut e_prime: DVector<Float> = dvector_zeros!(a_prime.ncols());
     iterative_solve(
         &a_prime,
         &r_prime,
@@ -1060,7 +1075,7 @@ fn build_pressure_correction_matrices(
     // The coefficients of the pressure correction matrix
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
     // This is the net mass flow rate into each cell
-    let mut b = initialize_DVector!(cell_count);
+    let mut b = dvector_zeros!(cell_count);
 
     for (cell_index, cell) in &mesh.cells {
         let mut a_p: Float = 0.;
@@ -1172,8 +1187,5 @@ fn apply_pressure_correction(
             &w[*cell_index] + velocity_correction.z * numerical_settings.momentum_relaxation;
         velocity_corr_sum += velocity_correction.norm().powi(2);
     }
-    (
-        p_prime.norm(),
-        velocity_corr_sum.sqrt(),
-    )
+    (p_prime.norm(), velocity_corr_sum.sqrt())
 }
