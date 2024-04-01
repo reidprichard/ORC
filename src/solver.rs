@@ -11,7 +11,6 @@ use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
 
-
 // ****** Solver numerical settings structs ******
 // TODO: make this hierarchical
 pub struct NumericalSettings {
@@ -29,9 +28,7 @@ pub struct NumericalSettings {
     pub matrix_solver: MatrixSolverSettings,
 }
 
-pub struct TurbulenceModelSettings {
-
-}
+pub struct TurbulenceModelSettings {}
 
 pub struct MatrixSolverSettings {
     pub solver_type: SolutionMethod,
@@ -74,7 +71,6 @@ pub struct MultigridSettings {
     pub smoother: SolutionMethod,
 }
 
-
 // ****** Solver numerical settings enums ******
 #[derive(Copy, Clone)]
 pub enum PressureVelocityCoupling {
@@ -89,7 +85,14 @@ pub enum MomentumDiscretization {
     CD1,
     // CD incorporating cell gradients; second-order on arbitrary grid
     CD2,
+    // Function specifies psi(r)
+    TVD(fn(Float) -> Float),
 }
+
+const TVD_UD: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 0.);
+const TVD_LUD: MomentumDiscretization = MomentumDiscretization::TVD(|r| r);
+const TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
+const TVD_QUICK: MomentumDiscretization = MomentumDiscretization::TVD(|r| (3. + r) / 4.);
 
 #[derive(Copy, Clone)]
 pub enum DiffusionScheme {
@@ -126,7 +129,7 @@ pub enum GradientReconstructionMethods {
 #[derive(Copy, Clone)]
 pub enum TurbulenceModel {
     None,
-    StandardKEpsilon
+    StandardKEpsilon,
 }
 
 // TODO: GMRES, ILU
@@ -430,6 +433,42 @@ fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
+fn calculate_velocity_gradient(
+    mesh: &Mesh,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    cell_index: usize,
+    gradient_scheme: GradientReconstructionMethods,
+) -> Tensor3 {
+    let cell = &mesh.cells[&cell_index];
+    match gradient_scheme {
+        GradientReconstructionMethods::GreenGauss(variant) => match variant {
+            GreenGaussVariants::CellBased => {
+                cell.face_indices
+                    .iter()
+                    .map(|face_index| {
+                        let face = &mesh.faces[&face_index];
+                        let face_value: Vector3 = get_face_velocity(
+                            &mesh,
+                            &u,
+                            &v,
+                            &w,
+                            *face_index,
+                            PressureInterpolation::Linear,
+                            gradient_scheme,
+                        );
+                        face_value * face.area * get_outward_face_normal(face, cell_index)
+                    })
+                    .fold(Tensor3::zero(), |acc, v| acc + v)
+                    / cell.volume
+            }
+            _ => panic!("unsupported Green-Gauss scheme"),
+        },
+        _ => panic!("unsupported gradient scheme"),
+    }
+}
+
 fn calculate_pressure_gradient(
     mesh: &Mesh,
     p: &DVector<Float>,
@@ -462,6 +501,55 @@ fn calculate_pressure_gradient(
     }
 }
 
+fn get_face_velocity(
+    mesh: &Mesh,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
+    face_index: usize,
+    interpolation_scheme: VelocityInterpolation,
+) -> Vector3 {
+    // ****** TODO: Add skewness corrections!!! ********
+    let face = &mesh.faces[&face_index];
+    let face_zone = &mesh.face_zones[&face.zone];
+    let cell_index = face.cell_indices[0];
+    match face_zone.zone_type {
+        FaceConditionTypes::Wall => Vector3::zero(),
+        FaceConditionTypes::Symmetry => Vector3::zero(),
+        FaceConditionTypes::VelocityInlet => face_zone.vector_value,
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vector3 {
+            x: u[cell_index],
+            y: v[cell_index],
+            z: w[cell_index],
+        },
+        FaceConditionTypes::Interior => {
+            let neighbor_index = face.cell_indices[1];
+            let vel0 = Vector3 {
+                x: u[cell_index],
+                y: v[cell_index],
+                z: w[cell_index],
+            };
+            let vel1 = Vector3 {
+                x: u[neighbor_index],
+                y: v[neighbor_index],
+                z: w[neighbor_index],
+            };
+            match interpolation_scheme {
+                VelocityInterpolation::LinearWeighted => {
+                    let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
+                    let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
+                    vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)
+                }
+                VelocityInterpolation::RhieChow => {
+                    panic!("unsupported");
+                }
+            }
+        }
+        _ => panic!("unsupported face zone type"),
+    }
+}
+
 fn get_face_flux(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -480,37 +568,48 @@ fn get_face_flux(
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
         FaceConditionTypes::Wall | FaceConditionTypes::Symmetry => 0.,
-        FaceConditionTypes::VelocityInlet => face_zone.vector_value.dot(&outward_face_normal),
-        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+        FaceConditionTypes::VelocityInlet
+        | FaceConditionTypes::PressureInlet
+        | FaceConditionTypes::PressureOutlet => {
             // TODO: optimize
-            outward_face_normal.dot(&Vector3 {
-                x: u[cell_index],
-                y: v[cell_index],
-                z: w[cell_index],
-            })
+            outward_face_normal.dot(&get_face_velocity(
+                &mesh,
+                &u,
+                &v,
+                &w,
+                &p,
+                face_index,
+                interpolation_scheme,
+            ))
         }
         FaceConditionTypes::Interior => {
-            let mut neighbor_index = face.cell_indices[0];
-            if neighbor_index == cell_index {
-                neighbor_index = face.cell_indices[1];
-            }
-            let vel0 = Vector3 {
-                x: u[cell_index],
-                y: v[cell_index],
-                z: w[cell_index],
-            };
-            let vel1 = Vector3 {
-                x: u[neighbor_index],
-                y: v[neighbor_index],
-                z: w[neighbor_index],
-            };
             match interpolation_scheme {
                 VelocityInterpolation::LinearWeighted => {
-                    let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
-                    let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
-                    outward_face_normal.dot(&(vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)))
+                    outward_face_normal.dot(&get_face_velocity(
+                        &mesh,
+                        &u,
+                        &v,
+                        &w,
+                        &p,
+                        face_index,
+                        interpolation_scheme,
+                    ))
                 }
                 VelocityInterpolation::RhieChow => {
+                    let mut neighbor_index = face.cell_indices[0];
+                    if neighbor_index == cell_index {
+                        neighbor_index = face.cell_indices[1];
+                    }
+                    let vel0 = Vector3 {
+                        x: u[cell_index],
+                        y: v[cell_index],
+                        z: w[cell_index],
+                    };
+                    let vel1 = Vector3 {
+                        x: u[neighbor_index],
+                        y: v[neighbor_index],
+                        z: w[neighbor_index],
+                    };
                     // WARNING: Something is wrong here
                     let xi = (mesh.cells[&neighbor_index].centroid
                         - mesh.cells[&cell_index].centroid)
@@ -1015,6 +1114,7 @@ fn build_momentum_matrices(
                     Float::min(f_i, 0.)
                 }
                 MomentumDiscretization::CD1 => f_i / 2.,
+                MomentumDiscretization::TVD(psi) => 0.,
                 // MomentumDiscretization::CD2 => {
                 //
                 // }
