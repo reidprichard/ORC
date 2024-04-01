@@ -52,7 +52,7 @@ impl Default for NumericalSettings {
             gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
                 GreenGaussVariants::CellBased,
             ),
-            pressure_relaxation: 0.25,
+            pressure_relaxation: 0.01,
             momentum_relaxation: 0.5,
             matrix_solver: MatrixSolverSettings::default(),
         }
