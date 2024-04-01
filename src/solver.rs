@@ -1127,11 +1127,29 @@ fn build_pressure_correction_matrices(
         b[*cell_index] = b_p;
     }
 
+    // TODO: Consider passing a and b as mut args rather than returning
     LinearSystem {
         a: CsrMatrix::from(&a),
         b,
     }
 }
+
+// fn build_k_epsilon_matrices(
+//     a_k: &mut CsrMatrix<Float>,
+//     a_eps: &mut CsrMatrix<Float>,
+//     b_k: &mut DVector<Float>,
+//     b_eps: &mut DVector<Float>,
+//     mesh: &Mesh,
+//     u: &DVector<Float>,
+//     v: &DVector<Float>,
+//     w: &DVector<Float>,
+//     p: &DVector<Float>,
+//     momentum_matrices: &CsrMatrix<Float>,
+//     numerical_settings: &NumericalSettings,
+//     rho: Float,
+// ) {
+//
+// }
 
 fn apply_pressure_correction(
     mesh: &mut Mesh,
