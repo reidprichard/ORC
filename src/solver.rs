@@ -129,14 +129,16 @@ pub enum TurbulenceModel {
     StandardKEpsilon
 }
 
+// TODO: GMRES, ILU
 #[derive(Copy, Clone)]
 pub enum SolutionMethod {
-    GaussSeidel,
+    GaussSeidel, // TODO: add backward sweep
     Jacobi,
     Multigrid,
     BiCGSTAB,
 }
 
+// TODO: Do I need this?
 pub struct LinearSystem {
     a: CsrMatrix<Float>,
     b: DVector<Float>,
