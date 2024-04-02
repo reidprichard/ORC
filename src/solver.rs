@@ -404,7 +404,8 @@ pub fn solve_steady(
     let mut pressure_grad_mean = Vector3::zero();
     let mut velocity_grad_mean = Tensor3::zero();
     for i in 0..mesh.cells.len() {
-        let pressure_gradient = calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
+        let pressure_gradient =
+            calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
         let velocity_gradient = calculate_velocity_gradient(
             mesh,
             &u,
@@ -417,7 +418,11 @@ pub fn solve_steady(
         velocity_grad_mean = velocity_grad_mean + velocity_gradient.abs();
         println!("{velocity_gradient}\t{pressure_gradient}\n");
     }
-    println!("MEAN\n{}\t{}\n", velocity_grad_mean/mesh.cells.len(), pressure_grad_mean/mesh.cells.len());
+    println!(
+        "MEAN\n{}\t{}\n",
+        velocity_grad_mean / mesh.cells.len(),
+        pressure_grad_mean / mesh.cells.len()
+    );
     (u, v, w, p)
 }
 
@@ -566,13 +571,10 @@ fn get_face_velocity(
                 z: w[neighbor_index],
             };
             match interpolation_scheme {
-                VelocityInterpolation::LinearWeighted => {
+                VelocityInterpolation::LinearWeighted | VelocityInterpolation::RhieChow => {
                     let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
                     let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
                     vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)
-                }
-                VelocityInterpolation::RhieChow => {
-                    panic!("unsupported");
                 }
             }
         }
@@ -645,10 +647,9 @@ fn get_face_flux(
                         calculate_pressure_gradient(mesh, p, neighbor_index, gradient_scheme);
                     let v0 = mesh.cells[&cell_index].volume;
                     let v1 = mesh.cells[&neighbor_index].volume;
-                    panic!("unsupported");
-                    // 0.5 * (outward_face_normal.dot(&(vel0 + vel1))
-                    //     + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / xi.norm()
-                    //     - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&xi))
+                    0.5 * (outward_face_normal.dot(&(vel0 + vel1))
+                        + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / xi.norm()
+                        - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&xi))
                 }
             }
         }
