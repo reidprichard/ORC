@@ -500,23 +500,23 @@ fn calculate_pressure_gradient(
     let cell = &mesh.cells[&cell_index];
     match gradient_scheme {
         GradientReconstructionMethods::GreenGauss(variant) => match variant {
-            GreenGaussVariants::CellBased => {
-                cell.face_indices
-                    .iter()
-                    .map(|face_index| {
-                        let face = &mesh.faces[&face_index];
-                        let face_value: Float = get_face_pressure(
-                            mesh,
-                            p,
-                            *face_index,
-                            PressureInterpolation::LinearWeighted,
-                            gradient_scheme,
-                        );
-                        face_value * face.area * get_outward_face_normal(face, cell_index)
-                    })
-                    .fold(Vector3::zero(), |acc, v| acc + v)
-                    / cell.volume
-            }
+            GreenGaussVariants::CellBased => cell
+                .face_indices
+                .iter()
+                .map(|face_index| {
+                    let face = &mesh.faces[&face_index];
+                    let face_value: Float = get_face_pressure(
+                        mesh,
+                        p,
+                        *face_index,
+                        PressureInterpolation::LinearWeighted,
+                        gradient_scheme,
+                    );
+                    face_value
+                        * (face.area / cell.volume)
+                        * get_outward_face_normal(face, cell_index)
+                })
+                .fold(Vector3::zero(), |acc, v| acc + v),
             _ => panic!("unsupported Green-Gauss scheme"),
         },
         _ => panic!("unsupported gradient scheme"),
