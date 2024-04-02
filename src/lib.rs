@@ -310,6 +310,7 @@ pub mod common {
         }
     }
 
+    #[derive(Copy, Clone, Debug)]
     pub struct Tensor3 {
         pub x: Vector3,
         pub y: Vector3,
@@ -325,11 +326,11 @@ pub mod common {
         }
 
         // TODO: pass by value?
-        pub fn dot(&self, vector: &Vector3) -> Vector3 {
+        pub fn inner(&self, v: &Vector3) -> Vector3 {
             Vector3 {
-                x: self.x.dot(&vector),
-                y: self.y.dot(&vector),
-                z: self.z.dot(&vector),
+                x: self.x.dot(&v),
+                y: self.y.dot(&v),
+                z: self.z.dot(&v),
             }
         }
     }
@@ -368,16 +369,10 @@ pub mod common {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(
                 f,
-                "({:.2e}, {:.2e}, {:.2e})\n({:.2e}, {:.2e}, {:.2e})\n({:.2e}, {:.2e}, {:.2e})\n",
-                self.x.x,
-                self.x.y,
-                self.x.z,
-                self.y.x,
-                self.y.y,
-                self.y.z,
-                self.z.x,
-                self.z.y,
-                self.z.z
+                "{}\n{}\n{}",
+                self.x,
+                self.y,
+                self.z,
             )
         }
     }
