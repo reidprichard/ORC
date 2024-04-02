@@ -2,7 +2,7 @@
 
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
-use orc::common::Float;
+use orc::common::{Float, Tensor3};
 use orc::common::{Uint, Vector3};
 use orc::io::read_mesh;
 use orc::io::write_data;
@@ -102,6 +102,24 @@ fn validate_solvers() {
     // TODO: Validate multigrid
 }
 
+fn test_tensor() {
+
+    let x = Tensor3 {
+        x: Vector3::ones() * 1e-12,
+        y: Vector3::ones() * 1e-13,
+        z: Vector3::ones() * 1e-14,
+    };
+
+    let y = Tensor3 {
+        x: Vector3::ones() * 1e-15,
+        y: Vector3::ones() * 1e-16,
+        z: Vector3::ones() * 1e-11,
+    };
+
+    let z = x + y;
+    println!("{z}");
+}
+
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
@@ -138,7 +156,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             // BiCGSTAB
             relative_convergence_threshold: 1e-3,
         },
-        momentum: TVD_LUD,
+        momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()

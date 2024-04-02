@@ -11,6 +11,8 @@ use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
 
+// TODO: Normalize mesh lengths to reduce roundoff error
+
 // ****** Solver numerical settings structs ******
 // TODO: make this hierarchical
 pub struct NumericalSettings {
@@ -398,8 +400,11 @@ pub fn solve_steady(
         }
         _ => panic!("unsupported pressure-velocity coupling"),
     }
+
+    let mut pressure_grad_mean = Vector3::zero();
+    let mut velocity_grad_mean = Tensor3::zero();
     for i in 0..mesh.cells.len() {
-        // let pressure_gradient = calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
+        let pressure_gradient = calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
         let velocity_gradient = calculate_velocity_gradient(
             mesh,
             &u,
@@ -408,8 +413,11 @@ pub fn solve_steady(
             i,
             numerical_settings.gradient_reconstruction,
         );
-        println!("{velocity_gradient}\n");
+        pressure_grad_mean += pressure_gradient.abs();
+        velocity_grad_mean = velocity_grad_mean + velocity_gradient.abs();
+        println!("{velocity_gradient}\t{pressure_gradient}\n");
     }
+    println!("MEAN\n{}\t{}\n", velocity_grad_mean/mesh.cells.len(), pressure_grad_mean/mesh.cells.len());
     (u, v, w, p)
 }
 
