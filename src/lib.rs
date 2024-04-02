@@ -79,12 +79,12 @@ pub mod common {
                 x: Vector3 {
                     x: self.x * other.x,
                     y: self.x * other.y,
-                    z: self.z * other.z,
+                    z: self.x * other.z,
                 },
                 y: Vector3 {
                     x: self.y * other.x,
                     y: self.y * other.y,
-                    z: self.z * other.z,
+                    z: self.y * other.z,
                 },
                 z: Vector3 {
                     x: self.z * other.x,
