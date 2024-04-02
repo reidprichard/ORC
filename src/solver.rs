@@ -408,15 +408,7 @@ pub fn solve_steady(
             i,
             numerical_settings.gradient_reconstruction,
         );
-        let du_dy = calculate_velocity_component_gradient(
-            mesh,
-            &u,
-            &v,
-            &w,
-            i,
-            numerical_settings.gradient_reconstruction,
-        );
-        println!("{velocity_gradient}\t{du_dy}\n");
+        println!("{velocity_gradient}\n");
     }
     (u, v, w, p)
 }
@@ -459,51 +451,12 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_
         a_coo.push(*i, *i, a_ii);
     }
     let a = &CsrMatrix::from(&a_coo);
-    iterative_solve(
-        a,
-        &b,
-        p,
-        iteration_count,
-        SolutionMethod::Jacobi,
-        0.5,
-        1e-6,
-    );
+    iterative_solve(a, &b, p, iteration_count, SolutionMethod::Jacobi, 0.5, 1e-6);
     println!("Done!");
 }
 
 fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
-}
-
-fn calculate_velocity_component_gradient(
-    mesh: &Mesh,
-    u: &DVector<Float>,
-    v: &DVector<Float>,
-    w: &DVector<Float>,
-    cell_index: usize,
-    gradient_scheme: GradientReconstructionMethods,
-) -> Vector3 {
-    let cell = &mesh.cells[&cell_index];
-    match gradient_scheme {
-        GradientReconstructionMethods::GreenGauss(_) => {
-            cell.face_indices
-                .iter()
-                .fold(Vector3::zero(), |acc, face_index| {
-                    let face = &mesh.faces[&face_index];
-                    let face_value = get_face_velocity(
-                        mesh,
-                        u,
-                        v,
-                        w,
-                        *face_index,
-                        VelocityInterpolation::LinearWeighted,
-                    );
-                    acc + face_value.x * face.area * get_outward_face_normal(face, cell_index)
-                })
-                / cell.volume
-        }
-        _ => panic!("unsupported gradient scheme"),
-    }
 }
 
 fn calculate_velocity_gradient(
@@ -529,13 +482,10 @@ fn calculate_velocity_gradient(
                         *face_index,
                         VelocityInterpolation::LinearWeighted,
                     );
-                    acc + Tensor3 {
-                        x: face_value.x * face.area * get_outward_face_normal(face, cell_index),
-                        y: face_value.y * face.area * get_outward_face_normal(face, cell_index),
-                        z: face_value.z * face.area * get_outward_face_normal(face, cell_index),
-                    }
+                    acc + face_value.outer(
+                        &(get_outward_face_normal(face, cell_index) * (face.area / cell.volume)),
+                    )
                 })
-                / cell.volume
         }
         _ => panic!("unsupported gradient scheme"),
     }
@@ -588,7 +538,9 @@ fn get_face_velocity(
     match face_zone.zone_type {
         FaceConditionTypes::Wall => Vector3::zero(),
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
-        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet | FaceConditionTypes::Symmetry => Vector3 {
+        FaceConditionTypes::PressureInlet
+        | FaceConditionTypes::PressureOutlet
+        | FaceConditionTypes::Symmetry => Vector3 {
             x: u[cell_index],
             y: v[cell_index],
             z: w[cell_index],
@@ -707,11 +659,12 @@ fn get_face_pressure(
     let face = &mesh.faces[&face_index];
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
-        FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
+        FaceConditionTypes::Symmetry
+        | FaceConditionTypes::Wall
+        | FaceConditionTypes::VelocityInlet => {
             // du/dn = 0, so we need the projection of cell center velocity onto the face's plane
             p[face.cell_indices[0]]
         }
-        FaceConditionTypes::VelocityInlet => p[face.cell_indices[0]],
         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
             face_zone.scalar_value
         }
