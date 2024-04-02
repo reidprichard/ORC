@@ -133,11 +133,11 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         matrix_solver: MatrixSolverSettings {
             solver_type: SolutionMethod::Multigrid,
             iterations: 100,
-            relaxation: 0., // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
+            relaxation: 0.5, // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
             // BiCGSTAB
             relative_convergence_threshold: 1e-3,
         },
-        momentum: MomentumDiscretization::UD,
+        momentum: TVD_QUICK,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()

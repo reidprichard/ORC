@@ -17,10 +17,9 @@ use std::thread;
 // TODO: make this hierarchical
 pub struct NumericalSettings {
     pub pressure_velocity_coupling: PressureVelocityCoupling,
-    // Setting to 1.0 seems to cause problems
     pub momentum: MomentumDiscretization,
     pub diffusion: DiffusionScheme,
-    // LinearWeighted or SecondOrder recommended; LinearWeighted is more stable but less accurate
+    // SecondOrder recommended; LinearWeighted is more stable but less accurate
     pub pressure_interpolation: PressureInterpolation,
     // LinearWeighted recommended; RhieChow is extremely unstable
     pub velocity_interpolation: VelocityInterpolation,
@@ -139,7 +138,9 @@ pub enum TurbulenceModel {
 pub enum SolutionMethod {
     GaussSeidel, // TODO: add backward sweep
     Jacobi,
+    // HashSet.
     Multigrid,
+    // WARNING: BiCGSTAB causes a nondeterministic panic.
     BiCGSTAB,
 }
 
@@ -205,11 +206,7 @@ pub fn solve_steady(
                     &v,
                     &w,
                     &p,
-                    if iter_number > 10 {
-                        numerical_settings.momentum
-                    } else {
-                        MomentumDiscretization::UD
-                    },
+                    numerical_settings.momentum,
                     if iter_number > 1 {
                         numerical_settings.velocity_interpolation
                     } else {
@@ -228,7 +225,8 @@ pub fn solve_steady(
                 a_v = &a_v + &a_di;
                 a_w = &a_w + &a_di;
 
-                if log_enabled!(log::Level::Debug) && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) {
+                    // && a_di.nrows() < 256 {
                     println!("\nMomentum:");
                     println!("u:");
                     print_linear_system(&a_u, &b_u);
@@ -416,7 +414,6 @@ pub fn solve_steady(
         );
         pressure_grad_mean += pressure_gradient.abs();
         velocity_grad_mean = velocity_grad_mean + velocity_gradient.abs();
-        println!("{velocity_gradient}\t{pressure_gradient}\n");
     }
     println!(
         "MEAN\n{}\t{}\n",
@@ -796,12 +793,16 @@ fn multigrid_solve(
         smooth_relaxation,
         smooth_convergence_threshold,
     );
+    let error_magnitude = (&r_prime - &a_prime * &e_prime).norm();
     if log_enabled!(log::Level::Trace) {
         println!(
             "Multigrid level {}: |e| = {:.2e}",
             multigrid_level,
-            (&r_prime - &a_prime * &e_prime).norm()
+            error_magnitude
         );
+    }
+    if error_magnitude.is_nan() {
+        panic!("Multigrid diverged");
     }
 
     // 5. Recurse to max desired coarsening level
@@ -927,7 +928,7 @@ pub fn iterative_solve(
                 b,
                 solution_vector,
                 iteration_count,
-                SolutionMethod::BiCGSTAB,
+                SolutionMethod::Jacobi, // Change to Jacobi until BiCGSTAB panic is fixed
                 relaxation_factor,
                 convergence_threshold,
             );
@@ -938,7 +939,7 @@ pub fn iterative_solve(
                 &r,
                 1,
                 COARSENING_LEVELS,
-                SolutionMethod::BiCGSTAB,
+                SolutionMethod::Jacobi, // Change to Jacobi until BiCGSTAB panic is fixed
                 iteration_count,
                 relaxation_factor,
                 convergence_threshold,
@@ -1154,14 +1155,6 @@ fn build_momentum_matrices(
                         z: a_nb,
                     }
                 }
-                // MomentumDiscretization::CD1 => {
-                //     let a_nb = f_i / 2.;
-                //     Vector3 {
-                //         x: a_nb,
-                //         y: a_nb,
-                //         z: a_nb,
-                //     }
-                // }
                 MomentumDiscretization::TVD(psi) => {
                     if neighbor_cell_index == usize::MAX {
                         let a_nb = Float::min(f_i, 0.);
@@ -1199,17 +1192,14 @@ fn build_momentum_matrices(
                             let r = 2. * cell_velocity_gradient.inner(&r_pa)
                                 / (downstream_velocity - velocity)
                                 - 1.;
-                            Vector3 {
+                            f_i * Vector3 {
                                 x: psi(r.x),
                                 y: psi(r.y),
                                 z: psi(r.z),
-                            }
+                            } / 2.
                         }
                     }
                 }
-                // MomentumDiscretization::CD2 => {
-                //
-                // }
                 _ => panic!("unsupported momentum scheme"),
             };
 
