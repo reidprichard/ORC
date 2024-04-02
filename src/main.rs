@@ -138,7 +138,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             // BiCGSTAB
             relative_convergence_threshold: 1e-3,
         },
-        momentum: MomentumDiscretization::UD,
+        momentum: TVD_LUD,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
@@ -183,8 +183,7 @@ fn main() {
         .parse()
         .expect("arg 2 should be an integer");
     validate_solvers();
-    // channel_flow(iteration_count, reporting_interval);
-    test_3d_1x3(iteration_count);
+    channel_flow(iteration_count, reporting_interval);
     // Interface: allow user to choose from
     // 1. Read mesh
     // 2. Read data

@@ -176,10 +176,10 @@ pub fn solve_steady(
 
     initialize_pressure_field(mesh, &mut p, 10000);
 
-    let a_di = build_momentum_diffusion_matrix(&mesh, numerical_settings.diffusion, mu);
-    let mut a_u = initialize_momentum_matrix(&mesh);
-    let mut a_v = initialize_momentum_matrix(&mesh);
-    let mut a_w = initialize_momentum_matrix(&mesh);
+    let a_di = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
+    let mut a_u = initialize_momentum_matrix(mesh);
+    let mut a_v = initialize_momentum_matrix(mesh);
+    let mut a_w = initialize_momentum_matrix(mesh);
     let mut b_u = dvector_zeros!(cell_count);
     let mut b_v = dvector_zeros!(cell_count);
     let mut b_w = dvector_zeros!(cell_count);
@@ -342,7 +342,7 @@ pub fn solve_steady(
 
                 trace!("solving p");
                 // Zero the pressure correction for a reasonable initial guess
-                p_prime = p_prime * 0.;
+                p_prime *= 0.;
                 iterative_solve(
                     &pressure_correction_matrices.a,
                     &pressure_correction_matrices.b,
@@ -377,7 +377,7 @@ pub fn solve_steady(
                     &mut v,
                     &mut w,
                     &mut p,
-                    &numerical_settings,
+                    numerical_settings,
                 );
 
                 let u_avg = u.iter().sum::<Float>() / (cell_count as Float);
@@ -401,7 +401,7 @@ pub fn solve_steady(
     for i in 0..mesh.cells.len() {
         // let pressure_gradient = calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
         let velocity_gradient = calculate_velocity_gradient(
-            &mesh,
+            mesh,
             &u,
             &v,
             &w,
@@ -409,7 +409,7 @@ pub fn solve_steady(
             numerical_settings.gradient_reconstruction,
         );
         let du_dy = calculate_velocity_component_gradient(
-            &mesh,
+            mesh,
             &u,
             &v,
             &w,
@@ -460,7 +460,7 @@ fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_
     }
     let a = &CsrMatrix::from(&a_coo);
     iterative_solve(
-        &a,
+        a,
         &b,
         p,
         iteration_count,
@@ -491,10 +491,10 @@ fn calculate_velocity_component_gradient(
                 .fold(Vector3::zero(), |acc, face_index| {
                     let face = &mesh.faces[&face_index];
                     let face_value = get_face_velocity(
-                        &mesh,
-                        &u,
-                        &v,
-                        &w,
+                        mesh,
+                        u,
+                        v,
+                        w,
                         *face_index,
                         VelocityInterpolation::LinearWeighted,
                     );
@@ -522,10 +522,10 @@ fn calculate_velocity_gradient(
                 .fold(Tensor3::zero(), |acc, face_index| {
                     let face = &mesh.faces[&face_index];
                     let face_value: Vector3 = get_face_velocity(
-                        &mesh,
-                        &u,
-                        &v,
-                        &w,
+                        mesh,
+                        u,
+                        v,
+                        w,
                         *face_index,
                         VelocityInterpolation::LinearWeighted,
                     );
@@ -556,8 +556,8 @@ fn calculate_pressure_gradient(
                     .map(|face_index| {
                         let face = &mesh.faces[&face_index];
                         let face_value: Float = get_face_pressure(
-                            &mesh,
-                            &p,
+                            mesh,
+                            p,
                             *face_index,
                             PressureInterpolation::LinearWeighted,
                             gradient_scheme,
@@ -646,10 +646,10 @@ fn get_face_flux(
         | FaceConditionTypes::PressureOutlet => {
             // TODO: optimize
             outward_face_normal.dot(&get_face_velocity(
-                &mesh,
-                &u,
-                &v,
-                &w,
+                mesh,
+                u,
+                v,
+                w,
                 face_index,
                 interpolation_scheme,
             ))
@@ -657,7 +657,7 @@ fn get_face_flux(
         FaceConditionTypes::Interior => {
             match interpolation_scheme {
                 VelocityInterpolation::LinearWeighted => outward_face_normal.dot(
-                    &get_face_velocity(&mesh, &u, &v, &w, face_index, interpolation_scheme),
+                    &get_face_velocity(mesh, u, v, w, face_index, interpolation_scheme),
                 ),
                 VelocityInterpolation::RhieChow => {
                     let mut neighbor_index = face.cell_indices[0];
@@ -681,9 +681,9 @@ fn get_face_flux(
                     let a0 = a_u.get(cell_index, cell_index);
                     let a1 = a_u.get(neighbor_index, neighbor_index);
                     let p_grad_0 =
-                        calculate_pressure_gradient(&mesh, &p, cell_index, gradient_scheme);
+                        calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
                     let p_grad_1 =
-                        calculate_pressure_gradient(&mesh, &p, neighbor_index, gradient_scheme);
+                        calculate_pressure_gradient(mesh, p, neighbor_index, gradient_scheme);
                     let v0 = mesh.cells[&cell_index].volume;
                     let v1 = mesh.cells[&neighbor_index].volume;
                     panic!("unsupported");
@@ -732,10 +732,10 @@ fn get_face_pressure(
                     panic!("`standard` pressure interpolation unsupported");
                 }
                 PressureInterpolation::SecondOrder => {
-                    let c0_grad = calculate_pressure_gradient(&mesh, &p, c0, gradient_scheme);
+                    let c0_grad = calculate_pressure_gradient(mesh, p, c0, gradient_scheme);
                     // println!("Pressure gradient: {c0_grad}");
                     // println!("Cell volume: {}", &mesh.cells[&c0].volume);
-                    let c1_grad = calculate_pressure_gradient(&mesh, &p, c1, gradient_scheme);
+                    let c1_grad = calculate_pressure_gradient(mesh, p, c1, gradient_scheme);
                     let r_c0 = face.centroid - mesh.cells[&c0].centroid;
                     let r_c1 = face.centroid - mesh.cells[&c1].centroid;
                     0.5 * ((&p[c0] + &p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
@@ -815,7 +815,7 @@ fn multigrid_solve(
 ) -> DVector<Float> {
     // 1. Build restriction matrix R
     // 5. If multigrid_level < max_level, recurse
-    let restriction_matrix = build_restriction_matrix(&a, restriction_method);
+    let restriction_matrix = build_restriction_matrix(a, restriction_method);
     // 2. Restrict r to r'
     let r_prime = &restriction_matrix * r;
     // 3. Create a' = R * a * R.⊺
@@ -969,7 +969,7 @@ pub fn iterative_solve(
             // TODO: find a way not to have to clone
             let r = b - a * &*solution_vector;
             *solution_vector += multigrid_solve(
-                &a,
+                a,
                 &r,
                 1,
                 COARSENING_LEVELS,
@@ -1135,33 +1135,33 @@ fn build_momentum_matrices(
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = Vector3::zero();
         let cell_velocity_gradient =
-            calculate_velocity_gradient(&mesh, &u, &v, &w, *cell_index, gradient_scheme);
+            calculate_velocity_gradient(mesh, u, v, w, *cell_index, gradient_scheme);
         // println!("\n{cell_velocity_gradient}");
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
             let face_flux = get_face_flux(
-                &mesh,
-                &u,
-                &v,
-                &w,
-                &p,
+                mesh,
+                u,
+                v,
+                w,
+                p,
                 *face_index,
                 *cell_index,
                 velocity_interpolation,
                 gradient_scheme,
-                &a_u,
-                &a_v,
-                &a_w,
+                a_u,
+                a_v,
+                a_w,
             );
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
-            let outward_face_normal = get_outward_face_normal(&face, *cell_index);
+            let outward_face_normal = get_outward_face_normal(face, *cell_index);
             // Mass flow rate out of this cell through this face
             let f_i = face_flux * face.area * rho;
             let face_pressure = get_face_pressure(
                 mesh,
-                &p,
+                p,
                 *face_index,
                 pressure_interpolation,
                 gradient_scheme,
@@ -1315,9 +1315,9 @@ fn build_pressure_correction_matrices(
             let face = &mesh.faces[face_index];
             let face_velocity = get_face_velocity(
                 mesh,
-                &u,
-                &v,
-                &w,
+                u,
+                v,
+                w,
                 *face_index,
                 numerical_settings.velocity_interpolation,
             );
@@ -1413,7 +1413,7 @@ fn apply_pressure_correction(
                 .fold(Vector3::zero(), |acc, face_index| {
                     let face = &mesh.faces[face_index];
                     let face_zone = &mesh.face_zones[&face.zone];
-                    let outward_face_normal = get_outward_face_normal(&face, *cell_index);
+                    let outward_face_normal = get_outward_face_normal(face, *cell_index);
                     let p_prime_neighbor = match face_zone.zone_type {
                         FaceConditionTypes::Wall
                         | FaceConditionTypes::Symmetry

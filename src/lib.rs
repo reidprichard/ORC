@@ -328,9 +328,9 @@ pub mod common {
         // TODO: pass by value?
         pub fn inner(&self, v: &Vector3) -> Vector3 {
             Vector3 {
-                x: self.x.dot(&v),
-                y: self.y.dot(&v),
-                z: self.z.dot(&v),
+                x: self.x.dot(v),
+                y: self.y.dot(v),
+                z: self.z.dot(v),
             }
         }
     }
