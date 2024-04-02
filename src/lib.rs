@@ -5,7 +5,7 @@ pub mod mesh;
 pub mod solver;
 
 trait GetEntry<T> {
-    fn get(&self, i:usize, j:usize) -> T;
+    fn get(&self, i: usize, j: usize) -> T;
 }
 
 use common::Float;
@@ -362,4 +362,23 @@ pub mod common {
 
     tensor_div!(Uint);
     tensor_div!(Float);
+
+    impl fmt::Display for Tensor3 {
+        // TODO: Switch between regular and scientific fmt based on magnitude
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "({:.2e}, {:.2e}, {:.2e})\n({:.2e}, {:.2e}, {:.2e})\n({:.2e}, {:.2e}, {:.2e})\n",
+                self.x.x,
+                self.x.y,
+                self.x.z,
+                self.y.x,
+                self.y.y,
+                self.y.z,
+                self.z.x,
+                self.z.y,
+                self.z.z
+            )
+        }
+    }
 }
