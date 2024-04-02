@@ -89,10 +89,10 @@ pub enum MomentumDiscretization {
     TVD(fn(Float) -> Float),
 }
 
-const TVD_UD: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 0.);
-const TVD_LUD: MomentumDiscretization = MomentumDiscretization::TVD(|r| r);
-const TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
-const TVD_QUICK: MomentumDiscretization = MomentumDiscretization::TVD(|r| (3. + r) / 4.);
+pub const TVD_UD: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 0.);
+pub const TVD_LUD: MomentumDiscretization = MomentumDiscretization::TVD(|r| r);
+pub const TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
+pub const TVD_QUICK: MomentumDiscretization = MomentumDiscretization::TVD(|r| (3. + r) / 4.);
 
 #[derive(Copy, Clone)]
 pub enum DiffusionScheme {
