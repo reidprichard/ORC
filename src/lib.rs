@@ -74,8 +74,8 @@ pub mod common {
             }
         }
 
-        pub fn outer(&self, other: &Self) -> Tensor {
-            Tensor {
+        pub fn outer(&self, other: &Self) -> Tensor3 {
+            Tensor3 {
                 x: Vector3 {
                     x: self.x * other.x,
                     y: self.x * other.y,
@@ -310,14 +310,14 @@ pub mod common {
         }
     }
 
-    pub struct Tensor {
+    pub struct Tensor3 {
         pub x: Vector3,
         pub y: Vector3,
         pub z: Vector3,
     }
-    impl Tensor {
+    impl Tensor3 {
         pub fn zero() -> Self {
-            Tensor {
+            Tensor3 {
                 x: Vector3::zero(),
                 y: Vector3::zero(),
                 z: Vector3::zero(),
@@ -334,10 +334,10 @@ pub mod common {
         }
     }
 
-    impl Add<Self> for Tensor {
+    impl Add<Self> for Tensor3 {
         type Output = Self;
-        fn add(self, rhs: Tensor) -> Tensor {
-            Tensor {
+        fn add(self, rhs: Tensor3) -> Tensor3 {
+            Tensor3 {
                 x: self.x + rhs.x,
                 y: self.y + rhs.y,
                 z: self.z + rhs.z,
@@ -347,10 +347,10 @@ pub mod common {
 
     macro_rules! tensor_div {
         ($T: ty) => {
-            impl Div<$T> for Tensor {
+            impl Div<$T> for Tensor3 {
                 type Output = Self;
                 fn div(self, rhs: $T) -> Self {
-                    Tensor {
+                    Tensor3 {
                         x: self.x * (rhs as Float),
                         y: self.y * (rhs as Float),
                         z: self.z * (rhs as Float),

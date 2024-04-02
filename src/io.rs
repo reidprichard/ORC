@@ -3,7 +3,7 @@
 use crate::common::*;
 use crate::mesh::*;
 use itertools::Itertools;
-use log::{debug, info};
+use log::info;
 use nalgebra::DVector;
 use nalgebra_sparse::CsrMatrix;
 use regex::Regex;
@@ -400,7 +400,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         }
     }
 
-    for (cell_index, cell) in &mut cells {
+    for (_cell_index, cell) in &mut cells {
         cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
             .face_indices

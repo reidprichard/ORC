@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, unused)]
 
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
@@ -183,8 +183,8 @@ fn main() {
         .parse()
         .expect("arg 2 should be an integer");
     validate_solvers();
-    channel_flow(iteration_count, reporting_interval);
-
+    // channel_flow(iteration_count, reporting_interval);
+    test_3d_1x3(iteration_count);
     // Interface: allow user to choose from
     // 1. Read mesh
     // 2. Read data
@@ -289,8 +289,23 @@ fn test_3d_1x3(iteration_count: Uint) {
         }
     }
 
-    let settings = NumericalSettings::default();
-    // High viscosity needed to keep Peclet under control
+    let settings = NumericalSettings {
+        momentum_relaxation: 0.8,
+        // This needs to be EXTREMELY low (~0.01)
+        // What is causing the solution to oscillate?
+        pressure_relaxation: 0.02,
+        matrix_solver: MatrixSolverSettings {
+            solver_type: SolutionMethod::Jacobi,
+            iterations: 100,
+            relaxation: 0.2, // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
+            relative_convergence_threshold: 1e-3,
+        },
+        momentum: MomentumDiscretization::UD,
+        pressure_interpolation: PressureInterpolation::SecondOrder,
+        velocity_interpolation: VelocityInterpolation::LinearWeighted,
+        ..NumericalSettings::default()
+    };
+
     let (u, v, w, _) = solve_steady(
         &mut mesh,
         &settings,
