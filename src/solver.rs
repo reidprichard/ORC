@@ -571,10 +571,13 @@ fn get_face_velocity(
                 z: w[neighbor_index],
             };
             match interpolation_scheme {
-                VelocityInterpolation::LinearWeighted | VelocityInterpolation::RhieChow => {
+                VelocityInterpolation::LinearWeighted => {
                     let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
                     let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
                     vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)
+                }
+                VelocityInterpolation::RhieChow => {
+                    panic!("unsupported");
                 }
             }
         }
@@ -612,7 +615,8 @@ fn get_face_flux(
                 v,
                 w,
                 face_index,
-                interpolation_scheme,
+                VelocityInterpolation::LinearWeighted, // Don't think it makes sense to need
+                                                       // Rhie-Chow here
             ))
         }
         FaceConditionTypes::Interior => {
@@ -1274,17 +1278,23 @@ fn build_pressure_correction_matrices(
         let mut b_p: Float = 0.;
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
-            let face_velocity = get_face_velocity(
+            let outward_face_flux = get_face_flux(
                 mesh,
                 u,
                 v,
                 w,
+                p,
                 *face_index,
+                *cell_index,
                 numerical_settings.velocity_interpolation,
+                numerical_settings.gradient_reconstruction,
+                a_u,
+                a_v,
+                a_w,
             );
             let inward_face_normal = get_inward_face_normal(face, *cell_index);
             // The net mass flow rate through this face into this cell
-            b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
+            b_p += rho * (-outward_face_flux) * face.area;
 
             let a_ii = Vector3 {
                 x: a_u.get(*cell_index, *cell_index) * Float::abs(inward_face_normal.x),
