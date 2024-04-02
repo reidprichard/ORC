@@ -342,8 +342,8 @@ pub mod common {
             }
         }
 
-        pub fn abs(&self) -> Tensor3 {
-            Tensor3 {
+        pub fn abs(&self) -> Self {
+            Self {
                 x: self.x.abs(),
                 y: self.y.abs(),
                 z: self.z.abs(),
@@ -353,8 +353,8 @@ pub mod common {
 
     impl Add<Self> for Tensor3 {
         type Output = Self;
-        fn add(self, rhs: Tensor3) -> Tensor3 {
-            Tensor3 {
+        fn add(self, rhs: Self) -> Self {
+            Self {
                 x: self.x.clone() + rhs.x.clone(),
                 y: self.y.clone() + rhs.y.clone(),
                 z: self.z.clone() + rhs.z.clone(),
@@ -368,9 +368,9 @@ pub mod common {
                 type Output = Self;
                 fn div(self, rhs: $T) -> Self {
                     Tensor3 {
-                        x: self.x * (rhs as Float),
-                        y: self.y * (rhs as Float),
-                        z: self.z * (rhs as Float),
+                        x: self.x / (rhs as Float),
+                        y: self.y / (rhs as Float),
+                        z: self.z / (rhs as Float),
                     }
                 }
             }
