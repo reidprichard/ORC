@@ -174,16 +174,18 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into());
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
+    let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
     let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
     let bulk_velocity_correct =
         Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) < 1.01;
-    let max_velocity_correct = Float::abs(u.iter().max_by(|a, b| a.total_cmp(b)).unwrap() / u_avg - 1.5) < 0.01;
+    let max_velocity_correct = Float::abs(u_max / u_avg - 1.5) < 0.01;
     if bulk_velocity_correct && max_velocity_correct {
         print!("channel_flow flow validation passed.");
     } else {
         print!("channel_flow flow validation failed.");
     }
-    println!(" U_measured = {u_avg:.2e}; U_analytical = {u_avg_analytical:.2e}");
+    println!(" U_mean = {u_avg:.2e}; U_mean_analytical = {u_avg_analytical:.2e}");
+    println!(" U_max = {:.2e} = {:.1e}U_mean", u_max, u_max / u_avg);
 }
 
 fn main() {
