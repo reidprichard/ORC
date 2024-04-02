@@ -33,9 +33,8 @@ fn validate_solvers() {
     a_coo.push(2, 2, 4.);
 
     let a = CsrMatrix::from(&a_coo);
-    // let mut a = CsMat::new((3, 3), vec![2., 0., 1.], vec![0., 3., 2.], vec![2., 0., 4.]);
-    let b = DVector::from_column_slice(&vec![3., 2., 1.]);
-    let mut x = DVector::from_column_slice(&vec![0., 0., 0.]);
+    let b = DVector::from_column_slice(&[3., 2., 1.]);
+    let mut x = DVector::from_column_slice(&[0., 0., 0.]);
 
     iterative_solve(
         &a,
@@ -100,24 +99,6 @@ fn validate_solvers() {
     // println!("x = {x:?}");
     // println!("*** Gauss-Seidel solver validated. ***");
     // TODO: Validate multigrid
-}
-
-fn test_tensor() {
-
-    let x = Tensor3 {
-        x: Vector3::ones() * 1e-12,
-        y: Vector3::ones() * 1e-13,
-        z: Vector3::ones() * 1e-14,
-    };
-
-    let y = Tensor3 {
-        x: Vector3::ones() * 1e-15,
-        y: Vector3::ones() * 1e-16,
-        z: Vector3::ones() * 1e-11,
-    };
-
-    let z = x + y;
-    println!("{z}");
 }
 
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
@@ -212,7 +193,7 @@ fn main() {
     // 5. Write data
     // 6. Write settings
     // 7. Run solver
-    println!("Complete in {}.", start.elapsed().as_secs());
+    println!("Complete in {}s.", start.elapsed().as_secs());
 }
 
 // ************** old cases *************
