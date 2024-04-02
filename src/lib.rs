@@ -105,6 +105,14 @@ pub mod common {
         pub fn approx_equals(&self, other: &Self, tol: Float) -> bool {
             (*self - *other).infinity_norm() < tol
         }
+
+        pub fn abs(&self) -> Self {
+            Vector3 {
+                x: Float::abs(self.x),
+                y: Float::abs(self.y),
+                z: Float::abs(self.z),
+            }
+        }
     }
 
     impl Add<Float> for Vector3 {
@@ -333,15 +341,23 @@ pub mod common {
                 z: self.z.dot(v),
             }
         }
+
+        pub fn abs(&self) -> Tensor3 {
+            Tensor3 {
+                x: self.x.abs(),
+                y: self.y.abs(),
+                z: self.z.abs(),
+            }
+        }
     }
 
     impl Add<Self> for Tensor3 {
         type Output = Self;
         fn add(self, rhs: Tensor3) -> Tensor3 {
             Tensor3 {
-                x: self.x + rhs.x,
-                y: self.y + rhs.y,
-                z: self.z + rhs.z,
+                x: self.x.clone() + rhs.x.clone(),
+                y: self.y.clone() + rhs.y.clone(),
+                z: self.z.clone() + rhs.z.clone(),
             }
         }
     }
@@ -362,6 +378,7 @@ pub mod common {
     }
 
     tensor_div!(Uint);
+    tensor_div!(usize);
     tensor_div!(Float);
 
     impl fmt::Display for Tensor3 {
