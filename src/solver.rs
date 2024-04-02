@@ -587,9 +587,8 @@ fn get_face_velocity(
     let cell_index = face.cell_indices[0];
     match face_zone.zone_type {
         FaceConditionTypes::Wall => Vector3::zero(),
-        FaceConditionTypes::Symmetry => Vector3::zero(),
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
-        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => Vector3 {
+        FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet | FaceConditionTypes::Symmetry => Vector3 {
             x: u[cell_index],
             y: v[cell_index],
             z: w[cell_index],
