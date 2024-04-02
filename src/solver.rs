@@ -237,7 +237,7 @@ pub fn solve_steady(
                         s.spawn(|| {
                             trace!("solving u");
                             iterative_solve(
-                                &(&a_u + &a_di),
+                                &a_u,
                                 &b_u,
                                 &mut u,
                                 numerical_settings.matrix_solver.iterations,
@@ -327,7 +327,8 @@ pub fn solve_steady(
                     numerical_settings,
                     rho,
                 );
-                if log_enabled!(log::Level::Debug) { // && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) {
+                    // && a_di.nrows() < 256 {
                     println!("\nPressure:");
                     print_linear_system(
                         &pressure_correction_matrices.a,
@@ -1253,11 +1254,13 @@ fn build_pressure_correction_matrices(
             // The net mass flow rate through this face into this cell
             b_p += rho * face_velocity.dot(&inward_face_normal) * face.area;
 
-            let a_ii = Vector3 {
-                x: a_u.get(*cell_index, *cell_index),
-                y: a_v.get(*cell_index, *cell_index),
-                z: a_w.get(*cell_index, *cell_index),
-            };
+            let x = Float::abs(inward_face_normal.x);
+            let y = Float::abs(inward_face_normal.y);
+            let z = Float::abs(inward_face_normal.z);
+
+            let a_ii = a_u.get(*cell_index, *cell_index) * x
+                + a_v.get(*cell_index, *cell_index) * y
+                + a_w.get(*cell_index, *cell_index) * z;
 
             if face.cell_indices.len() > 1 {
                 let neighbor_cell_index = if face.cell_indices[0] != *cell_index {
@@ -1268,20 +1271,17 @@ fn build_pressure_correction_matrices(
                 // This relates the pressure drop across this face to its velocity
                 // NOTE: It would be more rigorous to recalculate the advective coefficients,
                 // but I think this should be sufficient for now.
-                let a_ij = Vector3 {
-                    x: (a_u.get(neighbor_cell_index, neighbor_cell_index)),
-                    y: (a_v.get(neighbor_cell_index, neighbor_cell_index)),
-                    z: (a_w.get(neighbor_cell_index, neighbor_cell_index)),
-                };
+                let a_ij = (a_u.get(neighbor_cell_index, neighbor_cell_index)) * x
+                    + (a_v.get(neighbor_cell_index, neighbor_cell_index)) * y
+                    + (a_w.get(neighbor_cell_index, neighbor_cell_index)) * z;
                 let a_interpolated = (a_ii + a_ij) / 2.;
 
-                let a_nb =
-                    rho * Float::powi(face.area, 2) / a_interpolated.dot(&-inward_face_normal);
+                let a_nb = rho * Float::powi(face.area, 2) / a_interpolated;
                 a.push(*cell_index, neighbor_cell_index, -a_nb);
                 a_p += a_nb;
             } else {
                 // TODO: Handle boundary types here (e.g. wall should add zero)
-                let a_nb = rho * Float::powi(face.area, 2) / a_ii.dot(&-inward_face_normal);
+                let a_nb = rho * Float::powi(face.area, 2) / a_ii;
                 a_p += a_nb / 2.; // NOTE: I'm not sure if dividing by two is correct here?
             }
         }
