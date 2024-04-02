@@ -327,7 +327,8 @@ pub fn solve_steady(
                     numerical_settings,
                     rho,
                 );
-                if log_enabled!(log::Level::Debug) { // && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) {
+                    // && a_di.nrows() < 256 {
                     println!("\nPressure:");
                     print_linear_system(
                         &pressure_correction_matrices.a,
@@ -1139,37 +1140,42 @@ fn build_momentum_matrices(
                         z: a_nb,
                     }
                 }
-                // MomentumDiscretization::TVD(psi) => {
-                //     let r_pa =
-                //         mesh.cells[&neighbor_cell_index].centroid - mesh.cells[cell_index].centroid;
-                //     let downstream_cell = if f_i > 0. {
-                //         neighbor_cell_index
-                //     } else {
-                //         *cell_index
-                //     };
-                //     let downstream_velocity = Vector3 {
-                //         x: u[downstream_cell],
-                //         y: v[downstream_cell],
-                //         z: w[downstream_cell],
-                //     };
-                //     let velocity = Vector3 {
-                //         x: u[*cell_index],
-                //         y: v[*cell_index],
-                //         z: w[*cell_index],
-                //     };
-                //     let r = 2.
-                //         * (calculate_velocity_gradient(
-                //             &mesh,
-                //             &u,
-                //             &v,
-                //             &w,
-                //             *cell_index,
-                //             gradient_scheme,
-                //         )
-                //         .dot(&r_pa))
-                //         / (downstream_velocity - velocity);
-                //     0.
-                // }
+                MomentumDiscretization::TVD(psi) => {
+                    let r_pa =
+                        mesh.cells[&neighbor_cell_index].centroid - mesh.cells[cell_index].centroid;
+                    let downstream_cell = if f_i > 0. {
+                        neighbor_cell_index
+                    } else {
+                        *cell_index
+                    };
+                    let downstream_velocity = Vector3 {
+                        x: u[downstream_cell],
+                        y: v[downstream_cell],
+                        z: w[downstream_cell],
+                    };
+                    let velocity = Vector3 {
+                        x: u[*cell_index],
+                        y: v[*cell_index],
+                        z: w[*cell_index],
+                    };
+                    let r = 2.
+                        * (calculate_velocity_gradient(
+                            &mesh,
+                            &u,
+                            &v,
+                            &w,
+                            *cell_index,
+                            gradient_scheme,
+                        )
+                        .dot(&r_pa))
+                        / (downstream_velocity - velocity)
+                        - 1.;
+                    Vector3 {
+                        x: psi(r.x),
+                        y: psi(r.y),
+                        z: psi(r.z),
+                    }
+                }
                 // MomentumDiscretization::CD2 => {
                 //
                 // }
@@ -1269,15 +1275,19 @@ fn build_pressure_correction_matrices(
                 // NOTE: It would be more rigorous to recalculate the advective coefficients,
                 // but I think this should be sufficient for now.
                 let a_ij = Vector3 {
-                    x: (a_u.get(neighbor_cell_index, neighbor_cell_index)) * Float::abs(inward_face_normal.x),
-                    y: (a_v.get(neighbor_cell_index, neighbor_cell_index)) * Float::abs(inward_face_normal.y),
-                    z: (a_w.get(neighbor_cell_index, neighbor_cell_index)) * Float::abs(inward_face_normal.z),
+                    x: (a_u.get(neighbor_cell_index, neighbor_cell_index))
+                        * Float::abs(inward_face_normal.x),
+                    y: (a_v.get(neighbor_cell_index, neighbor_cell_index))
+                        * Float::abs(inward_face_normal.y),
+                    z: (a_w.get(neighbor_cell_index, neighbor_cell_index))
+                        * Float::abs(inward_face_normal.z),
                 };
                 let a_interpolated = (a_ii + a_ij) / 2.;
 
                 // NOTE: Unsure on how I'm combining the x/y/z components of `a` here.
-                let a_nb =
-                    rho * Float::powi(face.area, 2) / a_interpolated.norm();
+                // TODO: Test with mesh that doesn't align with XY grid to make sure this is
+                // correct
+                let a_nb = rho * Float::powi(face.area, 2) / a_interpolated.norm();
                 a.push(*cell_index, neighbor_cell_index, -a_nb);
                 a_p += a_nb;
             } else {
