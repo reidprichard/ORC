@@ -164,7 +164,7 @@ def plot_channel_flow():
     # axs[1].quiver(xi, yi, p_grad[1]*0, p_grad[0])
 
     fig.colorbar(cm, label="Velocity gradient [1/s]")
-    fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
+    # fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
     fig, ax = plt.subplots()
@@ -175,7 +175,7 @@ def plot_channel_flow():
     ax.scatter(y, u)
     ax.set_xlabel("Y [m]")
     ax.set_ylabel("U [m/s]")
-    fig.savefig("./examples/channel_flow_velocity_profile.png", dpi=300)
+    # fig.savefig("./examples/channel_flow_velocity_profile.png", dpi=300)
 
     tile_all_matplotlib_figures()
 
