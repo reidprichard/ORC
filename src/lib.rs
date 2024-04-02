@@ -328,7 +328,7 @@ pub mod common {
         pub fn dot(&self, vector: &Vector3) -> Vector3 {
             Vector3 {
                 x: self.x.dot(&vector),
-                y: self.x.dot(&vector),
+                y: self.y.dot(&vector),
                 z: self.z.dot(&vector),
             }
         }

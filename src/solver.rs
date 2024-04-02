@@ -203,13 +203,17 @@ pub fn solve_steady(
                     &v,
                     &w,
                     &p,
-                    numerical_settings.momentum,
-                    if iteration_count > 1 {
+                    if iter_number > 10 {
+                        numerical_settings.momentum
+                    } else {
+                        MomentumDiscretization::UD
+                    },
+                    if iter_number > 1 {
                         numerical_settings.velocity_interpolation
                     } else {
                         VelocityInterpolation::LinearWeighted
                     },
-                    if iteration_count > 1 {
+                    if iter_number > 1 {
                         numerical_settings.pressure_interpolation
                     } else {
                         PressureInterpolation::LinearWeighted
@@ -394,6 +398,26 @@ pub fn solve_steady(
         }
         _ => panic!("unsupported pressure-velocity coupling"),
     }
+    for i in 0..mesh.cells.len() {
+        // let pressure_gradient = calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
+        let velocity_gradient = calculate_velocity_gradient(
+            &mesh,
+            &u,
+            &v,
+            &w,
+            i,
+            numerical_settings.gradient_reconstruction,
+        );
+        let du_dy = calculate_velocity_component_gradient(
+            &mesh,
+            &u,
+            &v,
+            &w,
+            i,
+            numerical_settings.gradient_reconstruction,
+        );
+        println!("{velocity_gradient}\t{du_dy}\n");
+    }
     (u, v, w, p)
 }
 
@@ -451,6 +475,37 @@ fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
+fn calculate_velocity_component_gradient(
+    mesh: &Mesh,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    cell_index: usize,
+    gradient_scheme: GradientReconstructionMethods,
+) -> Vector3 {
+    let cell = &mesh.cells[&cell_index];
+    match gradient_scheme {
+        GradientReconstructionMethods::GreenGauss(_) => {
+            cell.face_indices
+                .iter()
+                .fold(Vector3::zero(), |acc, face_index| {
+                    let face = &mesh.faces[&face_index];
+                    let face_value = get_face_velocity(
+                        &mesh,
+                        &u,
+                        &v,
+                        &w,
+                        *face_index,
+                        VelocityInterpolation::LinearWeighted,
+                    );
+                    acc + face_value.x * face.area * get_outward_face_normal(face, cell_index)
+                })
+                / cell.volume
+        }
+        _ => panic!("unsupported gradient scheme"),
+    }
+}
+
 fn calculate_velocity_gradient(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -461,27 +516,27 @@ fn calculate_velocity_gradient(
 ) -> Tensor3 {
     let cell = &mesh.cells[&cell_index];
     match gradient_scheme {
-        GradientReconstructionMethods::GreenGauss(variant) => match variant {
-            GreenGaussVariants::CellBased => {
-                cell.face_indices
-                    .iter()
-                    .map(|face_index| {
-                        let face = &mesh.faces[&face_index];
-                        let face_value: Vector3 = get_face_velocity(
-                            &mesh,
-                            &u,
-                            &v,
-                            &w,
-                            *face_index,
-                            VelocityInterpolation::LinearWeighted,
-                        );
-                        (face_value * face.area).outer(&get_outward_face_normal(face, cell_index))
-                    })
-                    .fold(Tensor3::zero(), |acc, v| acc + v)
-                    / cell.volume
-            }
-            _ => panic!("unsupported Green-Gauss scheme"),
-        },
+        GradientReconstructionMethods::GreenGauss(_) => {
+            cell.face_indices
+                .iter()
+                .fold(Tensor3::zero(), |acc, face_index| {
+                    let face = &mesh.faces[&face_index];
+                    let face_value: Vector3 = get_face_velocity(
+                        &mesh,
+                        &u,
+                        &v,
+                        &w,
+                        *face_index,
+                        VelocityInterpolation::LinearWeighted,
+                    );
+                    acc + Tensor3 {
+                        x: face_value.x * face.area * get_outward_face_normal(face, cell_index),
+                        y: face_value.y * face.area * get_outward_face_normal(face, cell_index),
+                        z: face_value.z * face.area * get_outward_face_normal(face, cell_index),
+                    }
+                })
+                / cell.volume
+        }
         _ => panic!("unsupported gradient scheme"),
     }
 }
@@ -1079,7 +1134,9 @@ fn build_momentum_matrices(
 
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = Vector3::zero();
-
+        let cell_velocity_gradient =
+            calculate_velocity_gradient(&mesh, &u, &v, &w, *cell_index, gradient_scheme);
+        // println!("\n{cell_velocity_gradient}");
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
@@ -1132,48 +1189,57 @@ fn build_momentum_matrices(
                         z: a_nb,
                     }
                 }
-                MomentumDiscretization::CD1 => {
-                    let a_nb = f_i / 2.;
-                    Vector3 {
-                        x: a_nb,
-                        y: a_nb,
-                        z: a_nb,
-                    }
-                }
+                // MomentumDiscretization::CD1 => {
+                //     let a_nb = f_i / 2.;
+                //     Vector3 {
+                //         x: a_nb,
+                //         y: a_nb,
+                //         z: a_nb,
+                //     }
+                // }
                 MomentumDiscretization::TVD(psi) => {
-                    let r_pa =
-                        mesh.cells[&neighbor_cell_index].centroid - mesh.cells[cell_index].centroid;
-                    let downstream_cell = if f_i > 0. {
-                        neighbor_cell_index
+                    if neighbor_cell_index == usize::MAX {
+                        let a_nb = Float::min(f_i, 0.);
+                        Vector3 {
+                            x: a_nb,
+                            y: a_nb,
+                            z: a_nb,
+                        }
                     } else {
-                        *cell_index
-                    };
-                    let downstream_velocity = Vector3 {
-                        x: u[downstream_cell],
-                        y: v[downstream_cell],
-                        z: w[downstream_cell],
-                    };
-                    let velocity = Vector3 {
-                        x: u[*cell_index],
-                        y: v[*cell_index],
-                        z: w[*cell_index],
-                    };
-                    let r = 2.
-                        * (calculate_velocity_gradient(
-                            &mesh,
-                            &u,
-                            &v,
-                            &w,
-                            *cell_index,
-                            gradient_scheme,
-                        )
-                        .dot(&r_pa))
-                        / (downstream_velocity - velocity)
-                        - 1.;
-                    Vector3 {
-                        x: psi(r.x),
-                        y: psi(r.y),
-                        z: psi(r.z),
+                        let downstream_cell = if f_i > 0. {
+                            neighbor_cell_index
+                        } else {
+                            *cell_index
+                        };
+                        let downstream_velocity = Vector3 {
+                            x: u[downstream_cell],
+                            y: v[downstream_cell],
+                            z: w[downstream_cell],
+                        };
+                        let velocity = Vector3 {
+                            x: u[*cell_index],
+                            y: v[*cell_index],
+                            z: w[*cell_index],
+                        };
+                        if (downstream_velocity - velocity).norm() == 0. {
+                            let a_nb = Float::min(f_i, 0.);
+                            Vector3 {
+                                x: a_nb,
+                                y: a_nb,
+                                z: a_nb,
+                            }
+                        } else {
+                            let r_pa = mesh.cells[&neighbor_cell_index].centroid
+                                - mesh.cells[cell_index].centroid;
+                            let r = 2. * cell_velocity_gradient.inner(&r_pa)
+                                / (downstream_velocity - velocity)
+                                - 1.;
+                            Vector3 {
+                                x: psi(r.x),
+                                y: psi(r.y),
+                                z: psi(r.z),
+                            }
+                        }
                     }
                 }
                 // MomentumDiscretization::CD2 => {
