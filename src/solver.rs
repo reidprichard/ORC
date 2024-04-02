@@ -1094,7 +1094,7 @@ fn build_pressure_correction_matrices(
                 };
                 // NOTE: It would be more rigorous to recalculate the advective coefficients,
                 // but I think this should be sufficient for now.
-                let a_ij = momentum_matrices.get(*cell_index, neighbor_cell_index);
+                let a_ij = momentum_matrices.get(neighbor_cell_index, neighbor_cell_index);
 
                 let a_interpolated = (a_ij + a_ii) / 2.;
 
