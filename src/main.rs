@@ -53,6 +53,7 @@ fn validate_solvers() {
         SolutionMethod::Jacobi,
         0.5,
         TOL / 10.,
+        PreconditionMethod::Jacobi,
     );
 
     for row_num in 0..a.nrows() {
@@ -145,6 +146,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             // ~0.5 seems like roughly upper limit for Jacobi; does nothing for BiCGSTAB
             relaxation: 0.5,
             relative_convergence_threshold: 1e-3,
+            preconditioner: PreconditionMethod::Jacobi,
         },
         momentum: TVD_QUICK,
         pressure_interpolation: PressureInterpolation::SecondOrder,
@@ -350,6 +352,7 @@ fn test_3d_1x3(iteration_count: Uint) {
             iterations: 100,
             relaxation: 0.2, // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
             relative_convergence_threshold: 1e-3,
+            preconditioner: PreconditionMethod::Jacobi,
         },
         momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::SecondOrder,
