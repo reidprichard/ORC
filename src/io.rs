@@ -504,6 +504,7 @@ pub fn read_data(
     let file = File::open(data_file_path);
     match file {
         Ok(f) => {
+            println!("Reading solution data from {data_file_path}...");
             let data_file_lines = io::BufReader::new(f).lines();
 
             for line in data_file_lines {
@@ -547,6 +548,7 @@ pub fn write_data(
     decimal_precision: usize,
 ) {
     let mut file = File::create(output_file_name).unwrap();
+    println!("Writing data to {output_file_name}...");
     for cell_index in 0..mesh.cells.len() {
         let cell = &mesh.cells[&cell_index];
         writeln!(
