@@ -113,6 +113,22 @@ pub mod common {
                 z: Float::abs(self.z),
             }
         }
+
+        pub fn from_str(s: &str) -> Self {
+            let xyz = s
+                .strip_prefix("(")
+                .unwrap()
+                .strip_suffix(")")
+                .unwrap()
+                .splitn(3, ", ")
+                .map(|s_i| s_i.parse::<Float>().unwrap())
+                .collect::<Vec<Float>>();
+            Vector3 {
+                x: xyz[0],
+                y: xyz[1],
+                z: xyz[2],
+            }
+        }
     }
 
     impl Add<Float> for Vector3 {
@@ -384,13 +400,7 @@ pub mod common {
     impl fmt::Display for Tensor3 {
         // TODO: Switch between regular and scientific fmt based on magnitude
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(
-                f,
-                "{}\n{}\n{}",
-                self.x,
-                self.y,
-                self.z,
-            )
+            write!(f, "{}\n{}\n{}", self.x, self.y, self.z,)
         }
     }
 }
