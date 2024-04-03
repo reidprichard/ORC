@@ -145,6 +145,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             iterations: 50,
             // ~0.5 seems like roughly upper limit for Jacobi; does nothing for BiCGSTAB
             relaxation: 0.5,
+            // Does nothing for BiCGSTAB
             relative_convergence_threshold: 1e-3,
             preconditioner: PreconditionMethod::Jacobi,
         },
