@@ -439,6 +439,80 @@ pub fn solve_steady(
     (u, v, w, p)
 }
 
+pub fn initialize(
+    mesh: &mut Mesh,
+    mu: Float,
+    rho: Float,
+    iteration_count: Uint,
+) -> (
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
+    let n = mesh.cells.len();
+    let mut u = dvector_zeros!(n);
+    let mut v = dvector_zeros!(n);
+    let mut w = dvector_zeros!(n);
+    let mut p = dvector_zeros!(n);
+    let a_di = build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
+    let mut a_u = initialize_momentum_matrix(mesh);
+    let mut a_v = initialize_momentum_matrix(mesh);
+    let mut a_w = initialize_momentum_matrix(mesh);
+    let mut b_u = dvector_zeros!(n);
+    let mut b_v = dvector_zeros!(n);
+    let mut b_w = dvector_zeros!(n);
+
+    initialize_pressure_field(mesh, &mut p, iteration_count);
+    build_momentum_matrices(
+        &mut a_u,
+        &mut a_v,
+        &mut a_w,
+        &mut b_u,
+        &mut b_v,
+        &mut b_w,
+        &mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        MomentumDiscretization::UD,
+        VelocityInterpolation::LinearWeighted,
+        PressureInterpolation::LinearWeighted,
+        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        rho,
+    );
+
+    iterative_solve(
+        &(&a_u + &a_di),
+        &b_u,
+        &mut u,
+        100,
+        SolutionMethod::Multigrid,
+        0.5,
+        1e-6
+    );
+    iterative_solve(
+        &(&a_v + &a_di),
+        &b_v,
+        &mut v,
+        100,
+        SolutionMethod::Multigrid,
+        0.5,
+        1e-6
+    );
+    iterative_solve(
+        &(&a_w + &a_di),
+        &b_w,
+        &mut w,
+        100,
+        SolutionMethod::Multigrid,
+        0.5,
+        1e-6
+    );
+    (u, v, w, p)
+}
+
 fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
     println!("Initializing pressure field...");
     // TODO
