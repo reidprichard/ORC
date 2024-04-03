@@ -539,15 +539,16 @@ pub fn write_data(
     decimal_precision: usize,
 ) {
     let mut file = File::create(output_file_name).unwrap();
-    for (cell_index, cell) in &mesh.cells {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         writeln!(
             file,
             "{}\t({:.prec$e}, {:.prec$e}, {:.prec$e})\t{:.prec$e}",
             cell.centroid,
-            u[*cell_index],
-            v[*cell_index],
-            w[*cell_index],
-            p[*cell_index],
+            u[cell_index],
+            v[cell_index],
+            w[cell_index],
+            p[cell_index],
             prec = decimal_precision
         )
         .unwrap();
