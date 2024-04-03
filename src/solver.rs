@@ -10,6 +10,7 @@ use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
+use std::time::Instant;
 
 const MAX_PRINT_ROWS: usize = 64;
 const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
@@ -191,6 +192,7 @@ pub fn solve_steady(
     } else {
         debug!("{}", matrix_to_string(&a_di));
     }
+    let mut start = Instant::now();
     match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
@@ -386,9 +388,12 @@ pub fn solve_steady(
                 let v_avg = v.iter().sum::<Float>() / (cell_count as Float);
                 let w_avg = w.iter().sum::<Float>() / (cell_count as Float);
                 if (iter_number) % reporting_interval == 0 {
+                    let elapsed = (Instant::now() - start).as_millis();
+                    let millis_per_iter = elapsed / (reporting_interval as u128);
+                    start = Instant::now();
                     println!(
-                        "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tvelocity correction: {:.2e}\tpressure correction: {:.2e}",
-                        iter_number, u_avg, v_avg, w_avg, avg_vel_correction, avg_pressure_correction
+                        "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tvelocity correction: {:.2e}\tpressure correction: {:.2e}\tms/iter: {:.1e}",
+                        iter_number, u_avg, v_avg, w_avg, avg_vel_correction, avg_pressure_correction, millis_per_iter
                     );
                 }
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
