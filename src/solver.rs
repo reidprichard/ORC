@@ -194,8 +194,7 @@ pub fn solve_steady(
     match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                build_solution_matrices(
-                    &a_di,
+                build_momentum_matrices(
                     &mut a_u,
                     &mut a_v,
                     &mut a_w,
@@ -222,6 +221,10 @@ pub fn solve_steady(
                     rho,
                 );
 
+                a_u = &a_u + &a_di;
+                a_v = &a_v + &a_di;
+                a_w = &a_w + &a_di;
+
                 if log_enabled!(log::Level::Debug) && a_di.nrows() < 256 {
                     println!("\nMomentum:");
                     println!("u:");
@@ -232,7 +235,7 @@ pub fn solve_steady(
                     print_linear_system(&a_w, &b_w);
                 }
 
-                if false && !log_enabled!(log::Level::Trace) {
+                if !log_enabled!(log::Level::Trace) {
                     thread::scope(|s| {
                         s.spawn(|| {
                             trace!("solving u");
@@ -1083,8 +1086,7 @@ fn initialize_momentum_matrix(mesh: &Mesh) -> CsrMatrix<Float> {
     CsrMatrix::from(&a)
 }
 
-fn build_solution_matrices(
-    a_di: &CsrMatrix<Float>,
+fn build_momentum_matrices(
     a_u: &mut CsrMatrix<Float>,
     a_v: &mut CsrMatrix<Float>,
     a_w: &mut CsrMatrix<Float>,
@@ -1230,18 +1232,17 @@ fn build_solution_matrices(
 
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
-                let d_i = a_di.get(*cell_index, neighbor_cell_index);
                 // negate a_nb to move to LHS of equation
                 match a_u.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.x + d_i,
+                    NonZero(a_ij) => *a_ij = a_nb.x,
                     Zero => panic!(),
                 }
                 match a_v.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.y + d_i,
+                    NonZero(a_ij) => *a_ij = a_nb.y,
                     Zero => panic!(),
                 }
                 match a_w.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.z + d_i,
+                    NonZero(a_ij) => *a_ij = a_nb.z,
                     Zero => panic!(),
                 }
             }
@@ -1251,17 +1252,16 @@ fn build_solution_matrices(
         b_v[*cell_index] = source_total.y;
         b_w[*cell_index] = source_total.z;
 
-        let d_i = a_di.get(*cell_index, *cell_index);
         match a_u.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.x + d_i,
+            NonZero(v) => *v = a_p.x,
             Zero => panic!(),
         }
         match a_v.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.y + d_i,
+            NonZero(v) => *v = a_p.y,
             Zero => panic!(),
         }
         match a_w.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.z + d_i,
+            NonZero(v) => *v = a_p.z,
             Zero => panic!(),
         }
     } // end cell loop
