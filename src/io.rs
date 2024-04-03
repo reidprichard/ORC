@@ -12,10 +12,6 @@ use std::fs::File;
 use std::io::Write;
 use std::io::{self, BufRead};
 
-// cells: (12 (zone-id first-index last-index type      element-type))
-// faces: (13 (zone-id first-index last-index bc-type   face-type))
-// nodes: (10 (zone-id first-index last-index type      ND))
-
 // TODO: Make this only take block 1? Or handle error here in case 1 doesn't exist?
 macro_rules! skip_zone_zero {
     ($label:tt, $line_blocks:expr) => {
@@ -25,7 +21,6 @@ macro_rules! skip_zone_zero {
     };
 }
 
-// TODO: Subtract one from element numbers so they start at 0
 pub fn read_mesh(mesh_path: &str) -> Mesh {
     println!("Beginning reading mesh from {mesh_path}");
 
@@ -43,9 +38,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     fn read_section_header_common(header_line: &str) -> Vec<usize> {
         let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
-        // let re = Regex::new(r"\(\d+ \(([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+)")
-        //     .expect("valid regex");
-
         let mut items: Vec<usize> = Vec::new();
         for (_, [s]) in re.captures_iter(header_line).map(|c| c.extract()) {
             items.push(usize::from_str_radix(s, 16).expect("valid hex"));
@@ -493,30 +485,49 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
 pub fn read_settings() {}
 
-// pub fn read_data(
-//     file_path: &str,
-//     data_decimal_precision: usize
-// ) -> (
-//     DVector<Float>,
-//     DVector<Float>,
-//     DVector<Float>,
-//     DVector<Float>,
-// ) {
-//     let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
-//     let mut u: Vec<Float> = Vec::new();
-//     let mut v: Vec<Float> = Vec::new();
-//     let mut w: Vec<Float> = Vec::new();
-//     let mut p: Vec<Float> = Vec::new();
-//
-//     let file = File::open(file_path).unwrap();
-//
-//     (
-//         DVector::from_column_slice(&u),
-//         DVector::from_column_slice(&v),
-//         DVector::from_column_slice(&w),
-//         DVector::from_column_slice(&p),
-//     )
-// }
+pub fn read_data(
+    data_file_path: &str,
+    data_decimal_precision: usize
+) -> (
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
+    let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
+    let mut u: Vec<Float> = Vec::new();
+    let mut v: Vec<Float> = Vec::new();
+    let mut w: Vec<Float> = Vec::new();
+    let mut p: Vec<Float> = Vec::new();
+
+    // let data_file_contents = std::fs::read_to_string(file_path).expect("file_path should exist");
+    let file = File::open(data_file_path).unwrap();
+    let data_file_lines = io::BufReader::new(file).lines();
+
+    for line in data_file_lines {
+        line.unwrap().splitn(3, "\t").enumerate().for_each(|(i, chunk)| {
+            match i {
+                0 => (),
+                1 => {
+                    println!("1: {chunk}");
+                    // append to velocity
+                },
+                2 => {
+                    p.push(chunk.parse().unwrap());
+                }
+                _ => panic!("There should only be three tab-separated columns in the data file.")
+            }
+        });
+    }
+    // println!("{p:?}");
+
+    (
+        DVector::from_column_slice(&u),
+        DVector::from_column_slice(&v),
+        DVector::from_column_slice(&w),
+        DVector::from_column_slice(&p),
+    )
+}
 
 pub fn write_data(
     mesh: &Mesh,
@@ -531,7 +542,7 @@ pub fn write_data(
     for (cell_index, cell) in &mesh.cells {
         writeln!(
             file,
-            "{},\t({:.prec$}, {:.prec$}, {:.prec$}),\t{:.prec$}",
+            "{},\t({:.prec$e}, {:.prec$e}, {:.prec$e}),\t{:.prec$e}",
             cell.centroid,
             u[*cell_index],
             v[*cell_index],
