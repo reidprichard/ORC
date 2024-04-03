@@ -174,13 +174,6 @@ pub fn solve_steady(
     reporting_interval: Uint,
 ) {
     let cell_count: usize = mesh.cells.len();
-    // let mut u = dvector_zeros!(cell_count);
-    // let mut v = dvector_zeros!(cell_count);
-    // let mut w = dvector_zeros!(cell_count);
-    // let mut p = dvector_zeros!(cell_count);
-    let mut p_prime = dvector_zeros!(cell_count);
-
-    initialize_pressure_field(mesh, p, 10000);
 
     let a_di = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
@@ -189,6 +182,7 @@ pub fn solve_steady(
     let mut b_u = dvector_zeros!(cell_count);
     let mut b_v = dvector_zeros!(cell_count);
     let mut b_w = dvector_zeros!(cell_count);
+    let mut p_prime = dvector_zeros!(cell_count);
 
     if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
         println!("\nMomentum diffusion:");
