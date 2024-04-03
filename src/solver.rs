@@ -4,7 +4,7 @@ use crate::io::{print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::GetEntry;
 use crate::{common::*, io::print_vec_scientific};
-use log::{log_enabled, trace};
+use log::{info, log_enabled, trace};
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 use std::collections::HashSet;
@@ -235,7 +235,7 @@ pub fn solve_steady(
                     print_linear_system(&a_w, &b_w);
                 }
 
-                if !log_enabled!(log::Level::Trace) {
+                if false && !log_enabled!(log::Level::Trace) {
                     thread::scope(|s| {
                         s.spawn(|| {
                             trace!("solving u");
@@ -400,11 +400,11 @@ pub fn solve_steady(
                         println!("w:");
                         print_linear_system(&a_w, &b_w);
 
-                        println!("\nPressure:");
-                        print_linear_system(
-                            &pressure_correction_matrices.a,
-                            &pressure_correction_matrices.b,
-                        );
+                        // println!("\nPressure:");
+                        // print_linear_system(
+                        //     &pressure_correction_matrices.a,
+                        //     &pressure_correction_matrices.b,
+                        // );
 
                         print!("u:  ");
                         print_vec_scientific(&u);
@@ -412,10 +412,10 @@ pub fn solve_steady(
                         print_vec_scientific(&v);
                         print!("w:  ");
                         print_vec_scientific(&w);
-                        print!("p:  ");
-                        print_vec_scientific(&p);
-                        print!("p': ");
-                        print_vec_scientific(&p_prime);
+                        // print!("p:  ");
+                        // print_vec_scientific(&p);
+                        // print!("p': ");
+                        // print_vec_scientific(&p_prime);
                     }
                     panic!("solution diverged");
                 }
@@ -886,6 +886,12 @@ pub fn iterative_solve(
                 b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
             for iter_num in 0..iteration_count {
+                trace!("\nJacobi iteration {iter_num} = {solution_vector:?}");
+                for v in solution_vector.iter() {
+                    if v.is_nan() {
+                        panic!("diverged");
+                    }
+                }
                 // It seems like there must be a way to avoid cloning solution_vector, even if that
                 // turns this into Gauss-Seidel
                 *solution_vector = relaxation_factor * (&b_prime - &a_prime * &*solution_vector)
@@ -895,7 +901,7 @@ pub fn iterative_solve(
                 if iter_num == 1 {
                     initial_residual = r;
                 } else if r / initial_residual < convergence_threshold {
-                    trace!("Converged in {} iters", iter_num);
+                    info!("Converged in {} iters", iter_num);
                     break;
                 }
             }
