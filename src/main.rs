@@ -1,5 +1,6 @@
 #![allow(dead_code, unused)]
 
+use log::log_enabled;
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::common::{Float, Tensor3};
@@ -15,6 +16,9 @@ use tracing::{info, Level};
 use tracing_appender::rolling::{self, RollingFileAppender};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::prelude::*;
+
+// TODO: Set this with command line arg
+const DEBUG: bool = false;
 
 fn validate_solvers() {
     const TOL: Float = 1e-6;
@@ -136,10 +140,10 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings {
-            solver_type: SolutionMethod::Jacobi,
-            iterations: 100,
-            relaxation: 0.5, // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
-            // BiCGSTAB
+            solver_type: SolutionMethod::Multigrid,
+            iterations: 50,
+            // ~0.5 seems like roughly upper limit for Jacobi; does nothing for BiCGSTAB
+            relaxation: 0.5,
             relative_convergence_threshold: 1e-3,
         },
         momentum: TVD_QUICK,
@@ -175,22 +179,24 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 }
 
 fn main() {
-    let file_appender = BasicRollingFileAppender::new(
-        "./orc.log",
-        RollingConditionBasic::new().max_size(2_u64.pow(26)),
-        10,
-    )
-    .unwrap();
-    // Start chatgippity
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking)
-                .with_span_events(FmtSpan::CLOSE),
+    if DEBUG {
+        let file_appender = BasicRollingFileAppender::new(
+            "./logs/orc.log",
+            RollingConditionBasic::new().max_size(2_u64.pow(26)),
+            10,
         )
-        .init();
+        .unwrap();
+        // Start chatgippity
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_span_events(FmtSpan::CLOSE),
+            )
+            .init();
     // end chatgippity
+    } 
 
     let start = Instant::now();
     let args: Vec<String> = env::args().collect();
