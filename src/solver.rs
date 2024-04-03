@@ -1,15 +1,17 @@
 #![allow(unreachable_patterns, unused)]
 
-use crate::io::{print_linear_system, print_matrix};
+use crate::io::{linear_system_to_string, matrix_to_string, print_linear_system, print_matrix};
 use crate::mesh::*;
 use crate::GetEntry;
 use crate::{common::*, io::print_vec_scientific};
-use log::{info, log_enabled, trace};
+use log::{debug, info, log_enabled, trace};
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
 use std::collections::HashSet;
 // use rayon::prelude::*;
 use std::thread;
+
+const MAX_PRINT_ROWS: usize = 64;
 
 // TODO: Normalize mesh lengths to reduce roundoff error
 
@@ -187,9 +189,11 @@ pub fn solve_steady(
     let mut b_v = dvector_zeros!(cell_count);
     let mut b_w = dvector_zeros!(cell_count);
 
-    if log_enabled!(log::Level::Debug) && a_di.ncols() < 256 {
+    if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
         println!("\nMomentum diffusion:");
         print_matrix(&a_di);
+    } else {
+        debug!("{}", matrix_to_string(&a_di));
     }
     match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
@@ -225,7 +229,7 @@ pub fn solve_steady(
                 a_v = &a_v + &a_di;
                 a_w = &a_w + &a_di;
 
-                if log_enabled!(log::Level::Debug) && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
                     println!("\nMomentum:");
                     println!("u:");
                     print_linear_system(&a_u, &b_u);
@@ -233,6 +237,11 @@ pub fn solve_steady(
                     print_linear_system(&a_v, &b_v);
                     println!("w:");
                     print_linear_system(&a_w, &b_w);
+                }
+                else {
+                    debug!("{}", linear_system_to_string(&a_u, &b_u));
+                    debug!("{}", linear_system_to_string(&a_v, &b_v));
+                    debug!("{}", linear_system_to_string(&a_w, &b_w));
                 }
 
                 if false && !log_enabled!(log::Level::Trace) {
@@ -330,12 +339,15 @@ pub fn solve_steady(
                     numerical_settings,
                     rho,
                 );
-                if log_enabled!(log::Level::Debug) && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
                     println!("\nPressure:");
                     print_linear_system(
                         &pressure_correction_matrices.a,
                         &pressure_correction_matrices.b,
                     );
+                }
+                else {
+                    debug!("{}", linear_system_to_string(&pressure_correction_matrices.a, &pressure_correction_matrices.b));
                 }
 
                 trace!("solving p");
@@ -390,33 +402,6 @@ pub fn solve_steady(
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
                     // TODO: Some undefined behavior seems to be causing this to trigger
                     // intermittently
-
-                    if log_enabled!(log::Level::Debug) {
-                        println!("\nMomentum:");
-                        println!("u:");
-                        print_linear_system(&a_u, &b_u);
-                        println!("v:");
-                        print_linear_system(&a_v, &b_v);
-                        println!("w:");
-                        print_linear_system(&a_w, &b_w);
-
-                        // println!("\nPressure:");
-                        // print_linear_system(
-                        //     &pressure_correction_matrices.a,
-                        //     &pressure_correction_matrices.b,
-                        // );
-
-                        print!("u:  ");
-                        print_vec_scientific(&u);
-                        print!("v:  ");
-                        print_vec_scientific(&v);
-                        print!("w:  ");
-                        print_vec_scientific(&w);
-                        // print!("p:  ");
-                        // print_vec_scientific(&p);
-                        // print!("p': ");
-                        // print_vec_scientific(&p_prime);
-                    }
                     panic!("solution diverged");
                 }
             }
@@ -440,11 +425,11 @@ pub fn solve_steady(
         pressure_grad_mean += pressure_gradient.abs();
         velocity_grad_mean = velocity_grad_mean + velocity_gradient.abs();
     }
-    println!(
-        "MEAN\n{}\t{}\n",
-        velocity_grad_mean / mesh.cells.len(),
-        pressure_grad_mean / mesh.cells.len()
-    );
+    // println!(
+    //     "MEAN\n{}\t{}\n",
+    //     velocity_grad_mean / mesh.cells.len(),
+    //     pressure_grad_mean / mesh.cells.len()
+    // );
     (u, v, w, p)
 }
 
@@ -819,12 +804,11 @@ fn multigrid_solve(
         smooth_convergence_threshold,
     );
     let error_magnitude = (&r_prime - &a_prime * &e_prime).norm();
-    if log_enabled!(log::Level::Trace) {
-        println!(
-            "Multigrid level {}: |e| = {:.2e}",
-            multigrid_level, error_magnitude
-        );
-    }
+    trace!(
+        "Multigrid level {}: |e| = {:.2e}",
+        multigrid_level,
+        error_magnitude
+    );
     if error_magnitude.is_nan() {
         panic!("Multigrid diverged");
     }
@@ -853,13 +837,11 @@ fn multigrid_solve(
             smooth_relaxation,
             smooth_convergence_threshold / 10.,
         );
-        if log_enabled!(log::Level::Trace) {
-            println!(
-                "Multigrid level {}: |e| = {:.2e}",
-                multigrid_level,
-                (&r_prime - &a_prime * &e_prime).norm() // e_prime.norm()
-            );
-        }
+        trace!(
+            "Multigrid level {}: |e| = {:.2e}",
+            multigrid_level,
+            (&r_prime - &a_prime * &e_prime).norm() // e_prime.norm()
+        );
     }
     // Prolong correction vector
     &restriction_matrix.transpose() * e_prime
@@ -958,7 +940,7 @@ pub fn iterative_solve(
                 b,
                 solution_vector,
                 iteration_count,
-                SolutionMethod::Jacobi, // Change to Jacobi until BiCGSTAB panic is fixed
+                SolutionMethod::BiCGSTAB,
                 relaxation_factor,
                 convergence_threshold,
             );
@@ -969,7 +951,7 @@ pub fn iterative_solve(
                 &r,
                 1,
                 COARSENING_LEVELS,
-                SolutionMethod::Jacobi, // Change to Jacobi until BiCGSTAB panic is fixed
+                SolutionMethod::BiCGSTAB,
                 iteration_count,
                 relaxation_factor,
                 convergence_threshold,
@@ -1052,12 +1034,6 @@ fn build_momentum_diffusion_matrix(
                     panic!("BC not supported");
                 }
             }; // end BC match
-               // if log_enabled!(log::Level::Trace) {
-               //     println!(
-               //         "cell {: >3}, face {: >3}: D_i = {: >9}",
-               //         cell_index, face_index, d_i
-               //     );
-               // }
 
             let face_contribution = d_i;
             a_p += face_contribution;
