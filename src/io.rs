@@ -580,7 +580,6 @@ pub fn write_gradients(
     let mut file = File::create(output_file_name).unwrap();
     println!("Writing data to {output_file_name}...");
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
         let mut velocity_gradient_str = String::new();
         calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme)
             .flatten()
@@ -590,8 +589,8 @@ pub fn write_gradients(
                     &format!("{:.prec$e}, ", v, prec = decimal_precision).to_string();
             });
         velocity_gradient_str.strip_suffix(", ").unwrap();
-        let mut pressure_gradient_str = String::new();
 
+        let mut pressure_gradient_str = String::new();
         calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme)
             .to_vec()
             .iter()
@@ -603,7 +602,7 @@ pub fn write_gradients(
         writeln!(
             file,
             "{}\t({})\t({})",
-            cell.centroid, velocity_gradient_str, pressure_gradient_str
+            &mesh.cells[&cell_index].centroid, velocity_gradient_str, pressure_gradient_str
         )
         .unwrap();
     }
