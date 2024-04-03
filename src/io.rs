@@ -544,7 +544,7 @@ pub fn write_data(
     v: &DVector<Float>,
     w: &DVector<Float>,
     p: &DVector<Float>,
-    output_file_name: String,
+    output_file_name: &str,
     decimal_precision: usize,
 ) {
     let mut file = File::create(output_file_name).unwrap();
