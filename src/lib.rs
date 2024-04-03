@@ -129,6 +129,10 @@ pub mod common {
                 z: xyz[2],
             }
         }
+
+        pub fn to_vec(&self) -> Vec<Float> {
+            vec![self.x, self.y, self.z]
+        }
     }
 
     impl Add<Float> for Vector3 {
@@ -364,6 +368,13 @@ pub mod common {
                 y: self.y.abs(),
                 z: self.z.abs(),
             }
+        }
+
+        pub fn flatten(&self) -> Vec<Float> {
+            let row_1 = self.x.to_vec();
+            let row_2 = self.y.to_vec();
+            let row_3 = self.z.to_vec();
+            vec![row_1, row_2, row_3].concat()
         }
     }
 
