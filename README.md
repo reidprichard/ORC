@@ -9,7 +9,7 @@ unstructured grids with the following numerical schemes and details:
 - Co-located grid
 - Algebraic multigrid solver with BiCGSTAB, Jacobi, or Gauss-Seidel smoothing (GMRES will be evaluated)
 - Pressure-velocity coupling: SIMPLE (coupled solver may be added later)
-- Momentum discretization: first-order upwind differencing and central differencing
+- Momentum discretization: UD, CD, LUD, QUICK (bounded higher-order schemes will be added)
 - Gradient reconstruction: Green-Gauss cell-based (least squares may be added)
 - Pressure interpolation: linear and second-order
 - Velocity interpolation: linear and Rhie-Chow distance-based
@@ -35,7 +35,7 @@ Supported boundary conditions:
 Roadmap:
 - [X] Read TGRID (ANSYS Fluent) mesh into memory
 - [X] Build solution matrices
-- [ ] Initialize flow (75% complete)
+- [ ] Initialize flow (90% complete)
 - [X] Iterate steady
 - [X] Add under-relaxation
 - [X] Implement Rhie-Chow interpolation (very unstable for now)
@@ -43,7 +43,7 @@ Roadmap:
 - [ ] Implement bounded high-order momentum schemes, e.g. Jasak et al.'s bounded central differencing
 - [ ] Add cross diffusion correction
 - [X] Multigrid
-- [ ] Read/write solution data (20% complete)
+- [X] Read/write solution data
 - [ ] Read/write settings?
 - [ ] CLI
 - [ ] Iterate transient
