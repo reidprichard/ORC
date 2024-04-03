@@ -29,7 +29,7 @@ Supported boundary conditions:
 - Wall
 - Pressure outlet
 - Pressure inlet
-- Velocity inlet
+- ~~Velocity inlet~~ (unfinished)
 - Symmetry
 
 Roadmap:
