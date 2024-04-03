@@ -5,7 +5,7 @@ pub mod mesh;
 pub mod solver;
 
 trait GetEntry<T> {
-    fn get(&self, i:usize, j:usize) -> T;
+    fn get(&self, i: usize, j: usize) -> T;
 }
 
 use common::Float;
@@ -74,17 +74,17 @@ pub mod common {
             }
         }
 
-        pub fn outer(&self, other: &Self) -> Tensor {
-            Tensor {
+        pub fn outer(&self, other: &Self) -> Tensor3 {
+            Tensor3 {
                 x: Vector3 {
                     x: self.x * other.x,
                     y: self.x * other.y,
-                    z: self.z * other.z,
+                    z: self.x * other.z,
                 },
                 y: Vector3 {
                     x: self.y * other.x,
                     y: self.y * other.y,
-                    z: self.z * other.z,
+                    z: self.y * other.z,
                 },
                 z: Vector3 {
                     x: self.z * other.x,
@@ -104,6 +104,30 @@ pub mod common {
 
         pub fn approx_equals(&self, other: &Self, tol: Float) -> bool {
             (*self - *other).infinity_norm() < tol
+        }
+
+        pub fn abs(&self) -> Self {
+            Vector3 {
+                x: Float::abs(self.x),
+                y: Float::abs(self.y),
+                z: Float::abs(self.z),
+            }
+        }
+
+        pub fn from_str(s: &str) -> Self {
+            let xyz = s
+                .strip_prefix("(")
+                .unwrap()
+                .strip_suffix(")")
+                .unwrap()
+                .splitn(3, ", ")
+                .map(|s_i| s_i.parse::<Float>().unwrap())
+                .collect::<Vec<Float>>();
+            Vector3 {
+                x: xyz[0],
+                y: xyz[1],
+                z: xyz[2],
+            }
         }
     }
 
@@ -310,14 +334,15 @@ pub mod common {
         }
     }
 
-    pub struct Tensor {
+    #[derive(Copy, Clone, Debug)]
+    pub struct Tensor3 {
         pub x: Vector3,
         pub y: Vector3,
         pub z: Vector3,
     }
-    impl Tensor {
+    impl Tensor3 {
         pub fn zero() -> Self {
-            Tensor {
+            Tensor3 {
                 x: Vector3::zero(),
                 y: Vector3::zero(),
                 z: Vector3::zero(),
@@ -325,35 +350,43 @@ pub mod common {
         }
 
         // TODO: pass by value?
-        pub fn dot(&self, vector: &Vector3) -> Vector3 {
+        pub fn inner(&self, v: &Vector3) -> Vector3 {
             Vector3 {
-                x: self.x.dot(&vector),
-                y: self.x.dot(&vector),
-                z: self.z.dot(&vector),
+                x: self.x.dot(v),
+                y: self.y.dot(v),
+                z: self.z.dot(v),
+            }
+        }
+
+        pub fn abs(&self) -> Self {
+            Self {
+                x: self.x.abs(),
+                y: self.y.abs(),
+                z: self.z.abs(),
             }
         }
     }
 
-    impl Add<Self> for Tensor {
+    impl Add<Self> for Tensor3 {
         type Output = Self;
-        fn add(self, rhs: Tensor) -> Tensor {
-            Tensor {
-                x: self.x + rhs.x,
-                y: self.y + rhs.y,
-                z: self.z + rhs.z,
+        fn add(self, rhs: Self) -> Self {
+            Self {
+                x: self.x.clone() + rhs.x.clone(),
+                y: self.y.clone() + rhs.y.clone(),
+                z: self.z.clone() + rhs.z.clone(),
             }
         }
     }
 
     macro_rules! tensor_div {
         ($T: ty) => {
-            impl Div<$T> for Tensor {
+            impl Div<$T> for Tensor3 {
                 type Output = Self;
                 fn div(self, rhs: $T) -> Self {
-                    Tensor {
-                        x: self.x * (rhs as Float),
-                        y: self.y * (rhs as Float),
-                        z: self.z * (rhs as Float),
+                    Tensor3 {
+                        x: self.x / (rhs as Float),
+                        y: self.y / (rhs as Float),
+                        z: self.z / (rhs as Float),
                     }
                 }
             }
@@ -361,5 +394,13 @@ pub mod common {
     }
 
     tensor_div!(Uint);
+    tensor_div!(usize);
     tensor_div!(Float);
+
+    impl fmt::Display for Tensor3 {
+        // TODO: Switch between regular and scientific fmt based on magnitude
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}\n{}\n{}", self.x, self.y, self.z,)
+        }
+    }
 }

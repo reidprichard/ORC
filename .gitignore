@@ -1,2 +1,4 @@
 /target
 *.csv
+orc.log*
+/logs

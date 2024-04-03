@@ -3,7 +3,7 @@
 use crate::common::*;
 use crate::mesh::*;
 use itertools::Itertools;
-use log::{debug, info};
+use log::info;
 use nalgebra::DVector;
 use nalgebra_sparse::CsrMatrix;
 use regex::Regex;
@@ -11,10 +11,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, BufRead};
-
-// cells: (12 (zone-id first-index last-index type      element-type))
-// faces: (13 (zone-id first-index last-index bc-type   face-type))
-// nodes: (10 (zone-id first-index last-index type      ND))
 
 // TODO: Make this only take block 1? Or handle error here in case 1 doesn't exist?
 macro_rules! skip_zone_zero {
@@ -25,7 +21,6 @@ macro_rules! skip_zone_zero {
     };
 }
 
-// TODO: Subtract one from element numbers so they start at 0
 pub fn read_mesh(mesh_path: &str) -> Mesh {
     println!("Beginning reading mesh from {mesh_path}");
 
@@ -43,9 +38,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     fn read_section_header_common(header_line: &str) -> Vec<usize> {
         let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
-        // let re = Regex::new(r"\(\d+ \(([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+) ([0-9a-z]+)")
-        //     .expect("valid regex");
-
         let mut items: Vec<usize> = Vec::new();
         for (_, [s]) in re.captures_iter(header_line).map(|c| c.extract()) {
             items.push(usize::from_str_radix(s, 16).expect("valid hex"));
@@ -75,7 +67,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             match section_header_blocks[0] {
                 "(0" => 'read_comment: {
                     zone_name = section_header_line
-                        .rsplit_once(" ")
+                        .rsplit_once(' ')
                         .expect("comment has a space")
                         .1
                         .trim_end_matches("\")")
@@ -87,7 +79,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     dimensions = section_header_blocks
                         .get(1)
                         .expect("dimensions section should have two items")
-                        .strip_suffix(")")
+                        .strip_suffix(')')
                         .expect("second item ends with )")
                         .parse()
                         .expect("second item is integer dimension count");
@@ -101,7 +93,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     let items = read_section_header_common(&section_header_line);
                     let (_, _, start_index, end_index, _, _) = items
                         .iter()
-                        .map(|n| *n)
+                        .copied()
                         .collect_tuple()
                         .expect("nodes header has six items");
                     info!("Beginning reading nodes from {start_index} to {end_index}.");
@@ -115,27 +107,33 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             current_line = mesh_file_lines.next().unwrap();
                             continue 'node_loop;
                         }
-                        if current_line.starts_with(")") {
+                        if current_line.starts_with(')') {
                             break 'node_loop;
                         }
                         // debug!("Node {node_index}: {current_line}");
                         let line_blocks: Vec<&str> =
                             current_line.split_ascii_whitespace().collect();
                         if line_blocks.len() == dimensions.into() {
-                            let x = line_blocks[0].parse::<Float>().expect(&format!(
-                                "{} should be a string representation of a float",
-                                line_blocks[0]
-                            ));
-                            let y = line_blocks[1].parse::<Float>().expect(&format!(
-                                "{} should be a string representation of a float",
-                                line_blocks[1]
-                            ));
+                            let x = line_blocks[0].parse::<Float>().unwrap_or_else(|_| {
+                                panic!(
+                                    "{} should be a string representation of a float",
+                                    line_blocks[0]
+                                )
+                            });
+                            let y = line_blocks[1].parse::<Float>().unwrap_or_else(|_| {
+                                panic!(
+                                    "{} should be a string representation of a float",
+                                    line_blocks[1]
+                                )
+                            });
                             let mut z = 0.;
                             if dimensions == 3 {
-                                z = line_blocks[2].parse::<Float>().expect(&format!(
-                                    "{} should be a string representation of a float",
-                                    line_blocks[2]
-                                ));
+                                z = line_blocks[2].parse::<Float>().unwrap_or_else(|_| {
+                                    panic!(
+                                        "{} should be a string representation of a float",
+                                        line_blocks[2]
+                                    )
+                                });
                             }
                             nodes.insert(
                                 node_number - 1,
@@ -170,7 +168,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     let items = read_section_header_common(&section_header_line);
                     let (_, zone_id, _, _, zone_type, _) = items
                         .iter()
-                        .map(|n| *n)
+                        .copied()
                         .collect_tuple()
                         .expect("cell section has 6 entries");
                     cell_zones.entry(zone_id as Uint).or_insert(CellZone {
@@ -184,7 +182,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                     let items = read_section_header_common(&section_header_line);
                     let (_, zone_id, start_index, _, boundary_type, face_type) = items
                         .iter()
-                        .map(|n| *n)
+                        .copied()
                         .collect_tuple()
                         .expect("face section has 6 entries");
                     face_zones.entry(zone_id as Uint).or_insert(FaceZone {
@@ -208,7 +206,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             current_line = mesh_file_lines.next().unwrap();
                             continue 'face_loop;
                         }
-                        if current_line.starts_with(")") {
+                        if current_line.starts_with(')') {
                             break 'face_loop;
                         }
                         // debug!("Face {face_number}: {current_line}");
@@ -392,7 +390,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             if *cell_index == usize::MAX {
                 continue;
             }
-            let cell = cells.entry(*cell_index).or_insert(Cell::default());
+            let cell = cells.entry(*cell_index).or_default();
             cell.face_indices.push(*face_index);
             // TODO: more rigorous centroid calc
             cell.centroid += face.centroid;
@@ -400,7 +398,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         }
     }
 
-    for (cell_index, cell) in &mut cells {
+    for (_cell_index, cell) in &mut cells {
         cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
             .face_indices
@@ -431,7 +429,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     // TODO: Rewrite more concisely
     // Very ugly way to do this
-    let node_positions: Vec<Vector3> = nodes.iter().map(|(_, n)| n.position).collect();
+    let node_positions: Vec<Vector3> = nodes.values().map(|n| n.position).collect();
     let x_min = node_positions
         .iter()
         .fold(Float::INFINITY, |acc, &n| acc.min(n.x));
@@ -487,7 +485,57 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
 pub fn read_settings() {}
 
-pub fn read_data() {}
+pub fn read_data(
+    data_file_path: &str,
+) -> Result<
+    (
+        DVector<Float>,
+        DVector<Float>,
+        DVector<Float>,
+        DVector<Float>,
+    ),
+    &'static str,
+> {
+    let mut u: Vec<Float> = Vec::new();
+    let mut v: Vec<Float> = Vec::new();
+    let mut w: Vec<Float> = Vec::new();
+    let mut p: Vec<Float> = Vec::new();
+
+    let file = File::open(data_file_path);
+    match file {
+        Ok(f) => {
+            let data_file_lines = io::BufReader::new(f).lines();
+
+            for line in data_file_lines {
+                line.unwrap()
+                    .splitn(3, "\t")
+                    .enumerate()
+                    .for_each(|(i, chunk)| match i {
+                        0 => (),
+                        1 => {
+                            let uvw_i = Vector3::from_str(chunk);
+                            u.push(uvw_i.x);
+                            v.push(uvw_i.y);
+                            w.push(uvw_i.z);
+                        }
+                        2 => {
+                            p.push(chunk.parse().unwrap());
+                        }
+                        _ => panic!(
+                            "There should only be three tab-separated columns in the data file."
+                        ),
+                    });
+            }
+            Ok((
+                DVector::from_column_slice(&u),
+                DVector::from_column_slice(&v),
+                DVector::from_column_slice(&w),
+                DVector::from_column_slice(&p),
+            ))
+        }
+        Err(_) => Err("could not read data file"),
+    }
+}
 
 pub fn write_data(
     mesh: &Mesh,
@@ -496,13 +544,20 @@ pub fn write_data(
     w: &DVector<Float>,
     p: &DVector<Float>,
     output_file_name: String,
+    decimal_precision: usize,
 ) {
     let mut file = File::create(output_file_name).unwrap();
-    for (cell_index, cell) in &mesh.cells {
-        write!(
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
+        writeln!(
             file,
-            "{},\t({}, {}, {}),\t{}\n",
-            cell.centroid, u[*cell_index], v[*cell_index], w[*cell_index], p[*cell_index]
+            "{}\t({:.prec$e}, {:.prec$e}, {:.prec$e})\t{:.prec$e}",
+            cell.centroid,
+            u[cell_index],
+            v[cell_index],
+            w[cell_index],
+            p[cell_index],
+            prec = decimal_precision
         )
         .unwrap();
     }
@@ -523,21 +578,10 @@ pub fn dvector_to_str(a: &DVector<Float>) -> String {
     output + "]"
 }
 
-pub fn print_matrix(a: &CsrMatrix<Float>) {
+pub fn matrix_to_string(a: &CsrMatrix<Float>) -> String {
+    let mut s: String = String::from("");
     for i in 0..a.nrows() {
-        print!("{}: ", i + 1);
-        for j in 0..a.ncols() {
-            let coeff = a.get_entry(i, j).unwrap().into_value();
-            let formatted_number = format!("{coeff:.2e}");
-            print!("{: >9}, ", formatted_number);
-        }
-        println!("");
-    }
-}
-
-pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
-    for i in 0..a.nrows() {
-        let mut s: String = String::from("");
+        s += &format!("{i}: ");
         for j in 0..a.ncols() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
             if a.ncols() < 16 {
@@ -553,8 +597,41 @@ pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
                 s += &format!("{}={: <9}, ", j, format!("{coeff:.2e}"));
             }
         }
-        println!("{: >3}: {} | {:.2e}", i, s, b[i]);
+        s += "\n";
     }
+    s
+}
+
+pub fn print_matrix(a: &CsrMatrix<Float>) {
+    println!("{}", matrix_to_string(&a));
+}
+
+pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> String {
+    let mut s: String = String::from("");
+    for i in 0..a.nrows() {
+        s += &format!("{i}: ");
+        for j in 0..a.ncols() {
+            let coeff = a.get_entry(i, j).unwrap().into_value();
+            if a.ncols() < 16 {
+                if coeff == 0. {
+                    s += "          , ";
+                } else {
+                    s += &format!("{: <9}, ", format!("{coeff:.2e}"));
+                }
+            } else if coeff != 0. {
+                if i == j {
+                    s += "*";
+                }
+                s += &format!("{}={: <9}, ", j, format!("{coeff:.2e}"));
+            }
+        }
+        s += &format!(" | {:.2e}\n", b[i]);
+    }
+    s
+}
+
+pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
+    println!("{}", linear_system_to_string(&a, &b));
 }
 
 pub fn print_vec_scientific(v: &DVector<Float>) {
