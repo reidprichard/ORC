@@ -240,7 +240,7 @@ pub fn solve_steady(
                     debug!("{}", linear_system_to_string(&a_w, &b_w));
                 }
 
-                if false && !log_enabled!(log::Level::Trace) {
+                if !log_enabled!(log::Level::Trace) {
                     thread::scope(|s| {
                         s.spawn(|| {
                             trace!("solving u");
@@ -578,7 +578,7 @@ fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
-fn calculate_velocity_gradient(
+pub fn calculate_velocity_gradient(
     mesh: &Mesh,
     u: &DVector<Float>,
     v: &DVector<Float>,
@@ -610,7 +610,7 @@ fn calculate_velocity_gradient(
     }
 }
 
-fn calculate_pressure_gradient(
+pub fn calculate_pressure_gradient(
     mesh: &Mesh,
     p: &DVector<Float>,
     cell_index: usize,
