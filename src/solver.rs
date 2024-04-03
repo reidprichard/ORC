@@ -475,12 +475,14 @@ pub fn initialize(
         rho,
     );
 
+    println!("Initializing velocity field...");
+    // NOTE: Initializing with multigrid was diverging, so using BiCGSTAB
     iterative_solve(
         &(&a_u + &a_di),
         &b_u,
         &mut u,
         iteration_count,
-        SolutionMethod::Multigrid,
+        SolutionMethod::BiCGSTAB,
         0.5,
         1e-6,
     );
@@ -489,7 +491,7 @@ pub fn initialize(
         &b_v,
         &mut v,
         iteration_count,
-        SolutionMethod::Multigrid,
+        SolutionMethod::BiCGSTAB,
         0.5,
         1e-6,
     );
@@ -498,10 +500,11 @@ pub fn initialize(
         &b_w,
         &mut w,
         iteration_count,
-        SolutionMethod::Multigrid,
+        SolutionMethod::BiCGSTAB,
         0.5,
         1e-6,
     );
+    println!("Done!");
     (u, v, w, p)
 }
 
