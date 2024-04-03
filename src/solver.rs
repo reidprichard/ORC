@@ -12,8 +12,10 @@ use std::collections::HashSet;
 use std::thread;
 
 const MAX_PRINT_ROWS: usize = 64;
+const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
 
 // TODO: Normalize mesh lengths to reduce roundoff error
+// TODO: Measure impact of logging on performance
 
 // ****** Solver numerical settings structs ******
 // TODO: make this hierarchical
@@ -237,8 +239,7 @@ pub fn solve_steady(
                     print_linear_system(&a_v, &b_v);
                     println!("w:");
                     print_linear_system(&a_w, &b_w);
-                }
-                else {
+                } else {
                     debug!("{}", linear_system_to_string(&a_u, &b_u));
                     debug!("{}", linear_system_to_string(&a_v, &b_v));
                     debug!("{}", linear_system_to_string(&a_w, &b_w));
@@ -345,9 +346,14 @@ pub fn solve_steady(
                         &pressure_correction_matrices.a,
                         &pressure_correction_matrices.b,
                     );
-                }
-                else {
-                    debug!("{}", linear_system_to_string(&pressure_correction_matrices.a, &pressure_correction_matrices.b));
+                } else {
+                    debug!(
+                        "{}",
+                        linear_system_to_string(
+                            &pressure_correction_matrices.a,
+                            &pressure_correction_matrices.b
+                        )
+                    );
                 }
 
                 trace!("solving p");
@@ -868,7 +874,9 @@ pub fn iterative_solve(
                 b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
             for iter_num in 0..iteration_count {
-                trace!("\nJacobi iteration {iter_num} = {solution_vector:?}");
+                // if log_enabled!(log::Level::Trace) {
+                //     trace!("\nJacobi iteration {iter_num} = {solution_vector:?}");
+                // }
                 for v in solution_vector.iter() {
                     if v.is_nan() {
                         panic!("diverged");
@@ -940,7 +948,7 @@ pub fn iterative_solve(
                 b,
                 solution_vector,
                 iteration_count,
-                SolutionMethod::BiCGSTAB,
+                MULTIGRID_SMOOTHER,
                 relaxation_factor,
                 convergence_threshold,
             );
@@ -951,7 +959,7 @@ pub fn iterative_solve(
                 &r,
                 1,
                 COARSENING_LEVELS,
-                SolutionMethod::BiCGSTAB,
+                MULTIGRID_SMOOTHER,
                 iteration_count,
                 relaxation_factor,
                 convergence_threshold,
