@@ -117,6 +117,18 @@ def tile_all_matplotlib_figures() -> None:
         plt.show()
 
 
+def interpolate_to_grid(x_list, y_list, z_list, n_x=100, n_y=100):
+    x_linear = np.linspace(min(x_list), max(x_list), n_x)
+    y_linear = np.linspace(min(y_list), max(y_list), n_y)
+    triang = tri.Triangulation(x_list, y_list)
+    x_grid, y_grid = np.meshgrid(x_linear, y_linear)
+
+    z_interpolator = tri.LinearTriInterpolator(triang, z_list)
+    z_grid = z_interpolator(x_grid, y_grid)
+
+    return (x_grid, y_grid, z_grid)
+
+
 def plot_channel_flow():
     MU = 0.1
     DP = -10
@@ -135,27 +147,36 @@ def plot_channel_flow():
                 row_values.append([float(n) for n in match.groups()])
     x, y, _, u, v, _, p = list(zip(*row_values))
 
-    xi = np.linspace(min(x), max(x), 100)
-    yi = np.linspace(min(y), max(y), 100)
-    triang = tri.Triangulation(x, y)
-    Xi, Yi = np.meshgrid(xi, yi)
+    x2 = []
+    y2 = []
+    velocity_gradient = []
+    pressure_gradient = []
+    with open("./examples/channel_flow_gradients.csv") as simulation_data:
+        for line in simulation_data.readlines():
+            centroid, vel_grad, p_grad = [s.split(', ') for s in line.replace('(','').replace(')','').split('\t')]
+            x2.append(float(centroid[0]))
+            y2.append(float(centroid[1]))
+            # There should only be 9 elements, but sometimes a trailing comma adds a 10th empty one
+            velocity_gradient.append(np.reshape(np.array(vel_grad[:9]),(3,3)))
+            # There should only be 3 elements, but sometimes a trailing comma adds a 4th empty one
+            pressure_gradient.append(np.array(p_grad[:3]))
+    velocity_gradient = np.array(velocity_gradient)
+    pressure_gradient = np.array(pressure_gradient)
 
     # *** Figure 1 ***
     fig, axs = plt.subplots(nrows=2, layout="constrained", sharex=True, sharey=True)
     fig.suptitle("Pressure-Driven Channel Flow")
-    p_interpolator = tri.LinearTriInterpolator(triang, p)
-    p_interpolated = p_interpolator(Xi, Yi)
-    cm = axs[0].contourf(xi, yi, p_interpolated, levels=10)
+    x_interpolated, y_interpolated, p_interpolated = interpolate_to_grid(x, y, p)
+    cm = axs[0].contourf(x_interpolated, y_interpolated, p_interpolated, levels=10)
     fig.colorbar(cm, label="Gage Pressure [Pa]")
     axs[0].quiver(x, y, u, v)
     axs[0].set_title("Velocity Vectors; Pressure Contours")
     axs[0].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
 
-    u_interpolator = tri.LinearTriInterpolator(triang, u)
-    u_interpolated = u_interpolator(Xi, Yi)
+    u_interpolated = interpolate_to_grid(x, y, u)[-1]
     du_dy = np.gradient(u_interpolated, axis=0)
-    cm = axs[1].contourf(xi, yi, du_dy, cmap="RdBu", levels=50)
+    cm = axs[1].contourf(x_interpolated, y_interpolated, du_dy, cmap="RdBu", levels=50)
     axs[1].set_title(r"$\frac{du}{dy}$")
     axs[1].set_xlabel("X [m]")
     axs[1].set_ylabel("Y [m]")
@@ -170,8 +191,9 @@ def plot_channel_flow():
     fig, ax = plt.subplots()
     fig.suptitle("Pressure-Driven Channel Flow")
     a = CHANNEL_HEIGHT
-    u_analytical = 1 / (2 * MU) * DP / DX * (yi**2 - a * yi)
-    ax.plot(yi, u_analytical)
+    y_linear = np.linspace(np.min(y), np.max(y), 100)
+    u_analytical = 1 / (2 * MU) * DP / DX * (y_linear**2 - a * y_linear)
+    ax.plot(y_linear, u_analytical)
     ax.scatter(y, u)
     ax.set_xlabel("Y [m]")
     ax.set_ylabel("U [m/s]")
