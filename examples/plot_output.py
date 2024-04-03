@@ -125,7 +125,7 @@ def plot_channel_flow():
 
     FLOAT = "[\\d|\\.|e|\\-]+"
     VECTOR = f"\\(({FLOAT}),\\s+({FLOAT}),\\s+({FLOAT})\\)"
-    datafile_pattern = re.compile(f"{VECTOR},\\s+{VECTOR},\\s+({FLOAT})")
+    datafile_pattern = re.compile(f"{VECTOR}\\t{VECTOR}\\t({FLOAT})")
     row_values = []
     with open("./examples/channel_flow.csv") as simulation_data:
         lines = simulation_data.readlines()
