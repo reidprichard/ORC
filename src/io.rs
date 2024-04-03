@@ -542,7 +542,7 @@ pub fn write_data(
     for (cell_index, cell) in &mesh.cells {
         writeln!(
             file,
-            "{},\t({:.prec$e}, {:.prec$e}, {:.prec$e}),\t{:.prec$e}",
+            "{}\t({:.prec$e}, {:.prec$e}, {:.prec$e})\t{:.prec$e}",
             cell.centroid,
             u[*cell_index],
             v[*cell_index],
