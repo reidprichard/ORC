@@ -161,7 +161,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         iteration_count,
         Uint::max(reporting_interval, 1),
     );
-    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into());
+    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into(), 8);
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();

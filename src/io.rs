@@ -493,7 +493,30 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
 pub fn read_settings() {}
 
-pub fn read_data() {}
+// pub fn read_data(
+//     file_path: &str,
+//     data_decimal_precision: usize
+// ) -> (
+//     DVector<Float>,
+//     DVector<Float>,
+//     DVector<Float>,
+//     DVector<Float>,
+// ) {
+//     let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
+//     let mut u: Vec<Float> = Vec::new();
+//     let mut v: Vec<Float> = Vec::new();
+//     let mut w: Vec<Float> = Vec::new();
+//     let mut p: Vec<Float> = Vec::new();
+//
+//     let file = File::open(file_path).unwrap();
+//
+//     (
+//         DVector::from_column_slice(&u),
+//         DVector::from_column_slice(&v),
+//         DVector::from_column_slice(&w),
+//         DVector::from_column_slice(&p),
+//     )
+// }
 
 pub fn write_data(
     mesh: &Mesh,
@@ -502,13 +525,19 @@ pub fn write_data(
     w: &DVector<Float>,
     p: &DVector<Float>,
     output_file_name: String,
+    decimal_precision: usize,
 ) {
     let mut file = File::create(output_file_name).unwrap();
     for (cell_index, cell) in &mesh.cells {
         writeln!(
             file,
-            "{},\t({}, {}, {}),\t{}",
-            cell.centroid, u[*cell_index], v[*cell_index], w[*cell_index], p[*cell_index]
+            "{},\t({:.prec$}, {:.prec$}, {:.prec$}),\t{:.prec$}",
+            cell.centroid,
+            u[*cell_index],
+            v[*cell_index],
+            w[*cell_index],
+            p[*cell_index],
+            prec = decimal_precision
         )
         .unwrap();
     }
