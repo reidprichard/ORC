@@ -174,15 +174,15 @@ def plot_channel_flow():
     axs[0].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
 
-    u_interpolated = interpolate_to_grid(x, y, u)[-1]
-    du_dy = np.gradient(u_interpolated, axis=0)
-    cm = axs[1].contourf(x_interpolated, y_interpolated, du_dy, cmap="RdBu", levels=50)
+    x2_interpolated, y2_interpolated, du_dy = interpolate_to_grid(x2,y2,velocity_gradient[:,0,1])
+    cm = axs[1].contourf(x2_interpolated, y2_interpolated, du_dy, cmap="RdBu", levels=50)
+    # dp_dx = interpolate_to_grid(x2, y2, pressure_gradient[:,0])[-1]
+    # dp_dy = interpolate_to_grid(x2, y2, pressure_gradient[:,1])[-1]
+    # axs[1].quiver(x2_interpolated, y2_interpolated, dp_dx, dp_dy)
     axs[1].set_title(r"$\frac{du}{dy}$")
     axs[1].set_xlabel("X [m]")
     axs[1].set_ylabel("Y [m]")
     axs[1].ticklabel_format(style="scientific", scilimits=(0,0))
-    # p_grad = np.gradient(p_interpolated, xi, yi)
-    # axs[1].quiver(xi, yi, p_grad[1]*0, p_grad[0])
 
     fig.colorbar(cm, label="Velocity gradient [1/s]")
     # fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
