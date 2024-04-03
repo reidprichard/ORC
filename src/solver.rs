@@ -163,25 +163,24 @@ macro_rules! dvector_zeros {
 // TODO: Make struct to encapsulate all settings so I don't have a million args
 pub fn solve_steady(
     mesh: &mut Mesh,
+    u: &mut DVector<Float>,
+    v: &mut DVector<Float>,
+    w: &mut DVector<Float>,
+    p: &mut DVector<Float>,
     numerical_settings: &NumericalSettings,
     rho: Float,
     mu: Float,
     iteration_count: Uint,
     reporting_interval: Uint,
-) -> (
-    DVector<Float>,
-    DVector<Float>,
-    DVector<Float>,
-    DVector<Float>,
 ) {
     let cell_count: usize = mesh.cells.len();
-    let mut u = dvector_zeros!(cell_count);
-    let mut v = dvector_zeros!(cell_count);
-    let mut w = dvector_zeros!(cell_count);
-    let mut p = dvector_zeros!(cell_count);
+    // let mut u = dvector_zeros!(cell_count);
+    // let mut v = dvector_zeros!(cell_count);
+    // let mut w = dvector_zeros!(cell_count);
+    // let mut p = dvector_zeros!(cell_count);
     let mut p_prime = dvector_zeros!(cell_count);
 
-    initialize_pressure_field(mesh, &mut p, 10000);
+    initialize_pressure_field(mesh, p, 10000);
 
     let a_di = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
@@ -252,7 +251,7 @@ pub fn solve_steady(
                             iterative_solve(
                                 &a_u,
                                 &b_u,
-                                &mut u,
+                                u,
                                 numerical_settings.matrix_solver.iterations,
                                 numerical_settings.matrix_solver.solver_type,
                                 numerical_settings.matrix_solver.relaxation,
@@ -266,7 +265,7 @@ pub fn solve_steady(
                             iterative_solve(
                                 &a_v,
                                 &b_v,
-                                &mut v,
+                                v,
                                 numerical_settings.matrix_solver.iterations,
                                 numerical_settings.matrix_solver.solver_type,
                                 numerical_settings.matrix_solver.relaxation,
@@ -280,7 +279,7 @@ pub fn solve_steady(
                             iterative_solve(
                                 &a_w,
                                 &b_w,
-                                &mut w,
+                                w,
                                 numerical_settings.matrix_solver.iterations,
                                 numerical_settings.matrix_solver.solver_type,
                                 numerical_settings.matrix_solver.relaxation,
@@ -295,7 +294,7 @@ pub fn solve_steady(
                     iterative_solve(
                         &a_u,
                         &b_u,
-                        &mut u,
+                        u,
                         numerical_settings.matrix_solver.iterations,
                         numerical_settings.matrix_solver.solver_type,
                         numerical_settings.matrix_solver.relaxation,
@@ -307,7 +306,7 @@ pub fn solve_steady(
                     iterative_solve(
                         &a_v,
                         &b_v,
-                        &mut v,
+                        v,
                         numerical_settings.matrix_solver.iterations,
                         numerical_settings.matrix_solver.solver_type,
                         numerical_settings.matrix_solver.relaxation,
@@ -319,7 +318,7 @@ pub fn solve_steady(
                     iterative_solve(
                         &a_w,
                         &b_w,
-                        &mut w,
+                        w,
                         numerical_settings.matrix_solver.iterations,
                         numerical_settings.matrix_solver.solver_type,
                         numerical_settings.matrix_solver.relaxation,
@@ -389,10 +388,10 @@ pub fn solve_steady(
                     &a_v,
                     &a_w,
                     &p_prime,
-                    &mut u,
-                    &mut v,
-                    &mut w,
-                    &mut p,
+                    u,
+                    v,
+                    w,
+                    p,
                     numerical_settings,
                 );
 
@@ -436,11 +435,10 @@ pub fn solve_steady(
     //     velocity_grad_mean / mesh.cells.len(),
     //     pressure_grad_mean / mesh.cells.len()
     // );
-    (u, v, w, p)
 }
 
 pub fn initialize(
-    mesh: &mut Mesh,
+    mesh: &Mesh,
     mu: Float,
     rho: Float,
     iteration_count: Uint,
@@ -487,33 +485,33 @@ pub fn initialize(
         &(&a_u + &a_di),
         &b_u,
         &mut u,
-        100,
+        iteration_count,
         SolutionMethod::Multigrid,
         0.5,
-        1e-6
+        1e-6,
     );
     iterative_solve(
         &(&a_v + &a_di),
         &b_v,
         &mut v,
-        100,
+        iteration_count,
         SolutionMethod::Multigrid,
         0.5,
-        1e-6
+        1e-6,
     );
     iterative_solve(
         &(&a_w + &a_di),
         &b_w,
         &mut w,
-        100,
+        iteration_count,
         SolutionMethod::Multigrid,
         0.5,
-        1e-6
+        1e-6,
     );
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(mesh: &mut Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
+fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
     println!("Initializing pressure field...");
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:

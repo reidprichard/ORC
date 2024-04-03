@@ -5,8 +5,8 @@ use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::common::{Float, Tensor3};
 use orc::common::{Uint, Vector3};
-use orc::io::read_mesh;
 use orc::io::write_data;
+use orc::io::{read_data, read_mesh};
 use orc::mesh::*;
 use orc::solver::*;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
@@ -153,15 +153,29 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     };
 
     // ************ Solve **************
-    let (u, v, w, p) = solve_steady(
+    let (mut u, mut v, mut w, mut p) = read_data("./examples/channel_flow.csv");
+    // let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    solve_steady(
         &mut mesh,
+        &mut u,
+        &mut v,
+        &mut w,
+        &mut p,
         &settings,
         rho,
         mu,
         iteration_count,
         Uint::max(reporting_interval, 1),
     );
-    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into(), 8);
+    write_data(
+        &mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        "./examples/channel_flow.csv".into(),
+        8,
+    );
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
@@ -195,8 +209,8 @@ fn main() {
                     .with_span_events(FmtSpan::CLOSE),
             )
             .init();
-    // end chatgippity
-    } 
+        // end chatgippity
+    }
 
     let start = Instant::now();
     let args: Vec<String> = env::args().collect();
@@ -227,6 +241,8 @@ fn main() {
 // ************** old cases *************
 
 fn test_2d(iteration_count: Uint) {
+    let rho = 1000.;
+    let mu = 0.001;
     let domain_height = 1.;
     let domain_length = 2.;
     let cell_height = domain_height / 3.;
@@ -268,17 +284,24 @@ fn test_2d(iteration_count: Uint) {
 
     let settings = NumericalSettings::default();
 
+    let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
     solve_steady(
         &mut mesh,
+        &mut u,
+        &mut v,
+        &mut w,
+        &mut p,
         &settings,
-        1000.,
-        0.001,
+        rho,
+        mu,
         iteration_count,
         Uint::max(iteration_count / 1000, 1),
     );
 }
 
 fn test_3d_1x3(iteration_count: Uint) {
+    let rho = 1000.;
+    let mu = 10.;
     let cell_length = 1.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -334,11 +357,16 @@ fn test_3d_1x3(iteration_count: Uint) {
         ..NumericalSettings::default()
     };
 
-    let (u, v, w, _) = solve_steady(
+    let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    solve_steady(
         &mut mesh,
+        &mut u,
+        &mut v,
+        &mut w,
+        &mut p,
         &settings,
-        1000.,
-        10.,
+        rho,
+        mu,
         iteration_count,
         Uint::max(iteration_count / 1000, 1),
     );
@@ -361,6 +389,8 @@ fn test_3d_1x3(iteration_count: Uint) {
 }
 
 fn test_3d_3x3(iteration_count: Uint) {
+    let mu = 100.;
+    let rho = 1000.;
     let cell_length = 1. / 3.;
     let face_area = Float::powi(cell_length, 2);
     let cell_volume = Float::powi(cell_length, 3);
@@ -398,11 +428,16 @@ fn test_3d_3x3(iteration_count: Uint) {
     }
 
     let settings = NumericalSettings::default();
-    let (u, v, w, _) = solve_steady(
+    let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    solve_steady(
         &mut mesh,
+        &mut u,
+        &mut v,
+        &mut w,
+        &mut p,
         &settings,
-        1000.,
-        100.,
+        rho,
+        mu,
         iteration_count,
         Uint::max(iteration_count / 1000, 1),
     );
