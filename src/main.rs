@@ -153,8 +153,8 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     };
 
     // ************ Solve **************
-    let (mut u, mut v, mut w, mut p) = read_data("./examples/channel_flow.csv");
-    // let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    let (mut u, mut v, mut w, mut p) =
+        read_data("./examples/channel_flow.csv").unwrap_or(initialize(&mesh, mu, rho, 1000));
     solve_steady(
         &mut mesh,
         &mut u,

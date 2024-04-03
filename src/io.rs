@@ -487,46 +487,57 @@ pub fn read_settings() {}
 
 pub fn read_data(
     data_file_path: &str,
-) -> (
-    DVector<Float>,
-    DVector<Float>,
-    DVector<Float>,
-    DVector<Float>,
-) {
+) -> Result<
+    (
+        DVector<Float>,
+        DVector<Float>,
+        DVector<Float>,
+        DVector<Float>,
+    ),
+    &'static str,
+> {
     let mut u: Vec<Float> = Vec::new();
     let mut v: Vec<Float> = Vec::new();
     let mut w: Vec<Float> = Vec::new();
     let mut p: Vec<Float> = Vec::new();
 
     // let data_file_contents = std::fs::read_to_string(file_path).expect("file_path should exist");
-    let file = File::open(data_file_path).unwrap();
-    let data_file_lines = io::BufReader::new(file).lines();
+    let file = File::open(data_file_path);
+    match file {
+        Ok(f) => {
+            let data_file_lines = io::BufReader::new(f).lines();
 
-    for line in data_file_lines {
-        line.unwrap().splitn(3, "\t").enumerate().for_each(|(i, chunk)| {
-            match i {
-                0 => (),
-                1 => {
-                    let uvw_i = Vector3::from_str(chunk);
-                    u.push(uvw_i.x);
-                    v.push(uvw_i.y);
-                    w.push(uvw_i.z);
-                },
-                2 => {
-                    p.push(chunk.parse().unwrap());
-                }
-                _ => panic!("There should only be three tab-separated columns in the data file.")
+            for line in data_file_lines {
+                line.unwrap()
+                    .splitn(3, "\t")
+                    .enumerate()
+                    .for_each(|(i, chunk)| match i {
+                        0 => (),
+                        1 => {
+                            let uvw_i = Vector3::from_str(chunk);
+                            u.push(uvw_i.x);
+                            v.push(uvw_i.y);
+                            w.push(uvw_i.z);
+                        }
+                        2 => {
+                            p.push(chunk.parse().unwrap());
+                        }
+                        _ => panic!(
+                            "There should only be three tab-separated columns in the data file."
+                        ),
+                    });
             }
-        });
-    }
-    // println!("{p:?}");
+            // println!("{p:?}");
 
-    (
-        DVector::from_column_slice(&u),
-        DVector::from_column_slice(&v),
-        DVector::from_column_slice(&w),
-        DVector::from_column_slice(&p),
-    )
+            Ok((
+                DVector::from_column_slice(&u),
+                DVector::from_column_slice(&v),
+                DVector::from_column_slice(&w),
+                DVector::from_column_slice(&p),
+            ))
+        }
+        Err(_) => Err("could not read data file"),
+    }
 }
 
 pub fn write_data(
