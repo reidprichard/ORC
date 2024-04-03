@@ -5,8 +5,8 @@ use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::common::{Float, Tensor3};
 use orc::common::{Uint, Vector3};
-use orc::io::write_data;
 use orc::io::{read_data, read_mesh};
+use orc::io::{write_data, write_gradients};
 use orc::mesh::*;
 use orc::solver::*;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
@@ -149,7 +149,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             relative_convergence_threshold: 1e-3,
             preconditioner: PreconditionMethod::Jacobi,
         },
-        momentum: TVD_QUICK,
+        momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
@@ -178,6 +178,16 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         &p,
         "./examples/channel_flow.csv".into(),
         8,
+    );
+    write_gradients(
+        &mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        "./examples/channel_flow_gradients.csv".into(),
+        8,
+        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
     );
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
