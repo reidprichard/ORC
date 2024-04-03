@@ -2,6 +2,8 @@
 
 use crate::common::*;
 use crate::mesh::*;
+use crate::solver::GradientReconstructionMethods;
+use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
 use itertools::Itertools;
 use log::info;
 use nalgebra::DVector;
@@ -560,6 +562,48 @@ pub fn write_data(
             w[cell_index],
             p[cell_index],
             prec = decimal_precision
+        )
+        .unwrap();
+    }
+}
+
+pub fn write_gradients(
+    mesh: &Mesh,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
+    output_file_name: &str,
+    decimal_precision: usize,
+    gradient_scheme: GradientReconstructionMethods,
+) {
+    let mut file = File::create(output_file_name).unwrap();
+    println!("Writing data to {output_file_name}...");
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
+        let mut velocity_gradient_str = String::new();
+        calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme)
+            .flatten()
+            .iter()
+            .for_each(|v| {
+                velocity_gradient_str +=
+                    &format!("{:.prec$e}, ", v, prec = decimal_precision).to_string();
+            });
+        velocity_gradient_str.strip_suffix(", ").unwrap();
+        let mut pressure_gradient_str = String::new();
+
+        calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme)
+            .to_vec()
+            .iter()
+            .for_each(|v| {
+                pressure_gradient_str +=
+                    &format!("{:.prec$e}, ", v, prec = decimal_precision).to_string();
+            });
+        pressure_gradient_str.strip_suffix(", ").unwrap();
+        writeln!(
+            file,
+            "{}\t({})\t({})",
+            cell.centroid, velocity_gradient_str, pressure_gradient_str
         )
         .unwrap();
     }
