@@ -501,7 +501,6 @@ pub fn read_data(
     let mut w: Vec<Float> = Vec::new();
     let mut p: Vec<Float> = Vec::new();
 
-    // let data_file_contents = std::fs::read_to_string(file_path).expect("file_path should exist");
     let file = File::open(data_file_path);
     match file {
         Ok(f) => {
@@ -527,8 +526,6 @@ pub fn read_data(
                         ),
                     });
             }
-            // println!("{p:?}");
-
             Ok((
                 DVector::from_column_slice(&u),
                 DVector::from_column_slice(&v),
