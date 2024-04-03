@@ -8,8 +8,13 @@ use orc::io::read_mesh;
 use orc::io::write_data;
 use orc::mesh::*;
 use orc::solver::*;
+use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
 use std::time::Instant;
+use tracing::{info, Level};
+use tracing_appender::rolling::{self, RollingFileAppender};
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::prelude::*;
 
 fn validate_solvers() {
     const TOL: Float = 1e-6;
@@ -131,7 +136,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings {
-            solver_type: SolutionMethod::Multigrid,
+            solver_type: SolutionMethod::Jacobi,
             iterations: 100,
             relaxation: 0.5, // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
             // BiCGSTAB
@@ -170,7 +175,23 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 }
 
 fn main() {
-    env_logger::init();
+    let file_appender = BasicRollingFileAppender::new(
+        "./orc.log",
+        RollingConditionBasic::new().max_size(2_u64.pow(26)),
+        10,
+    )
+    .unwrap();
+    // Start chatgippity
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_span_events(FmtSpan::CLOSE),
+        )
+        .init();
+    // end chatgippity
+
     let start = Instant::now();
     let args: Vec<String> = env::args().collect();
     let iteration_count: Uint = args
@@ -185,6 +206,7 @@ fn main() {
         .expect("arg 2 should be an integer");
     validate_solvers();
     channel_flow(iteration_count, reporting_interval);
+    // test_3d_1x3(iteration_count);
     // Interface: allow user to choose from
     // 1. Read mesh
     // 2. Read data
