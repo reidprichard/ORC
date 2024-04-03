@@ -146,7 +146,6 @@ pub enum SolutionMethod {
     Jacobi,
     // HashSet.
     Multigrid,
-    // WARNING: BiCGSTAB causes a nondeterministic panic.
     BiCGSTAB,
 }
 
@@ -987,7 +986,9 @@ pub fn iterative_solve(
         }
         SolutionMethod::BiCGSTAB => {
             // TODO: Optimize this
+            // TODO: Try preconditioning by matrix diagonal
             let mut r = b - a * &*solution_vector;
+            // TODO: Set search direction more intelligently
             let r_hat_0 = DVector::from_column_slice(&vec![1.; r.nrows()]);
             let mut rho = r.dot(&r_hat_0);
             let mut p = r.clone();
@@ -1019,7 +1020,6 @@ pub fn iterative_solve(
                 relaxation_factor,
                 convergence_threshold,
             );
-            // TODO: find a way not to have to clone
             let r = b - a * &*solution_vector;
             *solution_vector += multigrid_solve(
                 a,
