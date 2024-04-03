@@ -82,6 +82,7 @@ pub enum PressureVelocityCoupling {
     SIMPLE,
 }
 
+// TODO: Add flux limiters to higher-order methods
 #[derive(Copy, Clone)]
 pub enum MomentumDiscretization {
     // First-order upwind
@@ -206,16 +207,8 @@ pub fn solve_steady(
                     &w,
                     &p,
                     numerical_settings.momentum,
-                    if iter_number > 1 {
-                        numerical_settings.velocity_interpolation
-                    } else {
-                        VelocityInterpolation::LinearWeighted
-                    },
-                    if iter_number > 1 {
-                        numerical_settings.pressure_interpolation
-                    } else {
-                        PressureInterpolation::LinearWeighted
-                    },
+                    numerical_settings.velocity_interpolation,
+                    numerical_settings.pressure_interpolation,
                     numerical_settings.gradient_reconstruction,
                     rho,
                 );
