@@ -487,14 +487,12 @@ pub fn read_settings() {}
 
 pub fn read_data(
     data_file_path: &str,
-    data_decimal_precision: usize
 ) -> (
     DVector<Float>,
     DVector<Float>,
     DVector<Float>,
     DVector<Float>,
 ) {
-    let re = Regex::new(r"([0-9a-z]+)").expect("valid regex");
     let mut u: Vec<Float> = Vec::new();
     let mut v: Vec<Float> = Vec::new();
     let mut w: Vec<Float> = Vec::new();
@@ -509,8 +507,10 @@ pub fn read_data(
             match i {
                 0 => (),
                 1 => {
-                    println!("1: {chunk}");
-                    // append to velocity
+                    let uvw_i = Vector3::from_str(chunk);
+                    u.push(uvw_i.x);
+                    v.push(uvw_i.y);
+                    w.push(uvw_i.z);
                 },
                 2 => {
                     p.push(chunk.parse().unwrap());
