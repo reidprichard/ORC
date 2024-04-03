@@ -194,7 +194,8 @@ pub fn solve_steady(
     match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                build_momentum_matrices(
+                build_solution_matrices(
+                    &a_di,
                     &mut a_u,
                     &mut a_v,
                     &mut a_w,
@@ -221,12 +222,7 @@ pub fn solve_steady(
                     rho,
                 );
 
-                a_u = &a_u + &a_di;
-                a_v = &a_v + &a_di;
-                a_w = &a_w + &a_di;
-
-                if log_enabled!(log::Level::Debug) {
-                    // && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) && a_di.nrows() < 256 {
                     println!("\nMomentum:");
                     println!("u:");
                     print_linear_system(&a_u, &b_u);
@@ -236,7 +232,7 @@ pub fn solve_steady(
                     print_linear_system(&a_w, &b_w);
                 }
 
-                if !log_enabled!(log::Level::Trace) {
+                if false && !log_enabled!(log::Level::Trace) {
                     thread::scope(|s| {
                         s.spawn(|| {
                             trace!("solving u");
@@ -331,8 +327,7 @@ pub fn solve_steady(
                     numerical_settings,
                     rho,
                 );
-                if log_enabled!(log::Level::Debug) {
-                    // && a_di.nrows() < 256 {
+                if log_enabled!(log::Level::Debug) && a_di.nrows() < 256 {
                     println!("\nPressure:");
                     print_linear_system(
                         &pressure_correction_matrices.a,
@@ -392,6 +387,33 @@ pub fn solve_steady(
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
                     // TODO: Some undefined behavior seems to be causing this to trigger
                     // intermittently
+
+                    if log_enabled!(log::Level::Debug) {
+                        println!("\nMomentum:");
+                        println!("u:");
+                        print_linear_system(&a_u, &b_u);
+                        println!("v:");
+                        print_linear_system(&a_v, &b_v);
+                        println!("w:");
+                        print_linear_system(&a_w, &b_w);
+
+                        println!("\nPressure:");
+                        print_linear_system(
+                            &pressure_correction_matrices.a,
+                            &pressure_correction_matrices.b,
+                        );
+
+                        print!("u:  ");
+                        print_vec_scientific(&u);
+                        print!("v:  ");
+                        print_vec_scientific(&v);
+                        print!("w:  ");
+                        print_vec_scientific(&w);
+                        print!("p:  ");
+                        print_vec_scientific(&p);
+                        print!("p': ");
+                        print_vec_scientific(&p_prime);
+                    }
                     panic!("solution diverged");
                 }
             }
@@ -797,8 +819,7 @@ fn multigrid_solve(
     if log_enabled!(log::Level::Trace) {
         println!(
             "Multigrid level {}: |e| = {:.2e}",
-            multigrid_level,
-            error_magnitude
+            multigrid_level, error_magnitude
         );
     }
     if error_magnitude.is_nan() {
@@ -1062,7 +1083,8 @@ fn initialize_momentum_matrix(mesh: &Mesh) -> CsrMatrix<Float> {
     CsrMatrix::from(&a)
 }
 
-fn build_momentum_matrices(
+fn build_solution_matrices(
+    a_di: &CsrMatrix<Float>,
     a_u: &mut CsrMatrix<Float>,
     a_v: &mut CsrMatrix<Float>,
     a_w: &mut CsrMatrix<Float>,
@@ -1208,17 +1230,18 @@ fn build_momentum_matrices(
 
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
+                let d_i = a_di.get(*cell_index, neighbor_cell_index);
                 // negate a_nb to move to LHS of equation
                 match a_u.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.x,
+                    NonZero(a_ij) => *a_ij = a_nb.x + d_i,
                     Zero => panic!(),
                 }
                 match a_v.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.y,
+                    NonZero(a_ij) => *a_ij = a_nb.y + d_i,
                     Zero => panic!(),
                 }
                 match a_w.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.z,
+                    NonZero(a_ij) => *a_ij = a_nb.z + d_i,
                     Zero => panic!(),
                 }
             }
@@ -1228,16 +1251,17 @@ fn build_momentum_matrices(
         b_v[*cell_index] = source_total.y;
         b_w[*cell_index] = source_total.z;
 
+        let d_i = a_di.get(*cell_index, *cell_index);
         match a_u.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.x,
+            NonZero(v) => *v = a_p.x + d_i,
             Zero => panic!(),
         }
         match a_v.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.y,
+            NonZero(v) => *v = a_p.y + d_i,
             Zero => panic!(),
         }
         match a_w.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.z,
+            NonZero(v) => *v = a_p.z + d_i,
             Zero => panic!(),
         }
     } // end cell loop
