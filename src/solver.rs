@@ -443,7 +443,7 @@ pub fn solve_steady(
     // );
 }
 
-pub fn initialize(
+pub fn initialize_flow(
     mesh: &Mesh,
     mu: Float,
     rho: Float,

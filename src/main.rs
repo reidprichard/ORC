@@ -149,7 +149,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             relative_convergence_threshold: 1e-3,
             preconditioner: PreconditionMethod::Jacobi,
         },
-        momentum: MomentumDiscretization::UD,
+        momentum: TVD_QUICK,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
@@ -157,7 +157,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************ Solve **************
     let (mut u, mut v, mut w, mut p) = read_data("./examples/channel_flow.csv")
-        .unwrap_or_else(|_| initialize(&mesh, mu, rho, 1000));
+        .unwrap_or_else(|_| initialize_flow(&mesh, mu, rho, 1000));
     solve_steady(
         &mut mesh,
         &mut u,
@@ -170,15 +170,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         iteration_count,
         Uint::max(reporting_interval, 1),
     );
-    write_data(
-        &mesh,
-        &u,
-        &v,
-        &w,
-        &p,
-        "./examples/channel_flow.csv".into(),
-        8,
-    );
+    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into());
     write_gradients(
         &mesh,
         &u,
@@ -186,7 +178,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         &w,
         &p,
         "./examples/channel_flow_gradients.csv".into(),
-        8,
+        7,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
     );
 
@@ -297,7 +289,7 @@ fn test_2d(iteration_count: Uint) {
 
     let settings = NumericalSettings::default();
 
-    let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 200);
     solve_steady(
         &mut mesh,
         &mut u,
@@ -371,7 +363,7 @@ fn test_3d_1x3(iteration_count: Uint) {
         ..NumericalSettings::default()
     };
 
-    let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 200);
     solve_steady(
         &mut mesh,
         &mut u,
@@ -442,7 +434,7 @@ fn test_3d_3x3(iteration_count: Uint) {
     }
 
     let settings = NumericalSettings::default();
-    let (mut u, mut v, mut w, mut p) = initialize(&mesh, mu, rho, 200);
+    let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 200);
     solve_steady(
         &mut mesh,
         &mut u,

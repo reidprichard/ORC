@@ -547,6 +547,27 @@ pub fn write_data(
     w: &DVector<Float>,
     p: &DVector<Float>,
     output_file_name: &str,
+) {
+    let mut file = File::create(output_file_name).unwrap();
+    println!("Writing data to {output_file_name}...");
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
+        writeln!(
+            file,
+            "{}\t({:.e}, {:.e}, {:.e})\t{:.e}",
+            cell.centroid, u[cell_index], v[cell_index], w[cell_index], p[cell_index],
+        )
+        .unwrap();
+    }
+}
+
+pub fn write_data_with_precision(
+    mesh: &Mesh,
+    u: &DVector<Float>,
+    v: &DVector<Float>,
+    w: &DVector<Float>,
+    p: &DVector<Float>,
+    output_file_name: &str,
     decimal_precision: usize,
 ) {
     let mut file = File::create(output_file_name).unwrap();
