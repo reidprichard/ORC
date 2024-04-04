@@ -47,7 +47,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         items
     }
 
-    let mut nodes: HashMap<usize, Vertex> = HashMap::new();
+    let mut vertices: HashMap<usize, Vertex> = HashMap::new();
     let mut faces: HashMap<usize, Face> = HashMap::new();
     let mut cells: HashMap<usize, Cell> = HashMap::new();
     let mut face_zones: HashMap<Uint, FaceZone> = HashMap::new();
@@ -137,7 +137,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                     )
                                 });
                             }
-                            nodes.insert(
+                            vertices.insert(
                                 node_number - 1,
                                 Vertex {
                                     position: Vector3 { x, y, z },
@@ -281,7 +281,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         let face_nodes: Vec<&Vertex> = face
             .node_indices
             .iter()
-            .map(|n| nodes.get(n).expect("nodes should have all been read"))
+            .map(|n| vertices.get(n).expect("nodes should have all been read"))
             .collect();
         match dimensions {
             2 => {
@@ -320,7 +320,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         face.centroid = face
             .node_indices
             .iter()
-            .fold(Vector3::zero(), |acc, n| acc + nodes[n].position)
+            .fold(Vector3::zero(), |acc, n| acc + vertices[n].position)
             / (face.node_indices.len() as Float);
         face.area = match face_nodes.len() {
             0 | 1 => panic!("faces must have 2+ nodes"),
@@ -365,16 +365,16 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 let area: Float = face.node_indices.windows(2).fold(0., |acc, w| {
                     acc + calculate_triangle_area(
                         &face.centroid,
-                        &nodes[&w[0]].position,
-                        &nodes[&w[1]].position,
+                        &vertices[&w[0]].position,
+                        &vertices[&w[1]].position,
                     )
                 });
                 let first = face.node_indices[0];
                 let last = face.node_indices[node_count - 1];
                 area + calculate_triangle_area(
                     &face.centroid,
-                    &nodes[&first].position,
-                    &nodes[&last].position,
+                    &vertices[&first].position,
+                    &vertices[&last].position,
                 )
             }
         };
@@ -422,12 +422,12 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         "Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}",
         cells.len(),
         faces.len(),
-        nodes.len()
+        vertices.len()
     );
 
     // TODO: Rewrite more concisely
     // Very ugly way to do this
-    let node_positions: Vec<Vector3> = nodes.values().map(|n| n.position).collect();
+    let node_positions: Vec<Vector3> = vertices.values().map(|n| n.position).collect();
     let x_min = node_positions
         .iter()
         .fold(Float::INFINITY, |acc, &n| acc.min(n.x));
@@ -473,7 +473,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     }
 
     Mesh {
-        nodes,
+        vertices,
         faces,
         cells,
         face_zones,

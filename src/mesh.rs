@@ -25,7 +25,7 @@ pub enum FaceConditionTypes {
     Interior,
     Wall,
     PressureInlet,
-    PressureOutlet,
+    PressureOutlet, // TODO: Consider merging PressureInlet/PressureOutlet
     Symmetry,
     PeriodicShadow,
     PressureFarField,
@@ -177,7 +177,7 @@ impl Default for Face {
 }
 
 pub struct Mesh {
-    pub nodes: HashMap<usize, Vertex>,
+    pub vertices: HashMap<usize, Vertex>,
     pub faces: HashMap<usize, Face>,
     pub cells: HashMap<usize, Cell>,
     pub face_zones: HashMap<Uint, FaceZone>,
