@@ -10,7 +10,7 @@ const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
 const MULTIGRID_COARSENING_LEVELS: Uint = 4;
 
 fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) -> CsrMatrix<Float> {
-    let n = a.ncols() / 2 + a.ncols() % 2;
+    let n = a.ncols() / 2 + a.ncols() % 2; // half rounded up
     let mut restriction_matrix_coo = CooMatrix::<Float>::new(n, a.ncols());
     match method {
         RestrictionMethods::Injection => {
@@ -25,21 +25,21 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
             }
         }
         RestrictionMethods::Strongest => {
-            // For each row, find the largest off-diagonal value
+            // For each row, find the most negative off-diagonal value
             // If that cell hasn't already been combined, combine it with diagonal
             // If it *has* been combined, find the next largest and so on.
-            let mut combined_cells = HashSet::<usize>::new();
+            let mut combined_cells = HashSet::<usize>::new(); // TODO: pre-seeded hasher
             a.row_iter().enumerate().for_each(|(i, row)| {
-                let mut largest_coefficient: Float = Float::MAX;
+                let mut strongest_coeff: Float = Float::MAX;
                 let strongest_unmerged_neighbor =
                     row.col_indices().iter().fold(usize::MAX, |acc, j| {
                         // not efficient to look this up each time
                         if combined_cells.contains(j) || i == *j {
                             acc
                         } else {
-                            let entry = a.get(i, *j);
-                            if entry < largest_coefficient {
-                                largest_coefficient = entry;
+                            let coeff = a.get(i, *j);
+                            if coeff < strongest_coeff {
+                                strongest_coeff = coeff;
                                 *j
                             } else {
                                 acc
