@@ -1,21 +1,166 @@
-use nalgebra_sparse::CsrMatrix;
-
+pub mod discretization;
 pub mod io;
+pub mod linear_algebra;
 pub mod mesh;
 pub mod solver;
 
-trait GetEntry<T> {
-    fn get(&self, i: usize, j: usize) -> T;
-}
+pub mod settings {
+    use crate::numerical_types::*;
+    use nalgebra::DVector;
+    use nalgebra_sparse::CsrMatrix;
+    // ****** Solver numerical settings structs ******
+    // TODO: make this hierarchical
+    pub struct NumericalSettings {
+        pub pressure_velocity_coupling: PressureVelocityCoupling,
+        pub momentum: MomentumDiscretization,
+        pub diffusion: DiffusionScheme,
+        // SecondOrder recommended; LinearWeighted is more stable but less accurate
+        pub pressure_interpolation: PressureInterpolation,
+        // LinearWeighted recommended; RhieChow is extremely unstable
+        pub velocity_interpolation: VelocityInterpolation,
+        pub gradient_reconstruction: GradientReconstructionMethods,
+        pub pressure_relaxation: Float,
+        pub momentum_relaxation: Float,
+        pub matrix_solver: MatrixSolverSettings,
+    }
 
-use common::Float;
-impl GetEntry<Float> for CsrMatrix<Float> {
-    fn get(&self, i: usize, j: usize) -> Float {
-        self.get_entry(i, j).unwrap().into_value()
+    pub struct TurbulenceModelSettings {}
+
+    pub struct MatrixSolverSettings {
+        pub solver_type: SolutionMethod,
+        // It seems like too many iterations can cause pv coupling to go crazy
+        pub iterations: Uint,
+        pub relaxation: Float,
+        pub relative_convergence_threshold: Float,
+        pub preconditioner: PreconditionMethod,
+    }
+
+    impl Default for NumericalSettings {
+        fn default() -> Self {
+            NumericalSettings {
+                pressure_velocity_coupling: PressureVelocityCoupling::SIMPLE,
+                momentum: MomentumDiscretization::CD1,
+                diffusion: DiffusionScheme::CD,
+                pressure_interpolation: PressureInterpolation::LinearWeighted,
+                velocity_interpolation: VelocityInterpolation::LinearWeighted,
+                gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
+                    GreenGaussVariants::CellBased,
+                ),
+                pressure_relaxation: 0.01,
+                momentum_relaxation: 0.5,
+                matrix_solver: MatrixSolverSettings::default(),
+            }
+        }
+    }
+
+    impl Default for MatrixSolverSettings {
+        fn default() -> Self {
+            MatrixSolverSettings {
+                solver_type: SolutionMethod::Multigrid,
+                iterations: 50,
+                relaxation: 0.5,
+                relative_convergence_threshold: 0.001,
+                preconditioner: PreconditionMethod::Jacobi,
+            }
+        }
+    }
+
+    // ****** Solver numerical settings enums ******
+    #[derive(Copy, Clone)]
+    pub enum PressureVelocityCoupling {
+        SIMPLE,
+    }
+
+    // TODO: Add flux limiters to higher-order methods
+    #[derive(Copy, Clone)]
+    pub enum MomentumDiscretization {
+        // First-order upwind
+        UD,
+        // Basic CD; first-order on arbitrary grid and second-order with even spacing
+        CD1,
+        // CD incorporating cell gradients; second-order on arbitrary grid
+        CD2,
+        // Function specifies psi(r)
+        TVD(fn(Float) -> Float),
+    }
+
+    pub const TVD_UD: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 0.);
+    pub const TVD_LUD: MomentumDiscretization = MomentumDiscretization::TVD(|r| r);
+    pub const TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
+    pub const TVD_QUICK: MomentumDiscretization = MomentumDiscretization::TVD(|r| (3. + r) / 4.);
+
+    #[derive(Copy, Clone)]
+    pub enum DiffusionScheme {
+        CD,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum PressureInterpolation {
+        Linear,
+        LinearWeighted,
+        Standard,
+        SecondOrder,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum VelocityInterpolation {
+        LinearWeighted,
+        // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
+        RhieChow,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum GreenGaussVariants {
+        CellBased,
+        NodeBased,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum GradientReconstructionMethods {
+        GreenGauss(GreenGaussVariants),
+        LeastSquares,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum TurbulenceModel {
+        None,
+        StandardKEpsilon,
+    }
+
+    // TODO: GMRES, ILU
+    #[derive(Copy, Clone)]
+    pub enum SolutionMethod {
+        GaussSeidel, // TODO: add backward sweep
+        Jacobi,
+        // HashSet.
+        Multigrid,
+        BiCGSTAB,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum PreconditionMethod {
+        None,
+        Jacobi,
+    }
+
+    // TODO: Do I need this?
+    pub struct LinearSystem {
+        pub a: CsrMatrix<Float>,
+        pub b: DVector<Float>,
+    }
+
+    pub struct MultigridSettings {
+        pub smoother: SolutionMethod,
+    }
+
+    #[derive(Copy, Clone)]
+    pub enum RestrictionMethods {
+        Injection,
+        Strongest,
     }
 }
 
-pub mod common {
+pub mod numerical_types {
     use std::{
         fmt,
         ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
@@ -114,11 +259,11 @@ pub mod common {
             }
         }
 
-        pub fn from_str(s: &str) -> Self {
+        pub fn parse(s: &str) -> Self {
             let xyz = s
-                .strip_prefix("(")
+                .strip_prefix('(')
                 .unwrap()
-                .strip_suffix(")")
+                .strip_suffix(')')
                 .unwrap()
                 .splitn(3, ", ")
                 .map(|s_i| s_i.parse::<Float>().unwrap())
@@ -374,7 +519,7 @@ pub mod common {
             let row_1 = self.x.to_vec();
             let row_2 = self.y.to_vec();
             let row_3 = self.z.to_vec();
-            vec![row_1, row_2, row_3].concat()
+            [row_1, row_2, row_3].concat()
         }
     }
 
@@ -382,9 +527,9 @@ pub mod common {
         type Output = Self;
         fn add(self, rhs: Self) -> Self {
             Self {
-                x: self.x.clone() + rhs.x.clone(),
-                y: self.y.clone() + rhs.y.clone(),
-                z: self.z.clone() + rhs.z.clone(),
+                x: self.x + rhs.x,
+                y: self.y + rhs.y,
+                z: self.z + rhs.z,
             }
         }
     }
@@ -414,4 +559,24 @@ pub mod common {
             write!(f, "{}\n{}\n{}", self.x, self.y, self.z,)
         }
     }
+}
+
+pub mod nalgebra {
+    use crate::numerical_types::Float;
+    use nalgebra_sparse::CsrMatrix;
+    pub trait GetEntry<T> {
+        fn get(&self, i: usize, j: usize) -> T;
+    }
+
+    impl GetEntry<Float> for CsrMatrix<Float> {
+        fn get(&self, i: usize, j: usize) -> Float {
+            self.get_entry(i, j).unwrap().into_value()
+        }
+    }
+    macro_rules! dvector_zeros {
+        ($n:expr) => {
+            DVector::from_column_slice(&vec![0.; $n])
+        };
+    }
+    pub(crate) use dvector_zeros;
 }

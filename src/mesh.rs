@@ -1,4 +1,4 @@
-use crate::common::*;
+use crate::numerical_types::*;
 use core::fmt;
 use std::collections::HashMap;
 
@@ -187,7 +187,8 @@ impl Mesh {
     pub fn get_face_zone(&mut self, zone_name: &str) -> &mut FaceZone {
         self.face_zones
             .iter_mut()
-            .map(|(_zone_num, fz)| fz).find(|fz| fz.name == zone_name)
+            .map(|(_zone_num, fz)| fz)
+            .find(|fz| fz.name == zone_name)
             .unwrap_or_else(|| panic!("face zone '{zone_name}' should exist in mesh"))
     }
     // pub fn calculate_velocity_gradient(&self, cell_number: usize) -> Tensor {
