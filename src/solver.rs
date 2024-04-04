@@ -1,16 +1,18 @@
-#![allow(unreachable_patterns, unused)]
+#![allow(unreachable_patterns)]
 
-use crate::io::{linear_system_to_string, matrix_to_string, print_linear_system, print_matrix, print_vec_scientific};
-use crate::mesh::*;
 use crate::discretization::*;
+use crate::io::{
+    linear_system_to_string, matrix_to_string, print_linear_system, print_matrix,
+    print_vec_scientific,
+};
 use crate::linear_algebra::*;
-use crate::nalgebra::{GetEntry, dvector_zeros};
+use crate::mesh::*;
+use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
 use crate::settings::*;
-use log::{debug, info, log_enabled, trace};
+use log::{debug, log_enabled, trace};
 use nalgebra::DVector;
-use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix, SparseEntryMut::*};
-use std::collections::HashSet;
+use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 // use rayon::prelude::*;
 use std::thread;
 use std::time::Instant;
@@ -19,8 +21,6 @@ const MAX_PRINT_ROWS: usize = 64;
 
 // TODO: Normalize mesh lengths to reduce roundoff error
 // TODO: Measure impact of logging on performance
-
-
 
 // TODO: Make struct to encapsulate all settings so I don't have a million args
 pub fn solve_steady(
@@ -585,9 +585,9 @@ pub fn get_face_flux(
                     &get_face_velocity(mesh, u, v, w, face_index, interpolation_scheme),
                 ),
                 VelocityInterpolation::RhieChow => {
-                    let mut neighbor_index = face.cell_indices[0];
-                    if neighbor_index == cell_index {
-                        neighbor_index = face.cell_indices[1];
+                    let mut neighbor_cell_index = face.cell_indices[0];
+                    if neighbor_cell_index == cell_index {
+                        neighbor_cell_index = face.cell_indices[1];
                     }
                     let vel0 = Vector3 {
                         x: u[cell_index],
@@ -595,22 +595,22 @@ pub fn get_face_flux(
                         z: w[cell_index],
                     };
                     let vel1 = Vector3 {
-                        x: u[neighbor_index],
-                        y: v[neighbor_index],
-                        z: w[neighbor_index],
+                        x: u[neighbor_cell_index],
+                        y: v[neighbor_cell_index],
+                        z: w[neighbor_cell_index],
                     };
                     // WARNING: Something is wrong here
-                    let xi = (mesh.cells[&neighbor_index].centroid
+                    let xi = (mesh.cells[&neighbor_cell_index].centroid
                         - mesh.cells[&cell_index].centroid)
                         .unit();
                     let a0 = a_u.get(cell_index, cell_index);
-                    let a1 = a_u.get(neighbor_index, neighbor_index);
+                    let a1 = a_u.get(neighbor_cell_index, neighbor_cell_index);
                     let p_grad_0 =
                         calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
                     let p_grad_1 =
-                        calculate_pressure_gradient(mesh, p, neighbor_index, gradient_scheme);
+                        calculate_pressure_gradient(mesh, p, neighbor_cell_index, gradient_scheme);
                     let v0 = mesh.cells[&cell_index].volume;
-                    let v1 = mesh.cells[&neighbor_index].volume;
+                    let v1 = mesh.cells[&neighbor_cell_index].volume;
                     0.5 * (outward_face_normal.dot(&(vel0 + vel1))
                         + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / xi.norm()
                         - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&xi))
