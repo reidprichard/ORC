@@ -3,14 +3,14 @@
 use log::log_enabled;
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
-use orc::numerical_types::{Float, Tensor3};
-use orc::numerical_types::{Uint, Vector3};
 use orc::io::{read_data, read_mesh};
 use orc::io::{write_data, write_gradients};
-use orc::mesh::*;
-use orc::solver::*;
 use orc::linear_algebra::iterative_solve;
+use orc::mesh::*;
+use orc::numerical_types::{Float, Tensor3};
+use orc::numerical_types::{Uint, Vector3};
 use orc::settings::*;
+use orc::solver::*;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
 use std::time::Instant;
@@ -172,14 +172,14 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         iteration_count,
         Uint::max(reporting_interval, 1),
     );
-    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv".into());
+    write_data(&mesh, &u, &v, &w, &p, "./examples/channel_flow.csv");
     write_gradients(
         &mesh,
         &u,
         &v,
         &w,
         &p,
-        "./examples/channel_flow_gradients.csv".into(),
+        "./examples/channel_flow_gradients.csv",
         7,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
     );
@@ -281,7 +281,7 @@ fn test_2d(iteration_count: Uint) {
         panic!("face calculated as too large");
     }
     const VOLUME_TOL: Float = 0.0001;
-    for (_, cell) in &mesh.cells {
+    for cell in mesh.cells.values() {
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);
@@ -339,7 +339,7 @@ fn test_3d_1x3(iteration_count: Uint) {
         panic!("face calculated as too large");
     }
     const VOLUME_TOL: Float = 0.0001;
-    for (_, cell) in &mesh.cells {
+    for cell in mesh.cells.values() {
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);
@@ -427,7 +427,7 @@ fn test_3d_3x3(iteration_count: Uint) {
         panic!("face calculated as too large");
     }
     const VOLUME_TOL: Float = 0.0001;
-    for (_, cell) in &mesh.cells {
+    for cell in mesh.cells.values() {
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);

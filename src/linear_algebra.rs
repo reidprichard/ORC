@@ -1,12 +1,10 @@
-#[allow(unreachable_patterns)]
-
-use crate::settings::*;
+use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
-use crate::nalgebra::{GetEntry, dvector_zeros};
-use nalgebra_sparse::{CsrMatrix, CooMatrix};
-use nalgebra::DVector;
-use std::collections::HashSet;
+use crate::settings::*;
 use log::{info, trace};
+use nalgebra::DVector;
+use nalgebra_sparse::{CooMatrix, CsrMatrix};
+use std::collections::HashSet;
 
 const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
 const MULTIGRID_COARSENING_LEVELS: Uint = 4;
@@ -60,6 +58,7 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
     CsrMatrix::from(&restriction_matrix_coo)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn multigrid_solve(
     a: &CsrMatrix<Float>,
     r: &DVector<Float>,
@@ -137,6 +136,7 @@ fn multigrid_solve(
     &restriction_matrix.transpose() * e_prime
 }
 
+#[allow(clippy::too_many_arguments, unreachable_patterns)]
 pub fn iterative_solve(
     a: &CsrMatrix<Float>,
     b: &DVector<Float>,
@@ -148,13 +148,15 @@ pub fn iterative_solve(
     preconditioner: PreconditionMethod,
 ) {
     // Surely there is a better way to do this...
-    let a_tmp:CsrMatrix<Float>;
-    let b_tmp:DVector<Float>;
+    let a_tmp: CsrMatrix<Float>;
+    let b_tmp: DVector<Float>;
     let (a_preconditioned, b_preconditioned) = match preconditioner {
         PreconditionMethod::None => (a, b),
         PreconditionMethod::Jacobi => {
             let mut p_inv = a.diagonal_as_csr();
-            p_inv.triplet_iter_mut().for_each(|(_i, _j, v)| *v = 1. / *v);
+            p_inv
+                .triplet_iter_mut()
+                .for_each(|(_i, _j, v)| *v = 1. / *v);
             a_tmp = &p_inv * a;
             b_tmp = &p_inv * b;
             (&a_tmp, &b_tmp)
@@ -240,11 +242,11 @@ pub fn iterative_solve(
             let mut p = r.clone();
             for _iter_num in 0..iteration_count {
                 let nu: DVector<Float> = a_preconditioned * &p;
-                let alpha: Float = rho / &r_hat_0.dot(&nu);
+                let alpha: Float = rho / r_hat_0.dot(&nu);
                 let h: DVector<Float> = &*solution_vector + alpha * &p;
                 let s: DVector<Float> = &r - alpha * &nu;
                 let t: DVector<Float> = a_preconditioned * &s;
-                let omega: Float = &t.dot(&s) / &t.dot(&t);
+                let omega: Float = t.dot(&s) / t.dot(&t);
                 *solution_vector = &h + omega * &s;
                 r = &s - omega * &t;
                 let rho_prev: Float = rho;
@@ -283,5 +285,3 @@ pub fn iterative_solve(
         _ => panic!("unsupported solution method"),
     }
 }
-
-

@@ -23,6 +23,7 @@ const MAX_PRINT_ROWS: usize = 64;
 // TODO: Measure impact of logging on performance
 
 // TODO: Make struct to encapsulate all settings so I don't have a million args
+#[allow(clippy::too_many_arguments)]
 pub fn solve_steady(
     mesh: &mut Mesh,
     u: &mut DVector<Float>,
@@ -64,10 +65,10 @@ pub fn solve_steady(
                     &mut b_v,
                     &mut b_w,
                     mesh,
-                    &u,
-                    &v,
-                    &w,
-                    &p,
+                    u,
+                    v,
+                    w,
+                    p,
                     numerical_settings.momentum,
                     numerical_settings.velocity_interpolation,
                     numerical_settings.pressure_interpolation,
@@ -184,10 +185,10 @@ pub fn solve_steady(
                 }
                 let pressure_correction_matrices = build_pressure_correction_matrices(
                     mesh,
-                    &u,
-                    &v,
-                    &w,
-                    &p,
+                    u,
+                    v,
+                    w,
+                    p,
                     &a_u,
                     &a_v,
                     &a_w,
@@ -228,13 +229,13 @@ pub fn solve_steady(
 
                 if log_enabled!(log::Level::Info) && u.nrows() < 64 {
                     print!("u:  ");
-                    print_vec_scientific(&u);
+                    print_vec_scientific(u);
                     print!("v:  ");
-                    print_vec_scientific(&v);
+                    print_vec_scientific(v);
                     print!("w:  ");
-                    print_vec_scientific(&w);
+                    print_vec_scientific(w);
                     print!("p:  ");
-                    print_vec_scientific(&p);
+                    print_vec_scientific(p);
                     print!("p': ");
                     print_vec_scientific(&p_prime);
                 }
@@ -277,12 +278,12 @@ pub fn solve_steady(
     let mut velocity_grad_mean = Tensor3::zero();
     for i in 0..mesh.cells.len() {
         let pressure_gradient =
-            calculate_pressure_gradient(&mesh, &p, i, numerical_settings.gradient_reconstruction);
+            calculate_pressure_gradient(mesh, p, i, numerical_settings.gradient_reconstruction);
         let velocity_gradient = calculate_velocity_gradient(
             mesh,
-            &u,
-            &v,
-            &w,
+            u,
+            v,
+            w,
             i,
             numerical_settings.gradient_reconstruction,
         );
@@ -328,7 +329,7 @@ pub fn initialize_flow(
         &mut b_u,
         &mut b_v,
         &mut b_w,
-        &mesh,
+        mesh,
         &u,
         &v,
         &w,
@@ -545,6 +546,7 @@ fn get_face_velocity(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn get_face_flux(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -556,8 +558,8 @@ pub fn get_face_flux(
     interpolation_scheme: VelocityInterpolation,
     gradient_scheme: GradientReconstructionMethods,
     a_u: &CsrMatrix<Float>,
-    a_v: &CsrMatrix<Float>,
-    a_w: &CsrMatrix<Float>,
+    _a_v: &CsrMatrix<Float>,
+    _a_w: &CsrMatrix<Float>,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -612,7 +614,7 @@ pub fn get_face_flux(
                     let v0 = mesh.cells[&cell_index].volume;
                     let v1 = mesh.cells[&neighbor_cell_index].volume;
                     0.5 * (outward_face_normal.dot(&(vel0 + vel1))
-                        + (v0 / a0 + v1 / a1) * (&p[0] - &p[1]) / xi.norm()
+                        + (v0 / a0 + v1 / a1) * (p[0] - p[1]) / xi.norm()
                         - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&xi))
                 }
             }
@@ -645,11 +647,11 @@ pub fn get_face_pressure(
             let c0 = face.cell_indices[0];
             let c1 = face.cell_indices[1];
             match interpolation_scheme {
-                PressureInterpolation::Linear => (&p[c0] + &p[c1]) * 0.5,
+                PressureInterpolation::Linear => (p[c0] + p[c1]) * 0.5,
                 PressureInterpolation::LinearWeighted => {
                     let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
                     let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
-                    &p[c0] + (&p[c1] - &p[c0]) * x0 / (x0 + x1)
+                    p[c0] + (p[c1] - p[c0]) * x0 / (x0 + x1)
                 }
                 PressureInterpolation::Standard => {
                     // requires momentum matrix coeffs; seems expensive to have to pass that whole
@@ -663,7 +665,7 @@ pub fn get_face_pressure(
                     let c1_grad = calculate_pressure_gradient(mesh, p, c1, gradient_scheme);
                     let r_c0 = face.centroid - mesh.cells[&c0].centroid;
                     let r_c1 = face.centroid - mesh.cells[&c1].centroid;
-                    0.5 * ((&p[c0] + &p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
+                    0.5 * ((p[c0] + p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
                 }
                 _ => panic!("unsupported pressure interpolation"),
             }
@@ -709,6 +711,7 @@ fn initialize_momentum_matrix(mesh: &Mesh) -> CsrMatrix<Float> {
 //
 // }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_pressure_correction(
     mesh: &mut Mesh,
     a_u: &CsrMatrix<Float>, // NOTE: I really only need the diagonal
@@ -724,8 +727,7 @@ fn apply_pressure_correction(
     let mut velocity_corr_sum = 0.;
     for (cell_index, cell) in &mut mesh.cells {
         let pressure_correction = *p_prime.get(*cell_index).unwrap_or(&0.);
-        p[*cell_index] =
-            &p[*cell_index] + numerical_settings.pressure_relaxation * pressure_correction;
+        p[*cell_index] += numerical_settings.pressure_relaxation * pressure_correction;
         let velocity_correction =
             cell.face_indices
                 .iter()
@@ -758,14 +760,11 @@ fn apply_pressure_correction(
                         y: outward_face_normal.y / a_v.get(*cell_index, *cell_index),
                         z: outward_face_normal.z / a_w.get(*cell_index, *cell_index),
                     };
-                    acc + scaled_normal * (&p_prime[*cell_index] - p_prime_neighbor) * face.area
+                    acc + scaled_normal * (p_prime[*cell_index] - p_prime_neighbor) * face.area
                 });
-        u[*cell_index] =
-            &u[*cell_index] + velocity_correction.x * numerical_settings.momentum_relaxation;
-        v[*cell_index] =
-            &v[*cell_index] + velocity_correction.y * numerical_settings.momentum_relaxation;
-        w[*cell_index] =
-            &w[*cell_index] + velocity_correction.z * numerical_settings.momentum_relaxation;
+        u[*cell_index] += velocity_correction.x * numerical_settings.momentum_relaxation;
+        v[*cell_index] += velocity_correction.y * numerical_settings.momentum_relaxation;
+        w[*cell_index] += velocity_correction.z * numerical_settings.momentum_relaxation;
         velocity_corr_sum += velocity_correction.norm().powi(2);
     }
     (p_prime.norm(), velocity_corr_sum.sqrt())

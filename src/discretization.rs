@@ -94,6 +94,7 @@ pub fn build_momentum_diffusion_matrix(
     CsrMatrix::from(&a)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_momentum_matrices(
     a_u: &mut CsrMatrix<Float>,
     a_v: &mut CsrMatrix<Float>,
@@ -277,6 +278,7 @@ pub fn build_momentum_matrices(
       // negative. It may be worth adding assertions to validate this.
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_pressure_correction_matrices(
     mesh: &Mesh,
     u: &DVector<Float>,

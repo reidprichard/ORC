@@ -1,7 +1,7 @@
 #![allow(unused_labels)]
 
-use crate::numerical_types::*;
 use crate::mesh::*;
+use crate::numerical_types::*;
 use crate::settings::GradientReconstructionMethods;
 use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
 use itertools::Itertools;
@@ -58,7 +58,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
     let mut zone_name: String = String::new();
 
     if let Ok(file_lines) = read_mesh_lines(mesh_path) {
-        let mut mesh_file_lines = file_lines.flatten();
+        let mut mesh_file_lines = file_lines.map_while(Result::ok);
         let mut section_header_line = mesh_file_lines
             .next()
             .expect("mesh is at least one line long");
@@ -141,7 +141,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                 node_number - 1,
                                 Vertex {
                                     position: Vector3 { x, y, z },
-                                    ..Vertex::default()
                                 },
                             );
                             // debug!(
@@ -218,10 +217,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             break;
                         }
                         let node_count = line_blocks.len() - 2;
-                        if face_type != 0
-                            && face_type != 5
-                            && face_type != node_count.try_into().unwrap()
-                        {
+                        if face_type != 0 && face_type != 5 && face_type != node_count {
                             break 'face_loop;
                         }
                         faces.insert(
@@ -400,7 +396,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         }
     }
 
-    for (_cell_index, cell) in &mut cells {
+    for cell in cells.values_mut() {
         cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
             .face_indices
@@ -511,12 +507,12 @@ pub fn read_data(
 
             for line in data_file_lines {
                 line.unwrap()
-                    .splitn(3, "\t")
+                    .splitn(3, '\t')
                     .enumerate()
                     .for_each(|(i, chunk)| match i {
                         0 => (),
                         1 => {
-                            let uvw_i = Vector3::from_str(chunk);
+                            let uvw_i = Vector3::parse(chunk);
                             u.push(uvw_i.x);
                             v.push(uvw_i.y);
                             w.push(uvw_i.z);
@@ -588,6 +584,7 @@ pub fn write_data_with_precision(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn write_gradients(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -669,7 +666,7 @@ pub fn matrix_to_string(a: &CsrMatrix<Float>) -> String {
 }
 
 pub fn print_matrix(a: &CsrMatrix<Float>) {
-    println!("{}", matrix_to_string(&a));
+    println!("{}", matrix_to_string(a));
 }
 
 pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> String {
@@ -697,7 +694,7 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
 }
 
 pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
-    println!("{}", linear_system_to_string(&a, &b));
+    println!("{}", linear_system_to_string(a, b));
 }
 
 pub fn print_vec_scientific(v: &DVector<Float>) {

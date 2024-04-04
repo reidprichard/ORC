@@ -259,11 +259,11 @@ pub mod numerical_types {
             }
         }
 
-        pub fn from_str(s: &str) -> Self {
+        pub fn parse(s: &str) -> Self {
             let xyz = s
-                .strip_prefix("(")
+                .strip_prefix('(')
                 .unwrap()
-                .strip_suffix(")")
+                .strip_suffix(')')
                 .unwrap()
                 .splitn(3, ", ")
                 .map(|s_i| s_i.parse::<Float>().unwrap())
@@ -519,7 +519,7 @@ pub mod numerical_types {
             let row_1 = self.x.to_vec();
             let row_2 = self.y.to_vec();
             let row_3 = self.z.to_vec();
-            vec![row_1, row_2, row_3].concat()
+            [row_1, row_2, row_3].concat()
         }
     }
 
@@ -527,9 +527,9 @@ pub mod numerical_types {
         type Output = Self;
         fn add(self, rhs: Self) -> Self {
             Self {
-                x: self.x.clone() + rhs.x.clone(),
-                y: self.y.clone() + rhs.y.clone(),
-                z: self.z.clone() + rhs.z.clone(),
+                x: self.x + rhs.x,
+                y: self.y + rhs.y,
+                z: self.z + rhs.z,
             }
         }
     }
