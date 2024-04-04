@@ -1,3 +1,4 @@
+use ahash::RandomState;
 use crate::numerical_types::*;
 use core::fmt;
 use std::collections::HashMap;
@@ -177,11 +178,11 @@ impl Default for Face {
 }
 
 pub struct Mesh {
-    pub vertices: HashMap<usize, Vertex>,
-    pub faces: HashMap<usize, Face>,
-    pub cells: HashMap<usize, Cell>,
-    pub face_zones: HashMap<Uint, FaceZone>,
-    pub cell_zones: HashMap<Uint, CellZone>,
+    pub vertices: HashMap<usize, Vertex, RandomState>,
+    pub faces: HashMap<usize, Face, RandomState>,
+    pub cells: HashMap<usize, Cell, RandomState>,
+    pub face_zones: HashMap<Uint, FaceZone, RandomState>,
+    pub cell_zones: HashMap<Uint, CellZone, RandomState>,
 }
 impl Mesh {
     pub fn get_face_zone(&mut self, zone_name: &str) -> &mut FaceZone {

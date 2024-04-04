@@ -4,6 +4,7 @@ use crate::mesh::*;
 use crate::numerical_types::*;
 use crate::settings::GradientReconstructionMethods;
 use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
+use ahash::RandomState;
 use itertools::Itertools;
 use log::info;
 use nalgebra::DVector;
@@ -13,6 +14,9 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, BufRead};
+
+// NOTE: In this file, the terms "node" and "vertex" are used interchangeably. A "node" is not a
+// cell center; it is a vertex of a cell/face.
 
 // TODO: Make this only take block 1? Or handle error here in case 1 doesn't exist?
 macro_rules! skip_zone_zero {
@@ -47,11 +51,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         items
     }
 
-    let mut vertices: HashMap<usize, Vertex> = HashMap::new();
-    let mut faces: HashMap<usize, Face> = HashMap::new();
-    let mut cells: HashMap<usize, Cell> = HashMap::new();
-    let mut face_zones: HashMap<Uint, FaceZone> = HashMap::new();
-    let mut cell_zones: HashMap<Uint, CellZone> = HashMap::new();
+    let mut vertices: HashMap<usize, Vertex, RandomState> = HashMap::default();
+    let mut faces: HashMap<usize, Face, RandomState> = HashMap::default();
+    let mut cells: HashMap<usize, Cell, RandomState> = HashMap::default();
+    let mut face_zones: HashMap<Uint, FaceZone, RandomState> = HashMap::default();
+    let mut cell_zones: HashMap<Uint, CellZone, RandomState> = HashMap::default();
 
     let mut dimensions: u8 = 0;
 
