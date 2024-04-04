@@ -3,12 +3,14 @@
 use log::log_enabled;
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
-use orc::common::{Float, Tensor3};
-use orc::common::{Uint, Vector3};
+use orc::numerical_types::{Float, Tensor3};
+use orc::numerical_types::{Uint, Vector3};
 use orc::io::{read_data, read_mesh};
 use orc::io::{write_data, write_gradients};
 use orc::mesh::*;
 use orc::solver::*;
+use orc::linear_algebra::iterative_solve;
+use orc::settings::*;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
 use std::time::Instant;

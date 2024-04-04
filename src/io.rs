@@ -1,8 +1,8 @@
 #![allow(unused_labels)]
 
-use crate::common::*;
+use crate::numerical_types::*;
 use crate::mesh::*;
-use crate::solver::GradientReconstructionMethods;
+use crate::settings::GradientReconstructionMethods;
 use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
 use itertools::Itertools;
 use log::info;
