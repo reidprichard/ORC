@@ -431,11 +431,11 @@ fn test_3d_1x3(iteration_count: Uint) {
         Uint::max(iteration_count / 1000, 1),
     );
 
-    for cell_number in 0..mesh.cells.len() {
+    for cell_index in 0..mesh.cells.len() {
         let cell_velocity = Vector3 {
-            x: u[cell_number],
-            y: v[cell_number],
-            z: w[cell_number],
+            x: u[cell_index],
+            y: v[cell_index],
+            z: w[cell_index],
         };
         assert!(cell_velocity.approx_equals(
             &Vector3 {
@@ -504,11 +504,11 @@ fn test_3d_3x3(iteration_count: Uint) {
     );
 
     let mut avg_velocity = Vector3::zero();
-    for cell_number in 0..mesh.cells.len() {
+    for cell_index in 0..mesh.cells.len() {
         let cell_velocity = Vector3 {
-            x: u[cell_number],
-            y: v[cell_number],
-            z: w[cell_number],
+            x: u[cell_index],
+            y: v[cell_index],
+            z: w[cell_index],
         };
         // assert!(cell_velocity.approx_equals(
         //     &Vector {
