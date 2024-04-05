@@ -1,5 +1,5 @@
-use ahash::RandomState;
 use crate::numerical_types::*;
+use ahash::RandomState;
 use core::fmt;
 use std::collections::HashMap;
 
@@ -123,6 +123,43 @@ impl fmt::Display for FaceConditionTypes {
 // (5, "polygonal (N nodes)"),
 // }
 
+#[derive(Copy, Clone)]
+pub struct Vertex {
+    pub position: Vector3,
+}
+impl Default for Vertex {
+    fn default() -> Vertex {
+        Vertex {
+            position: Vector3::zero(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Face {
+    pub zone: Uint,
+    // TODO: Make this an array
+    pub cell_indices: Vec<usize>,
+    pub node_indices: Vec<usize>,
+    pub area: Float,
+    pub centroid: Vector3,
+    // TODO: rename to unit_normal?
+    pub normal: Vector3,
+}
+impl Default for Face {
+    fn default() -> Face {
+        Face {
+            zone: 0,
+            cell_indices: Vec::new(),
+            node_indices: Vec::new(),
+            area: 0.,
+            centroid: Vector3::zero(),
+            normal: Vector3::zero(), // points toward cell 0!
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Cell {
     pub zone_number: Uint,
     pub face_indices: Vec<usize>,
@@ -140,48 +177,10 @@ impl Default for Cell {
     }
 }
 
-// #[derive(Copy, Clone)]
-pub struct Vertex {
-    pub position: Vector3,
-}
-impl Vertex {}
-
-impl Default for Vertex {
-    fn default() -> Vertex {
-        Vertex {
-            position: Vector3::zero(),
-        }
-    }
-}
-
-pub struct Face {
-    pub zone: Uint,
-    // TODO: Make this an array
-    pub cell_indices: Vec<usize>,
-    pub node_indices: Vec<usize>,
-    pub area: Float,
-    pub centroid: Vector3,
-    // TODO: rename to unit_normal?
-    pub normal: Vector3,
-}
-impl Face {}
-impl Default for Face {
-    fn default() -> Face {
-        Face {
-            zone: 0,
-            cell_indices: Vec::new(),
-            node_indices: Vec::new(),
-            area: 0.,
-            centroid: Vector3::zero(),
-            normal: Vector3::zero(), // points toward cell 0!
-        }
-    }
-}
-
 pub struct Mesh {
-    pub vertices: HashMap<usize, Vertex, RandomState>,
-    pub faces: HashMap<usize, Face, RandomState>,
-    pub cells: HashMap<usize, Cell, RandomState>,
+    pub vertices: Vec<Vertex>,
+    pub faces: Vec<Face>,
+    pub cells: Vec<Cell>,
     pub face_zones: HashMap<Uint, FaceZone, RandomState>,
     pub cell_zones: HashMap<Uint, CellZone, RandomState>,
 }
