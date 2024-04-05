@@ -57,6 +57,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         };
     }
 
+    // TODO: BTreeMap?
     let mut vertices_hashmap: HashMap<usize, Vertex, RandomState> = new_hashmap!();
     let mut faces_hashmap: HashMap<usize, Face, RandomState> = new_hashmap!();
     let mut cells_hashmap: HashMap<usize, Cell, RandomState> = new_hashmap!();
@@ -484,9 +485,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         );
     }
 
-    let mut vertices:Vec<Vertex> = Vec::new();
-    let mut faces:Vec<Face> = Vec::new();
-    let mut cells:Vec<Cell> = Vec::new();
+    let mut vertices:Vec<Vertex> = Vec::with_capacity(vertices_hashmap.len());
+    let mut faces:Vec<Face> = Vec::with_capacity(faces_hashmap.len());
+    let mut cells:Vec<Cell> = Vec::with_capacity(cells_hashmap.len());
 
     for vertex_index in 0..vertices_hashmap.len() {
         vertices.push(vertices_hashmap[&vertex_index]);
