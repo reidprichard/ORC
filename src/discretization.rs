@@ -174,6 +174,8 @@ pub fn build_momentum_advection_matrices(
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
             let face = &mesh.faces[*face_index];
+            // WARNING: Things can get tricky here from the recursion: you're calculating flux
+            // based on a_u/v/w, but you're doing so to calculate the coefficients in a_u/v/w
             let face_flux = get_face_flux(
                 mesh,
                 u,
