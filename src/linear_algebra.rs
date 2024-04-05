@@ -24,6 +24,9 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
                 restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
             }
         }
+        // TODO: Rethink this restriction strategy. I suspect it produces very long combined cells
+        // along directions of streamlines, which may not be the best strategy to get error to
+        // propagate.
         RestrictionMethods::Strongest => {
             // For each row, find the most negative off-diagonal value
             // If that cell hasn't already been combined, combine it with diagonal
