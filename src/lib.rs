@@ -13,10 +13,12 @@ pub mod settings {
     pub struct NumericalSettings {
         // SIMPLE is the only option for now
         pub pressure_velocity_coupling: PressureVelocityCoupling,
+        // Pick a suitable option for your flow. In theory, TVD schemes should be more expensive.
         pub momentum: MomentumDiscretization,
         // CD the only option for now
         pub diffusion: DiffusionScheme,
-        // SecondOrder recommended; LinearWeighted is more stable but less accurate
+        // SecondOrder is more rigorous but costs ~15% performance. LinearWeighted should be
+        // sufficient in most cases.
         pub pressure_interpolation: PressureInterpolation,
         // RhieChow is more rigorous and helps avoid checkerboarding but induces a ~25% performance
         // hit
@@ -66,7 +68,7 @@ pub mod settings {
                 solver_type: SolutionMethod::Multigrid,
                 iterations: 50,
                 relaxation: 0.5,
-                relative_convergence_threshold: 0.001,
+                relative_convergence_threshold: 1e-3,
                 preconditioner: PreconditionMethod::Jacobi,
             }
         }

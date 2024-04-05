@@ -142,17 +142,9 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         // This needs to be EXTREMELY low (~0.01)
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
-        matrix_solver: MatrixSolverSettings {
-            solver_type: SolutionMethod::Multigrid,
-            iterations: 50,
-            // ~0.5 seems like roughly upper limit for Jacobi; does nothing for BiCGSTAB
-            relaxation: 0.5,
-            // Does nothing for BiCGSTAB
-            relative_convergence_threshold: 1e-3,
-            preconditioner: PreconditionMethod::Jacobi,
-        },
-        momentum: MomentumDiscretization::UD,
-        pressure_interpolation: PressureInterpolation::SecondOrder,
+        matrix_solver: MatrixSolverSettings::default(),
+        momentum: TVD_QUICK,
+        pressure_interpolation: PressureInterpolation::LinearWeighted,
         velocity_interpolation: VelocityInterpolation::RhieChow,
         ..NumericalSettings::default()
     };
