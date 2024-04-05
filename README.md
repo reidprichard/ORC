@@ -47,6 +47,7 @@ Roadmap:
 - [X] Multigrid
 - [X] Read/write solution data
 - [ ] Read/write settings?
+- [ ] Replace panics with proper error handling
 - [ ] CLI
 - [ ] Iterate transient
 - [ ] Standard k-epsilon turbulence model?
