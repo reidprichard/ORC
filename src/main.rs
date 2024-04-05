@@ -331,7 +331,8 @@ fn test_2d(iteration_count: Uint) {
         panic!("face calculated as too large");
     }
     const VOLUME_TOL: Float = 0.0001;
-    for cell in mesh.cells.values() {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);
@@ -389,7 +390,8 @@ fn test_3d_1x3(iteration_count: Uint) {
         panic!("face calculated as too large");
     }
     const VOLUME_TOL: Float = 0.0001;
-    for cell in mesh.cells.values() {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);
@@ -477,7 +479,8 @@ fn test_3d_3x3(iteration_count: Uint) {
         panic!("face calculated as too large");
     }
     const VOLUME_TOL: Float = 0.0001;
-    for cell in mesh.cells.values() {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);

@@ -391,7 +391,8 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
     let mut a_coo = CooMatrix::<Float>::new(n, n);
     let mut b = dvector_zeros!(a_coo.nrows());
 
-    for (i, cell) in &mesh.cells {
+    for i in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&i];
         let mut a_ii = 0.;
         for face in cell
             .face_indices
@@ -400,22 +401,22 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
         {
             match mesh.face_zones[&face.zone].zone_type {
                 FaceConditionTypes::Interior => {
-                    let neighbor_cell_index = if face.cell_indices[0] == *i {
+                    let neighbor_cell_index = if face.cell_indices[0] == i {
                         face.cell_indices[1]
                     } else {
                         face.cell_indices[0]
                     };
-                    a_coo.push(*i, neighbor_cell_index, 1.0);
+                    a_coo.push(i, neighbor_cell_index, 1.0);
                     a_ii -= 1.0;
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                     a_ii -= 1e2;
-                    b[*i] -= mesh.face_zones[&face.zone].scalar_value * 1e2;
+                    b[i] -= mesh.face_zones[&face.zone].scalar_value * 1e2;
                 }
                 _ => (),
             }
         }
-        a_coo.push(*i, *i, a_ii);
+        a_coo.push(i, i, a_ii);
     }
     let a = &CsrMatrix::from(&a_coo);
     iterative_solve(
@@ -440,25 +441,26 @@ fn check_boundary_conditions(mesh: &Mesh) {
     for face_zone in mesh.face_zones.values() {
         match face_zone.zone_type {
             FaceConditionTypes::Wall => {
-                for face in mesh.faces.values() {
+                for face_index in 0..mesh.faces.len() {
+                    let face = &mesh.faces[&face_index];
                     if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
                         panic!("Wall velocity must be tangent to faces in zone.");
                     }
                 }
             }
             FaceConditionTypes::VelocityInlet => {
-                for face in mesh.faces.values() {
+                for face_index in 0..mesh.faces.len() {
+                    let face = &mesh.faces[&face_index];
                     if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
                         panic!("VelocityInlet velocity must not be tangent to faces in zone.");
                     }
                 }
-                
             }
             _ => {
                 // TODO: Handle other zone types. Could check if scalar_value/vector_value are
                 // set/not set appropriately, could check if system is overdefined/underdefined,
                 // etc.
-            },
+            }
         }
     }
 }
@@ -753,25 +755,26 @@ fn apply_pressure_correction(
     numerical_settings: &NumericalSettings,
 ) -> (Float, Float) {
     let mut velocity_corr_sum = 0.;
-    for (cell_index, cell) in &mut mesh.cells {
-        let pressure_correction = *p_prime.get(*cell_index).unwrap_or(&0.);
-        p[*cell_index] += numerical_settings.pressure_relaxation * pressure_correction;
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells.get_mut(&cell_index).unwrap();
+        let pressure_correction = *p_prime.get(cell_index).unwrap_or(&0.);
+        p[cell_index] += numerical_settings.pressure_relaxation * pressure_correction;
         let velocity_correction =
             cell.face_indices
                 .iter()
                 .fold(Vector3::zero(), |acc, face_index| {
                     let face = &mesh.faces[face_index];
                     let face_zone = &mesh.face_zones[&face.zone];
-                    let outward_face_normal = get_outward_face_normal(face, *cell_index);
+                    let outward_face_normal = get_outward_face_normal(face, cell_index);
                     let p_prime_neighbor = match face_zone.zone_type {
                         FaceConditionTypes::Wall
                         | FaceConditionTypes::Symmetry
-                        | FaceConditionTypes::VelocityInlet => p_prime[*cell_index],
+                        | FaceConditionTypes::VelocityInlet => p_prime[cell_index],
                         FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
                             0.
                         }
                         FaceConditionTypes::Interior => {
-                            let neighbor_cell_index = if face.cell_indices[0] == *cell_index {
+                            let neighbor_cell_index = if face.cell_indices[0] == cell_index {
                                 face.cell_indices[1]
                             } else {
                                 face.cell_indices[0]
@@ -784,15 +787,15 @@ fn apply_pressure_correction(
                         }
                     };
                     let scaled_normal = Vector3 {
-                        x: outward_face_normal.x / a_u.get(*cell_index, *cell_index),
-                        y: outward_face_normal.y / a_v.get(*cell_index, *cell_index),
-                        z: outward_face_normal.z / a_w.get(*cell_index, *cell_index),
+                        x: outward_face_normal.x / a_u.get(cell_index, cell_index),
+                        y: outward_face_normal.y / a_v.get(cell_index, cell_index),
+                        z: outward_face_normal.z / a_w.get(cell_index, cell_index),
                     };
-                    acc + scaled_normal * (p_prime[*cell_index] - p_prime_neighbor) * face.area
+                    acc + scaled_normal * (p_prime[cell_index] - p_prime_neighbor) * face.area
                 });
-        u[*cell_index] += velocity_correction.x * numerical_settings.momentum_relaxation;
-        v[*cell_index] += velocity_correction.y * numerical_settings.momentum_relaxation;
-        w[*cell_index] += velocity_correction.z * numerical_settings.momentum_relaxation;
+        u[cell_index] += velocity_correction.x * numerical_settings.momentum_relaxation;
+        v[cell_index] += velocity_correction.y * numerical_settings.momentum_relaxation;
+        w[cell_index] += velocity_correction.z * numerical_settings.momentum_relaxation;
         velocity_corr_sum += velocity_correction.norm().powi(2);
     }
     (p_prime.norm(), velocity_corr_sum.sqrt())

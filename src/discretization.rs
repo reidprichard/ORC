@@ -49,7 +49,8 @@ pub fn build_momentum_diffusion_matrix(
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
 
     // Iterate over all cells in the mesh
-    for (cell_index, cell) in &mesh.cells {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = 0.;
 
@@ -80,7 +81,7 @@ pub fn build_momentum_diffusion_matrix(
                 }
                 FaceConditionTypes::Interior => {
                     let mut neighbor_cell_index: usize = face.cell_indices[0];
-                    if neighbor_cell_index == *cell_index {
+                    if neighbor_cell_index == cell_index {
                         neighbor_cell_index = *face
                             .cell_indices
                             .get(1)
@@ -114,10 +115,10 @@ pub fn build_momentum_diffusion_matrix(
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index != usize::MAX {
                 // negate a_nb to move to LHS of equation
-                a.push(*cell_index, neighbor_cell_index, -d_i);
+                a.push(cell_index, neighbor_cell_index, -d_i);
             }
         } // end face loop
-        a.push(*cell_index, *cell_index, a_p);
+        a.push(cell_index, cell_index, a_p);
     } // end cell loop
     CsrMatrix::from(&a)
 }
@@ -144,7 +145,8 @@ pub fn build_momentum_advection_matrices(
 ) {
     // Iterate over all cells in the mesh
     // print_linear_system(&a_u, &b_u);
-    for (cell_index, cell) in &mesh.cells {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         // Diffusion of scalar phi from neighbor into this cell
         // = <face area> * <diffusivity> * <face-normal gradient of phi>
         // = A * nu * d/dn(phi)
@@ -162,10 +164,10 @@ pub fn build_momentum_advection_matrices(
         let s_d_cross = Vector3::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
-        let a_ii_di = a_di.get(*cell_index, *cell_index);
+        let a_ii_di = a_di.get(cell_index, cell_index);
         let mut a_p = Vector3::zero();
         let cell_velocity_gradient =
-            calculate_velocity_gradient(mesh, u, v, w, *cell_index, gradient_scheme);
+            calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme);
         // println!("\n{cell_velocity_gradient}");
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
@@ -177,7 +179,7 @@ pub fn build_momentum_advection_matrices(
                 w,
                 p,
                 *face_index,
-                *cell_index,
+                cell_index,
                 velocity_interpolation,
                 gradient_scheme,
                 a_u,
@@ -186,7 +188,7 @@ pub fn build_momentum_advection_matrices(
             );
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
-            let outward_face_normal = get_outward_face_normal(face, *cell_index);
+            let outward_face_normal = get_outward_face_normal(face, cell_index);
             // Mass flow rate out of this cell through this face
             let f_i = face_flux * face.area * rho;
             let face_pressure = get_face_pressure(
@@ -198,7 +200,7 @@ pub fn build_momentum_advection_matrices(
             );
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
-            } else if face.cell_indices[0] == *cell_index {
+            } else if face.cell_indices[0] == cell_index {
                 // face normal points to cell 0 by default, so we need to flip it
                 *face
                     .cell_indices
@@ -231,7 +233,7 @@ pub fn build_momentum_advection_matrices(
                         let downstream_cell = if f_i > 0. {
                             neighbor_cell_index
                         } else {
-                            *cell_index
+                            cell_index
                         };
                         let downstream_velocity = Vector3 {
                             x: u[downstream_cell],
@@ -239,9 +241,9 @@ pub fn build_momentum_advection_matrices(
                             z: w[downstream_cell],
                         };
                         let velocity = Vector3 {
-                            x: u[*cell_index],
-                            y: v[*cell_index],
-                            z: w[*cell_index],
+                            x: u[cell_index],
+                            y: v[cell_index],
+                            z: w[cell_index],
                         };
                         if (downstream_velocity - velocity).norm() == 0. {
                             let a_nb = Float::min(f_i, 0.);
@@ -252,7 +254,7 @@ pub fn build_momentum_advection_matrices(
                             }
                         } else {
                             let r_pa = mesh.cells[&neighbor_cell_index].centroid
-                                - mesh.cells[cell_index].centroid;
+                                - mesh.cells[&cell_index].centroid;
                             let r = 2. * cell_velocity_gradient.inner(&r_pa)
                                 / (downstream_velocity - velocity)
                                 - 1.;
@@ -286,36 +288,36 @@ pub fn build_momentum_advection_matrices(
                 }
                 // Add source term contributions for velocity BCs
             } else {
-                let a_ij_di = a_di.get(*cell_index, neighbor_cell_index);
+                let a_ij_di = a_di.get(cell_index, neighbor_cell_index);
                 // negate a_nb to move to LHS of equation
-                match a_u.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
+                match a_u.get_entry_mut(cell_index, neighbor_cell_index).unwrap() {
                     NonZero(a_ij) => *a_ij = a_nb.x + a_ij_di,
                     Zero => panic!(),
                 }
-                match a_v.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
+                match a_v.get_entry_mut(cell_index, neighbor_cell_index).unwrap() {
                     NonZero(a_ij) => *a_ij = a_nb.y + a_ij_di,
                     Zero => panic!(),
                 }
-                match a_w.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
+                match a_w.get_entry_mut(cell_index, neighbor_cell_index).unwrap() {
                     NonZero(a_ij) => *a_ij = a_nb.z + a_ij_di,
                     Zero => panic!(),
                 }
             }
         } // end face loop
         let source_total = s_u + s_u_dc + s_d_cross;
-        b_u[*cell_index] = source_total.x;
-        b_v[*cell_index] = source_total.y;
-        b_w[*cell_index] = source_total.z;
+        b_u[cell_index] = source_total.x;
+        b_v[cell_index] = source_total.y;
+        b_w[cell_index] = source_total.z;
 
-        match a_u.get_entry_mut(*cell_index, *cell_index).unwrap() {
+        match a_u.get_entry_mut(cell_index, cell_index).unwrap() {
             NonZero(v) => *v = a_p.x + a_ii_di,
             Zero => panic!(),
         }
-        match a_v.get_entry_mut(*cell_index, *cell_index).unwrap() {
+        match a_v.get_entry_mut(cell_index, cell_index).unwrap() {
             NonZero(v) => *v = a_p.y + a_ii_di,
             Zero => panic!(),
         }
-        match a_w.get_entry_mut(*cell_index, *cell_index).unwrap() {
+        match a_w.get_entry_mut(cell_index, cell_index).unwrap() {
             NonZero(v) => *v = a_p.z + a_ii_di,
             Zero => panic!(),
         }
@@ -343,7 +345,8 @@ pub fn build_pressure_correction_matrices(
     // This is the net mass flow rate into each cell
     let mut b = dvector_zeros!(cell_count);
 
-    for (cell_index, cell) in &mesh.cells {
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
         let mut a_p: Float = 0.;
         let mut b_p: Float = 0.;
         for face_index in &cell.face_indices {
@@ -355,19 +358,19 @@ pub fn build_pressure_correction_matrices(
                 w,
                 p,
                 *face_index,
-                *cell_index,
+                cell_index,
                 numerical_settings.velocity_interpolation,
                 numerical_settings.gradient_reconstruction,
                 a_u,
                 a_v,
                 a_w,
             );
-            let inward_face_normal = get_inward_face_normal(face, *cell_index);
+            let inward_face_normal = get_inward_face_normal(face, cell_index);
             // The net mass flow rate through this face into this cell
             b_p += rho * (-outward_face_flux) * face.area;
 
             if face.cell_indices.len() > 1 {
-                let neighbor_cell_index = if face.cell_indices[0] != *cell_index {
+                let neighbor_cell_index = if face.cell_indices[0] != cell_index {
                     face.cell_indices[0]
                 } else {
                     face.cell_indices[1]
@@ -376,7 +379,7 @@ pub fn build_pressure_correction_matrices(
                 // NOTE: It would be more rigorous to recalculate the advective coefficients,
                 // but I think this should be sufficient for now.
                 let a_interpolated_magnitude = get_face_normal_momentum_coefficient!(
-                    *cell_index,
+                    cell_index,
                     neighbor_cell_index,
                     a_u,
                     a_v,
@@ -388,12 +391,12 @@ pub fn build_pressure_correction_matrices(
                 // TODO: Test with mesh that doesn't align with XY grid to make sure this is
                 // correct
                 let a_nb = rho * Float::powi(face.area, 2) / a_interpolated_magnitude;
-                a.push(*cell_index, neighbor_cell_index, -a_nb);
+                a.push(cell_index, neighbor_cell_index, -a_nb);
                 a_p += a_nb;
             } else {
                 // TODO: Handle boundary types here (e.g. wall should add zero)
                 let a_ii_norm = get_normal_momentum_coefficient!(
-                    *cell_index,
+                    cell_index,
                     a_u,
                     a_v,
                     a_w,
@@ -403,8 +406,8 @@ pub fn build_pressure_correction_matrices(
                 a_p += a_nb / 2.; // NOTE: I'm not sure if dividing by two is correct here?
             }
         }
-        a.push(*cell_index, *cell_index, a_p);
-        b[*cell_index] = b_p;
+        a.push(cell_index, cell_index, a_p);
+        b[cell_index] = b_p;
     }
     // panic!("done");
 
@@ -418,20 +421,21 @@ pub fn build_pressure_correction_matrices(
 pub fn initialize_momentum_matrix(mesh: &Mesh) -> CsrMatrix<Float> {
     let cell_count = mesh.cells.len();
     let mut a: CooMatrix<Float> = CooMatrix::new(cell_count, cell_count);
-    for (cell_index, cell) in &mesh.cells {
-        a.push(*cell_index, *cell_index, 1.);
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[&cell_index];
+        a.push(cell_index, cell_index, 1.);
         let n = cell.face_indices.len() as Float;
         for face_index in &cell.face_indices {
             let face = &mesh.faces[face_index];
             if face.cell_indices.len() == 2 {
-                let neighbor_cell_index = if face.cell_indices[0] == *cell_index {
+                let neighbor_cell_index = if face.cell_indices[0] == cell_index {
                     face.cell_indices[1]
                 } else {
                     face.cell_indices[0]
                 };
                 // NOTE: Not sure if it's necessary to put a nonzero value, but this could save
                 // some headaches. However, `n` isn't necessarily correct I don't think.
-                a.push(*cell_index, neighbor_cell_index, -1. / n);
+                a.push(cell_index, neighbor_cell_index, -1. / n);
             }
         }
     }

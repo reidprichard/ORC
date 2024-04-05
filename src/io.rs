@@ -53,7 +53,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     macro_rules! new_hashmap {
         () => {
-            HashMap::with_hasher(RandomState::with_seeds(0, 1, 2, 3))
+            HashMap::with_hasher(RandomState::with_seed(31415))
         };
     }
 
@@ -283,7 +283,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         panic!("Unable to open mesh file for reading.");
     }
 
-    for (face_index, face) in &mut faces {
+    for face_index in 0..faces.len() {
+        let face = faces.get_mut(&face_index).unwrap();
         if face.node_indices.len() < dimensions.into() {
             println!("dimensions: {}", face.node_indices.len());
             panic!("face has too few nodes");
@@ -399,14 +400,15 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 continue;
             }
             let cell = cells.entry(*cell_index).or_default();
-            cell.face_indices.push(*face_index);
+            cell.face_indices.push(face_index);
             // TODO: more rigorous centroid calc
             cell.centroid += face.centroid;
             // TODO: Get cell zones
         }
     }
 
-    for cell in cells.values_mut() {
+    for cell_index in 0..cells.len() {
+        let cell = cells.get_mut(&cell_index).unwrap();
         cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
             .face_indices
