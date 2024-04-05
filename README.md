@@ -1,4 +1,4 @@
-# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD: A 3D, unstructured CFD solver
+# <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD: A 3D, unstructured computational fluid dynamics (CFD) solver
 
 ![Channel flow contour plots](./examples/channel_flow_contour_plots.png)
 
