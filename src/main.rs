@@ -173,7 +173,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
-    let mu = 0.005;
+    let mu = 0.1;
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
@@ -195,14 +195,14 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
-        momentum_relaxation: 0.8,
+        momentum_relaxation: 0.5,
         // This needs to be EXTREMELY low (~0.01)
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
-        momentum: TVD_QUICK,
+        momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::LinearWeighted,
-        velocity_interpolation: VelocityInterpolation::RhieChow,
+        velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
 
@@ -281,8 +281,8 @@ fn main() {
         .parse()
         .expect("arg 2 should be an integer");
     // validate_solvers(); // TODO: Get this back up
-    // channel_flow(iteration_count, reporting_interval);
-    couette_flow(iteration_count, reporting_interval);
+    channel_flow(iteration_count, reporting_interval);
+    // couette_flow(iteration_count, reporting_interval);
     // test_3d_1x3(iteration_count);
     // Interface: allow user to choose from
     // 1. Read mesh
