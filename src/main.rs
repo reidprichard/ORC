@@ -23,6 +23,7 @@ use tracing_subscriber::prelude::*;
 const DEBUG: bool = false;
 
 fn validate_solvers() {
+    // TODO: Move to tests.rs
     // TODO: Feed this a much larger linear system representative of CFD
     const TOL: Float = 1e-6;
 
@@ -90,18 +91,20 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
-    let top_wall_velocity = 1e-2;
+    let top_wall_velocity = 0.;
 
     // *********** Read mesh ************
-    let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
+    let mut mesh = orc::io::read_mesh("./examples/couette_flow_128x64x1.msh");
 
     // ************ Set boundary conditions **********
-    mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
-    mesh.get_face_zone("WALL").vector_value = Vector3 {
-        x: 1.,
+    mesh.get_face_zone("TOP_WALL").zone_type = FaceConditionTypes::Wall;
+    mesh.get_face_zone("TOP_WALL").vector_value = Vector3 {
+        x: top_wall_velocity,
         y: 0.,
         z: 0.,
     };
+
+    mesh.get_face_zone("BOTTOM_WALL").zone_type = FaceConditionTypes::Wall;
 
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
     mesh.get_face_zone("INLET").scalar_value = -dp;
@@ -119,7 +122,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
-        momentum: TVD_QUICK,
+        momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::LinearWeighted,
         velocity_interpolation: VelocityInterpolation::RhieChow,
         ..NumericalSettings::default()
@@ -170,7 +173,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
-    let mu = 0.1;
+    let mu = 0.005;
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
