@@ -57,9 +57,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         };
     }
 
-    let mut vertices: HashMap<usize, Vertex, RandomState> = new_hashmap!();
-    let mut faces: HashMap<usize, Face, RandomState> = new_hashmap!();
-    let mut cells: HashMap<usize, Cell, RandomState> = new_hashmap!();
+    let mut vertices_hashmap: HashMap<usize, Vertex, RandomState> = new_hashmap!();
+    let mut faces_hashmap: HashMap<usize, Face, RandomState> = new_hashmap!();
+    let mut cells_hashmap: HashMap<usize, Cell, RandomState> = new_hashmap!();
     let mut face_zones: HashMap<Uint, FaceZone, RandomState> = new_hashmap!();
     let mut cell_zones: HashMap<Uint, CellZone, RandomState> = new_hashmap!();
 
@@ -147,7 +147,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                                     )
                                 });
                             }
-                            vertices.insert(
+                            vertices_hashmap.insert(
                                 node_number - 1,
                                 Vertex {
                                     position: Vector3 { x, y, z },
@@ -230,7 +230,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                         if face_type != 0 && face_type != 5 && face_type != node_count {
                             break 'face_loop;
                         }
-                        faces.insert(
+                        faces_hashmap.insert(
                             face_number - 1,
                             Face {
                                 zone: zone_id as Uint,
@@ -283,8 +283,8 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         panic!("Unable to open mesh file for reading.");
     }
 
-    for face_index in 0..faces.len() {
-        let face = faces.get_mut(&face_index).unwrap();
+    for face_index in 0..faces_hashmap.len() {
+        let face = faces_hashmap.get_mut(&face_index).unwrap();
         if face.node_indices.len() < dimensions.into() {
             println!("dimensions: {}", face.node_indices.len());
             panic!("face has too few nodes");
@@ -292,7 +292,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         let face_nodes: Vec<&Vertex> = face
             .node_indices
             .iter()
-            .map(|n| vertices.get(n).expect("nodes should have all been read"))
+            .map(|n| vertices_hashmap.get(n).expect("nodes should have all been read"))
             .collect();
         match dimensions {
             2 => {
@@ -331,7 +331,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         face.centroid = face
             .node_indices
             .iter()
-            .fold(Vector3::zero(), |acc, n| acc + vertices[n].position)
+            .fold(Vector3::zero(), |acc, n| acc + vertices_hashmap[n].position)
             / (face.node_indices.len() as Float);
         face.area = match face_nodes.len() {
             0 | 1 => panic!("faces must have 2+ nodes"),
@@ -376,16 +376,16 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 let area: Float = face.node_indices.windows(2).fold(0., |acc, w| {
                     acc + calculate_triangle_area(
                         &face.centroid,
-                        &vertices[&w[0]].position,
-                        &vertices[&w[1]].position,
+                        &vertices_hashmap[&w[0]].position,
+                        &vertices_hashmap[&w[1]].position,
                     )
                 });
                 let first = face.node_indices[0];
                 let last = face.node_indices[node_count - 1];
                 area + calculate_triangle_area(
                     &face.centroid,
-                    &vertices[&first].position,
-                    &vertices[&last].position,
+                    &vertices_hashmap[&first].position,
+                    &vertices_hashmap[&last].position,
                 )
             }
         };
@@ -399,7 +399,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             if *cell_index == usize::MAX {
                 continue;
             }
-            let cell = cells.entry(*cell_index).or_default();
+            let cell = cells_hashmap.entry(*cell_index).or_default();
             cell.face_indices.push(face_index);
             // TODO: more rigorous centroid calc
             cell.centroid += face.centroid;
@@ -407,13 +407,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         }
     }
 
-    for cell_index in 0..cells.len() {
-        let cell = cells.get_mut(&cell_index).unwrap();
+    for cell_index in 0..cells_hashmap.len() {
+        let cell = cells_hashmap.get_mut(&cell_index).unwrap();
         cell.centroid /= cell.face_indices.len();
         let cell_faces: Vec<&Face> = cell
             .face_indices
             .iter()
-            .map(|n| faces.get(n).unwrap())
+            .map(|n| faces_hashmap.get(n).unwrap())
             .collect();
         if cell_faces.len() < (dimensions + 1) as usize {
             panic!("cell has too few faces");
@@ -432,14 +432,14 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     println!(
         "Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}",
-        cells.len(),
-        faces.len(),
-        vertices.len()
+        cells_hashmap.len(),
+        faces_hashmap.len(),
+        vertices_hashmap.len()
     );
 
     // TODO: Rewrite more concisely
     // Very ugly way to do this
-    let node_positions: Vec<Vector3> = vertices.values().map(|n| n.position).collect();
+    let node_positions: Vec<Vector3> = vertices_hashmap.values().map(|n| n.position).collect();
     let x_min = node_positions
         .iter()
         .fold(Float::INFINITY, |acc, &n| acc.min(n.x));
@@ -482,6 +482,20 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             "Face zone {}: {} ({})",
             face_zone_index, face_zone.zone_type, face_zone.name
         );
+    }
+
+    let mut vertices:Vec<Vertex> = Vec::new();
+    let mut faces:Vec<Face> = Vec::new();
+    let mut cells:Vec<Cell> = Vec::new();
+
+    for vertex_index in 0..vertices_hashmap.len() {
+        vertices.push(vertices_hashmap[&vertex_index]);
+    }
+    for face_index in 0..faces_hashmap.len() {
+        faces.push(faces_hashmap[&face_index].clone());
+    }
+    for cell_number in 0..cells_hashmap.len() {
+        cells.push(cells_hashmap[&cell_number].clone());
     }
 
     Mesh {
@@ -559,7 +573,7 @@ pub fn write_data(
     let mut file = File::create(output_file_name).unwrap();
     println!("Writing data to {output_file_name}...");
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         writeln!(
             file,
             "{}\t({:.e}, {:.e}, {:.e})\t{:.e}",
@@ -581,7 +595,7 @@ pub fn write_data_with_precision(
     let mut file = File::create(output_file_name).unwrap();
     println!("Writing data to {output_file_name}...");
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         writeln!(
             file,
             "{}\t({:.prec$e}, {:.prec$e}, {:.prec$e})\t{:.prec$e}",
@@ -632,7 +646,7 @@ pub fn write_gradients(
         writeln!(
             file,
             "{}\t({})\t({})",
-            &mesh.cells[&cell_index].centroid, velocity_gradient_str, pressure_gradient_str
+            &mesh.cells[cell_index].centroid, velocity_gradient_str, pressure_gradient_str
         )
         .unwrap();
     }

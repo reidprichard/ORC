@@ -320,7 +320,7 @@ fn test_2d(iteration_count: Uint) {
     mesh.get_face_zone("TOP").zone_type = FaceConditionTypes::Wall;
 
     let (face_min_actual, face_max_actual) =
-        mesh.faces.iter().fold((face_max, face_min), |acc, (_, f)| {
+        mesh.faces.iter().enumerate().fold((face_max, face_min), |acc, (_, f)| {
             (Float::min(acc.0, f.area), Float::max(acc.1, f.area))
         });
     const AREA_TOL: Float = 0.001;
@@ -332,7 +332,7 @@ fn test_2d(iteration_count: Uint) {
     }
     const VOLUME_TOL: Float = 0.0001;
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);
@@ -378,6 +378,7 @@ fn test_3d_1x3(iteration_count: Uint) {
     let (face_min_actual, face_max_actual) = mesh
         .faces
         .iter()
+        .enumerate()
         .fold((face_area, face_area), |acc, (_, f)| {
             (Float::min(acc.0, f.area), Float::max(acc.1, f.area))
         });
@@ -391,7 +392,7 @@ fn test_3d_1x3(iteration_count: Uint) {
     }
     const VOLUME_TOL: Float = 0.0001;
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);
@@ -468,6 +469,7 @@ fn test_3d_3x3(iteration_count: Uint) {
     let (face_min_actual, face_max_actual) = mesh
         .faces
         .iter()
+        .enumerate()
         .fold((face_area, face_area), |acc, (_, f)| {
             (Float::min(acc.0, f.area), Float::max(acc.1, f.area))
         });
@@ -480,7 +482,7 @@ fn test_3d_3x3(iteration_count: Uint) {
     }
     const VOLUME_TOL: Float = 0.0001;
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
             println!("Volume should be: {cell_volume}");
             println!("Volume is: {}", cell.volume);

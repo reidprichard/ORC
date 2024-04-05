@@ -392,12 +392,12 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
     let mut b = dvector_zeros!(a_coo.nrows());
 
     for i in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&i];
+        let cell = &mesh.cells[i];
         let mut a_ii = 0.;
         for face in cell
             .face_indices
             .iter()
-            .map(|face_index| &mesh.faces[face_index])
+            .map(|face_index| &mesh.faces[*face_index])
         {
             match mesh.face_zones[&face.zone].zone_type {
                 FaceConditionTypes::Interior => {
@@ -442,7 +442,7 @@ fn check_boundary_conditions(mesh: &Mesh) {
         match face_zone.zone_type {
             FaceConditionTypes::Wall => {
                 for face_index in 0..mesh.faces.len() {
-                    let face = &mesh.faces[&face_index];
+                    let face = &mesh.faces[face_index];
                     if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
                         panic!("Wall velocity must be tangent to faces in zone.");
                     }
@@ -450,7 +450,7 @@ fn check_boundary_conditions(mesh: &Mesh) {
             }
             FaceConditionTypes::VelocityInlet => {
                 for face_index in 0..mesh.faces.len() {
-                    let face = &mesh.faces[&face_index];
+                    let face = &mesh.faces[face_index];
                     if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
                         panic!("VelocityInlet velocity must not be tangent to faces in zone.");
                     }
@@ -473,13 +473,13 @@ pub fn calculate_velocity_gradient(
     cell_index: usize,
     gradient_scheme: GradientReconstructionMethods,
 ) -> Tensor3 {
-    let cell = &mesh.cells[&cell_index];
+    let cell = &mesh.cells[cell_index];
     match gradient_scheme {
         GradientReconstructionMethods::GreenGauss(_) => {
             cell.face_indices
                 .iter()
                 .fold(Tensor3::zero(), |acc, face_index| {
-                    let face = &mesh.faces[&face_index];
+                    let face = &mesh.faces[*face_index];
                     let face_value: Vector3 = get_face_velocity(
                         mesh,
                         u,
@@ -504,14 +504,14 @@ pub fn calculate_pressure_gradient(
     cell_index: usize,
     gradient_scheme: GradientReconstructionMethods,
 ) -> Vector3 {
-    let cell = &mesh.cells[&cell_index];
+    let cell = &mesh.cells[cell_index];
     match gradient_scheme {
         GradientReconstructionMethods::GreenGauss(variant) => match variant {
             GreenGaussVariants::CellBased => cell
                 .face_indices
                 .iter()
                 .map(|face_index| {
-                    let face = &mesh.faces[&face_index];
+                    let face = &mesh.faces[*face_index];
                     let face_value: Float = get_face_pressure(
                         mesh,
                         p,
@@ -539,7 +539,7 @@ fn get_face_velocity(
     interpolation_scheme: VelocityInterpolation,
 ) -> Vector3 {
     // ****** TODO: Add skewness corrections!!! ********
-    let face = &mesh.faces[&face_index];
+    let face = &mesh.faces[face_index];
     let face_zone = &mesh.face_zones[&face.zone];
     let cell_index = face.cell_indices[0];
     match face_zone.zone_type {
@@ -566,8 +566,8 @@ fn get_face_velocity(
             };
             match interpolation_scheme {
                 VelocityInterpolation::LinearWeighted => {
-                    let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
-                    let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
+                    let dx0 = (mesh.cells[cell_index].centroid - face.centroid).norm();
+                    let dx1 = (mesh.cells[neighbor_index].centroid - face.centroid).norm();
                     vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)
                 }
                 VelocityInterpolation::RhieChow => {
@@ -596,7 +596,7 @@ pub fn get_face_flux(
     a_w: &CsrMatrix<Float>,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
-    let face = &mesh.faces[&face_index];
+    let face = &mesh.faces[face_index];
     let outward_face_normal = get_outward_face_normal(face, cell_index);
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
@@ -635,8 +635,8 @@ pub fn get_face_flux(
                         y: v[neighbor_cell_index],
                         z: w[neighbor_cell_index],
                     };
-                    let cell_centroid_vector = mesh.cells[&neighbor_cell_index].centroid
-                        - mesh.cells[&cell_index].centroid;
+                    let cell_centroid_vector = mesh.cells[neighbor_cell_index].centroid
+                        - mesh.cells[cell_index].centroid;
                     let a_i = get_normal_momentum_coefficient!(
                         cell_index,
                         a_u,
@@ -655,8 +655,8 @@ pub fn get_face_flux(
                         calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
                     let p_grad_j =
                         calculate_pressure_gradient(mesh, p, neighbor_cell_index, gradient_scheme);
-                    let cell_vol_i = mesh.cells[&cell_index].volume;
-                    let cell_vol_j = mesh.cells[&neighbor_cell_index].volume;
+                    let cell_vol_i = mesh.cells[cell_index].volume;
+                    let cell_vol_j = mesh.cells[neighbor_cell_index].volume;
 
                     let term_1 = (vel_i + vel_j).dot(&outward_face_normal);
                     let term_2 = (cell_vol_i / a_i + cell_vol_j / a_j)
@@ -681,7 +681,7 @@ pub fn get_face_pressure(
     gradient_scheme: GradientReconstructionMethods,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
-    let face = &mesh.faces[&face_index];
+    let face = &mesh.faces[face_index];
     let face_zone = &mesh.face_zones[&face.zone];
     match face_zone.zone_type {
         FaceConditionTypes::Symmetry
@@ -699,8 +699,8 @@ pub fn get_face_pressure(
             match interpolation_scheme {
                 PressureInterpolation::Linear => (p[c0] + p[c1]) * 0.5,
                 PressureInterpolation::LinearWeighted => {
-                    let x0 = (mesh.cells[&c0].centroid - face.centroid).norm();
-                    let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
+                    let x0 = (mesh.cells[c0].centroid - face.centroid).norm();
+                    let x1 = (mesh.cells[c1].centroid - face.centroid).norm();
                     p[c0] + (p[c1] - p[c0]) * x0 / (x0 + x1)
                 }
                 PressureInterpolation::Standard => {
@@ -713,8 +713,8 @@ pub fn get_face_pressure(
                     // println!("Pressure gradient: {c0_grad}");
                     // println!("Cell volume: {}", &mesh.cells[&c0].volume);
                     let c1_grad = calculate_pressure_gradient(mesh, p, c1, gradient_scheme);
-                    let r_c0 = face.centroid - mesh.cells[&c0].centroid;
-                    let r_c1 = face.centroid - mesh.cells[&c1].centroid;
+                    let r_c0 = face.centroid - mesh.cells[c0].centroid;
+                    let r_c1 = face.centroid - mesh.cells[c1].centroid;
                     0.5 * ((p[c0] + p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
                 }
                 _ => panic!("unsupported pressure interpolation"),
@@ -754,16 +754,16 @@ fn apply_pressure_correction(
     p: &mut DVector<Float>,
     numerical_settings: &NumericalSettings,
 ) -> (Float, Float) {
-    let mut velocity_corr_sum = 0.;
+    let mut velocity_corr_sum:Float = 0.;
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells.get_mut(&cell_index).unwrap();
+        let cell = &mesh.cells.get_mut(cell_index).unwrap();
         let pressure_correction = *p_prime.get(cell_index).unwrap_or(&0.);
         p[cell_index] += numerical_settings.pressure_relaxation * pressure_correction;
         let velocity_correction =
             cell.face_indices
                 .iter()
                 .fold(Vector3::zero(), |acc, face_index| {
-                    let face = &mesh.faces[face_index];
+                    let face = &mesh.faces[*face_index];
                     let face_zone = &mesh.face_zones[&face.zone];
                     let outward_face_normal = get_outward_face_normal(face, cell_index);
                     let p_prime_neighbor = match face_zone.zone_type {

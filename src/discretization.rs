@@ -49,13 +49,13 @@ pub fn build_momentum_diffusion_matrix(
 
     // Iterate over all cells in the mesh
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         // The current cell's coefficients (matrix diagonal)
         let mut a_p = 0.;
 
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
-            let face = &mesh.faces[face_index];
+            let face = &mesh.faces[*face_index];
             let face_bc = &mesh.face_zones[&face.zone];
             let (d_i, neighbor_cell_index) = match face_bc.zone_type {
                 FaceConditionTypes::Wall => {
@@ -88,7 +88,7 @@ pub fn build_momentum_diffusion_matrix(
                     }
 
                     // Cell centroids vector
-                    let e_xi: Vector3 = mesh.cells[&neighbor_cell_index].centroid - cell.centroid;
+                    let e_xi: Vector3 = mesh.cells[neighbor_cell_index].centroid - cell.centroid;
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area / e_xi.norm();
 
@@ -145,7 +145,7 @@ pub fn build_momentum_advection_matrices(
     // Iterate over all cells in the mesh
     // print_linear_system(&a_u, &b_u);
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         // Diffusion of scalar phi from neighbor into this cell
         // = <face area> * <diffusivity> * <face-normal gradient of phi>
         // = A * nu * d/dn(phi)
@@ -173,7 +173,7 @@ pub fn build_momentum_advection_matrices(
         // println!("\n{cell_velocity_gradient}");
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
-            let face = &mesh.faces[face_index];
+            let face = &mesh.faces[*face_index];
             let face_flux = get_face_flux(
                 mesh,
                 u,
@@ -255,8 +255,8 @@ pub fn build_momentum_advection_matrices(
                                 z: a_nb,
                             }
                         } else {
-                            let r_pa = mesh.cells[&neighbor_cell_index].centroid
-                                - mesh.cells[&cell_index].centroid;
+                            let r_pa = mesh.cells[neighbor_cell_index].centroid
+                                - mesh.cells[cell_index].centroid;
                             let r = 2. * cell_velocity_gradient.inner(&r_pa)
                                 / (downstream_velocity - velocity)
                                 - 1.;
@@ -348,11 +348,11 @@ pub fn build_pressure_correction_matrices(
     let mut b = dvector_zeros!(cell_count);
 
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         let mut a_p: Float = 0.;
         let mut b_p: Float = 0.;
         for face_index in &cell.face_indices {
-            let face = &mesh.faces[face_index];
+            let face = &mesh.faces[*face_index];
             let outward_face_flux = get_face_flux(
                 mesh,
                 u,
@@ -424,11 +424,11 @@ pub fn initialize_momentum_matrix(mesh: &Mesh) -> CsrMatrix<Float> {
     let cell_count = mesh.cells.len();
     let mut a: CooMatrix<Float> = CooMatrix::new(cell_count, cell_count);
     for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
+        let cell = &mesh.cells[cell_index];
         a.push(cell_index, cell_index, 1.);
         let n = cell.face_indices.len() as Float;
         for face_index in &cell.face_indices {
-            let face = &mesh.faces[face_index];
+            let face = &mesh.faces[*face_index];
             if face.cell_indices.len() == 2 {
                 let neighbor_cell_index = if face.cell_indices[0] == cell_index {
                     face.cell_indices[1]
