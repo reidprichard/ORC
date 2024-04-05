@@ -53,7 +53,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     macro_rules! new_hashmap {
         () => {
-            HashMap::with_hasher(RandomState::with_seed(31415))
+            HashMap::with_hasher(RandomState::with_seeds(3, 1, 4, 1))
         };
     }
 
