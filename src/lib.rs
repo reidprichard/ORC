@@ -11,16 +11,23 @@ pub mod settings {
 
     // ****** Solver numerical settings structs ******
     pub struct NumericalSettings {
+        // SIMPLE is the only option for now
         pub pressure_velocity_coupling: PressureVelocityCoupling,
         pub momentum: MomentumDiscretization,
+        // CD the only option for now
         pub diffusion: DiffusionScheme,
         // SecondOrder recommended; LinearWeighted is more stable but less accurate
         pub pressure_interpolation: PressureInterpolation,
-        // LinearWeighted recommended; RhieChow is extremely unstable
+        // RhieChow is more rigorous and helps avoid checkerboarding but induces a ~25% performance
+        // hit
         pub velocity_interpolation: VelocityInterpolation,
+        // Green-Gauss cell-based only option for now
         pub gradient_reconstruction: GradientReconstructionMethods,
-        pub pressure_relaxation: Float,
+        // Large values are generally stable (~0.1 - 1.)
         pub momentum_relaxation: Float,
+        // Must be extremely small (<<0.1)
+        pub pressure_relaxation: Float,
+        // Multigrid is by far the fastest option; BiCGSTAB is the most stable
         pub matrix_solver: MatrixSolverSettings,
     }
 

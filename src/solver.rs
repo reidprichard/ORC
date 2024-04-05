@@ -456,6 +456,7 @@ pub fn calculate_velocity_gradient(
                         v,
                         w,
                         *face_index,
+                        // NOTE: Is LinearWeighted sufficient?
                         VelocityInterpolation::LinearWeighted,
                     );
                     acc + face_value.outer(

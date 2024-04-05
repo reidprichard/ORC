@@ -53,6 +53,7 @@ Roadmap:
 - [ ] Add other mesh formats?
 - [ ] Add validation of canonical flows
 - [ ] Optimize performance (20%; preliminary profiling and adjustment has been done)
+- [ ] Polish logging - ideally write error/warn/info to console and everything to file, all depending on RUST_LOG env var
 
 Validation:
 Only very preliminary validation has been performed. As seen below, the
