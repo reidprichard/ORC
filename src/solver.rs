@@ -446,6 +446,14 @@ fn check_boundary_conditions(mesh: &Mesh) {
                     }
                 }
             }
+            FaceConditionTypes::VelocityInlet => {
+                for face in mesh.faces.values() {
+                    if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
+                        panic!("VelocityInlet velocity must not be tangent to faces in zone.");
+                    }
+                }
+                
+            }
             _ => {
                 // TODO: Handle other zone types. Could check if scalar_value/vector_value are
                 // set/not set appropriately, could check if system is overdefined/underdefined,
