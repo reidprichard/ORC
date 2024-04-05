@@ -51,7 +51,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         items
     }
 
-    let hash_builder = RandomState::with_seed(31415);
+    let hash_builder = RandomState::with_seeds(0, 1, 2, 3);
 
     let mut vertices: HashMap<usize, Vertex, RandomState> = HashMap::with_hasher(hash_builder.clone());
     let mut faces: HashMap<usize, Face, RandomState> = HashMap::with_hasher(hash_builder.clone());
