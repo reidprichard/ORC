@@ -1,10 +1,10 @@
 use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
 use crate::settings::*;
+use ahash::{HashSet, RandomState};
 use log::{info, trace};
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix};
-use std::collections::HashSet;
 
 const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
 const MULTIGRID_COARSENING_LEVELS: Uint = 6;
@@ -31,7 +31,8 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
             // For each row, find the most negative off-diagonal value
             // If that cell hasn't already been combined, combine it with diagonal
             // If it *has* been combined, find the next largest and so on.
-            let mut combined_cells = HashSet::<usize>::new(); // TODO: pre-seeded hasher
+            let mut combined_cells =
+                HashSet::<usize>::with_capacity_and_hasher(n, RandomState::with_seeds(3, 1, 4, 1)); // TODO: pre-seeded hasher
             a.row_iter().enumerate().for_each(|(i, row)| {
                 let mut strongest_coeff: Float = Float::MAX;
                 let strongest_unmerged_neighbor =
