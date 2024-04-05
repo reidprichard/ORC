@@ -2,6 +2,7 @@ use crate::numerical_types::*;
 use ahash::RandomState;
 use core::fmt;
 use std::collections::HashMap;
+// TODO: Can I use aHash's HashMap?
 
 pub fn get_cell_zone_types() -> HashMap<Uint, &'static str> {
     HashMap::from([(0, "dead zone"), (1, "fluid zone"), (17, "solid zone")])
