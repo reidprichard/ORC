@@ -161,6 +161,7 @@ pub struct Face {
     pub node_indices: Vec<usize>,
     pub area: Float,
     pub centroid: Vector3,
+    // TODO: rename to unit_normal?
     pub normal: Vector3,
 }
 impl Face {}

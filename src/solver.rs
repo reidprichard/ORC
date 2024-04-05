@@ -64,21 +64,22 @@ pub fn solve_steady(
                     &mut b_u,
                     &mut b_v,
                     &mut b_w,
+                    &a_di,
                     mesh,
                     u,
                     v,
                     w,
                     p,
                     numerical_settings.momentum,
-                    numerical_settings.velocity_interpolation,
+                    if iter_number > 10 {
+                        numerical_settings.velocity_interpolation
+                    } else {
+                        VelocityInterpolation::LinearWeighted
+                    },
                     numerical_settings.pressure_interpolation,
                     numerical_settings.gradient_reconstruction,
                     rho,
                 );
-
-                a_u = &a_u + &a_di;
-                a_v = &a_v + &a_di;
-                a_w = &a_w + &a_di;
 
                 if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
                     println!("\nMomentum:");
@@ -329,6 +330,7 @@ pub fn initialize_flow(
         &mut b_u,
         &mut b_v,
         &mut b_w,
+        &a_di,
         mesh,
         &u,
         &v,
@@ -546,6 +548,7 @@ fn get_face_velocity(
     }
 }
 
+// TODO: Move this to discretization? Or a new interpolation module?
 #[allow(clippy::too_many_arguments)]
 pub fn get_face_flux(
     mesh: &Mesh,
@@ -558,8 +561,8 @@ pub fn get_face_flux(
     interpolation_scheme: VelocityInterpolation,
     gradient_scheme: GradientReconstructionMethods,
     a_u: &CsrMatrix<Float>,
-    _a_v: &CsrMatrix<Float>,
-    _a_w: &CsrMatrix<Float>,
+    a_v: &CsrMatrix<Float>,
+    a_w: &CsrMatrix<Float>,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -591,31 +594,80 @@ pub fn get_face_flux(
                     if neighbor_cell_index == cell_index {
                         neighbor_cell_index = face.cell_indices[1];
                     }
-                    let vel0 = Vector3 {
+                    let vel_i = Vector3 {
                         x: u[cell_index],
                         y: v[cell_index],
                         z: w[cell_index],
                     };
-                    let vel1 = Vector3 {
+                    let vel_j = Vector3 {
                         x: u[neighbor_cell_index],
                         y: v[neighbor_cell_index],
                         z: w[neighbor_cell_index],
                     };
-                    // WARNING: Something is wrong here
-                    let xi = (mesh.cells[&neighbor_cell_index].centroid
-                        - mesh.cells[&cell_index].centroid)
-                        .unit();
-                    let a0 = a_u.get(cell_index, cell_index);
-                    let a1 = a_u.get(neighbor_cell_index, neighbor_cell_index);
-                    let p_grad_0 =
+                    let cell_centroid_vector = mesh.cells[&neighbor_cell_index].centroid
+                        - mesh.cells[&cell_index].centroid;
+                    let a_i = get_normal_momentum_coefficient!(
+                        cell_index,
+                        a_u,
+                        a_v,
+                        a_w,
+                        &outward_face_normal
+                    );
+                    let a_j = get_normal_momentum_coefficient!(
+                        neighbor_cell_index,
+                        a_u,
+                        a_v,
+                        a_w,
+                        &outward_face_normal
+                    );
+                    // if Float::max(a_i, a_j) / Float::min(a_i, a_j) > 100. {
+                    //     println!(
+                    //         "{cell_index}: {:.1e}, {:.1e}, {:.1e}\t{neighbor_cell_index}: {:.1e}, {:.1e}, {:.1e}",
+                    //         a_u.get(cell_index, cell_index),
+                    //         a_v.get(cell_index, cell_index),
+                    //         a_w.get(cell_index, cell_index),
+                    //         a_u.get(neighbor_cell_index, neighbor_cell_index),
+                    //         a_v.get(neighbor_cell_index, neighbor_cell_index),
+                    //         a_w.get(neighbor_cell_index, neighbor_cell_index)
+                    //     )
+                    // }
+                    let p_grad_i =
                         calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
-                    let p_grad_1 =
+                    let p_grad_j =
                         calculate_pressure_gradient(mesh, p, neighbor_cell_index, gradient_scheme);
-                    let v0 = mesh.cells[&cell_index].volume;
-                    let v1 = mesh.cells[&neighbor_cell_index].volume;
-                    0.5 * (outward_face_normal.dot(&(vel0 + vel1))
-                        + (v0 / a0 + v1 / a1) * (p[0] - p[1]) / xi.norm()
-                        - (v0 / a0 * p_grad_0 + v1 / a1 * p_grad_1).dot(&xi))
+                    let cell_vol_i = mesh.cells[&cell_index].volume;
+                    let cell_vol_j = mesh.cells[&neighbor_cell_index].volume;
+
+                    let term_1 = (vel_i + vel_j).dot(&outward_face_normal);
+                    let term_2 = (cell_vol_i / a_i + cell_vol_j / a_j)
+                        * (p[cell_index] - p[neighbor_cell_index])
+                        / cell_centroid_vector.norm();
+                    // println!(
+                    //     "({:.1e}/{:.1e} + {:.1e}/{:.1e}) * ({:.1e} - {:.1e}) / {:.1e} = {:.1e}",
+                    //     cell_vol_i,
+                    //     a_i,
+                    //     cell_vol_j,
+                    //     a_j,
+                    //     p[cell_index],
+                    //     p[neighbor_cell_index],
+                    //     cell_centroid_vector.norm(),
+                    //     term_2
+                    // );
+                    let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
+                        .dot(&cell_centroid_vector.unit());
+                    let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
+                    // print!(
+                    //     "a_{} = {:.1e}, a_{} = {:.1e}, v_{} = {:.1e} (RC), {:.1e} (linear)",
+                    //     cell_index,
+                    //     a_i,
+                    //     neighbor_cell_index,
+                    //     a_j,
+                    //     face_index,
+                    //     face_velocity_magnitude,
+                    //     (vel_i + vel_j).dot(&outward_face_normal) / 2.
+                    // );
+                    // println!(",\t| {:.1e} | {:.1e} | {:.1e} | v = {:.1e}", term_1, term_2, term_3, face_velocity_magnitude);
+                    face_velocity_magnitude * face.area
                 }
             }
         }
@@ -672,26 +724,6 @@ pub fn get_face_pressure(
         }
         _ => panic!("unsupported face zone type"),
     }
-}
-
-fn initialize_momentum_matrix(mesh: &Mesh) -> CsrMatrix<Float> {
-    let cell_count = mesh.cells.len();
-    let mut a: CooMatrix<Float> = CooMatrix::new(cell_count, cell_count);
-    for (cell_index, cell) in &mesh.cells {
-        a.push(*cell_index, *cell_index, 1.);
-        for face_index in &cell.face_indices {
-            let face = &mesh.faces[face_index];
-            if face.cell_indices.len() == 2 {
-                let neighbor_cell_index = if face.cell_indices[0] == *cell_index {
-                    face.cell_indices[1]
-                } else {
-                    face.cell_indices[0]
-                };
-                a.push(*cell_index, neighbor_cell_index, 0.);
-            }
-        }
-    }
-    CsrMatrix::from(&a)
 }
 
 // fn build_k_epsilon_matrices(

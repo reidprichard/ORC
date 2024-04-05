@@ -151,9 +151,9 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
             relative_convergence_threshold: 1e-3,
             preconditioner: PreconditionMethod::Jacobi,
         },
-        momentum: TVD_QUICK,
+        momentum: MomentumDiscretization::UD,
         pressure_interpolation: PressureInterpolation::SecondOrder,
-        velocity_interpolation: VelocityInterpolation::LinearWeighted,
+        velocity_interpolation: VelocityInterpolation::RhieChow,
         ..NumericalSettings::default()
     };
 
