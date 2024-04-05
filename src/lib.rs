@@ -39,8 +39,15 @@ pub mod settings {
         pub solver_type: SolutionMethod,
         // It seems like too many iterations can cause pv coupling to go crazy
         pub iterations: Uint,
+        // Reducing this value increases the solver stability but reduces convergence rate.
         pub relaxation: Float,
+        // When the norm of the error vector becomes this proportion of its norm after 1 iteration,
+        // the matrix solver will terminate. In practice, it seems this criterion is rarely met
+        // except possibly with large thresholds (>>0.001).
         pub relative_convergence_threshold: Float,
+        // Using a preconditioner should make the solver more stable. There is a ~20% performance
+        // hit for the Jacobi preconditioner, but it is almost always worth it, allowing more
+        // aggressive numerics elsewhere (e.g. fewer iterations)
         pub preconditioner: PreconditionMethod,
     }
 
@@ -66,7 +73,7 @@ pub mod settings {
         fn default() -> Self {
             MatrixSolverSettings {
                 solver_type: SolutionMethod::Multigrid,
-                iterations: 50,
+                iterations: 20,
                 relaxation: 0.5,
                 relative_convergence_threshold: 1e-3,
                 preconditioner: PreconditionMethod::Jacobi,
