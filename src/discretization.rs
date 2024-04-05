@@ -162,6 +162,7 @@ pub fn build_momentum_advection_matrices(
         let s_d_cross = Vector3::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
+        let a_ii_di = a_di.get(*cell_index, *cell_index);
         let mut a_p = Vector3::zero();
         let cell_velocity_gradient =
             calculate_velocity_gradient(mesh, u, v, w, *cell_index, gradient_scheme);
@@ -270,18 +271,33 @@ pub fn build_momentum_advection_matrices(
             s_u += (-outward_face_normal) * face_pressure * face.area;
 
             // If it's MAX, that means it's a boundary face
-            if neighbor_cell_index != usize::MAX {
+            if neighbor_cell_index == usize::MAX {
+                let face_zone = &mesh.face_zones[&face.zone];
+                match face_zone.zone_type {
+                    FaceConditionTypes::Wall | FaceConditionTypes::VelocityInlet => {
+                        // TODO: Get this working
+                        s_u += Vector3 {
+                            x: (a_nb.x + a_ii_di) * face_zone.vector_value.x,
+                            y: (a_nb.y + a_ii_di) * face_zone.vector_value.y,
+                            z: (a_nb.z + a_ii_di) * face_zone.vector_value.z,
+                        }
+                    }
+                    _ => (),
+                }
+                // Add source term contributions for velocity BCs
+            } else {
+                let a_ij_di = a_di.get(*cell_index, neighbor_cell_index);
                 // negate a_nb to move to LHS of equation
                 match a_u.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.x + a_di.get(*cell_index, neighbor_cell_index),
+                    NonZero(a_ij) => *a_ij = a_nb.x + a_ij_di,
                     Zero => panic!(),
                 }
                 match a_v.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.y + a_di.get(*cell_index, neighbor_cell_index),
+                    NonZero(a_ij) => *a_ij = a_nb.y + a_ij_di,
                     Zero => panic!(),
                 }
                 match a_w.get_entry_mut(*cell_index, neighbor_cell_index).unwrap() {
-                    NonZero(a_ij) => *a_ij = a_nb.z + a_di.get(*cell_index, neighbor_cell_index),
+                    NonZero(a_ij) => *a_ij = a_nb.z + a_ij_di,
                     Zero => panic!(),
                 }
             }
@@ -292,15 +308,15 @@ pub fn build_momentum_advection_matrices(
         b_w[*cell_index] = source_total.z;
 
         match a_u.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.x + a_di.get(*cell_index, *cell_index),
+            NonZero(v) => *v = a_p.x + a_ii_di,
             Zero => panic!(),
         }
         match a_v.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.y + a_di.get(*cell_index, *cell_index),
+            NonZero(v) => *v = a_p.y + a_ii_di,
             Zero => panic!(),
         }
         match a_w.get_entry_mut(*cell_index, *cell_index).unwrap() {
-            NonZero(v) => *v = a_p.z + a_di.get(*cell_index, *cell_index),
+            NonZero(v) => *v = a_p.z + a_ii_di,
             Zero => panic!(),
         }
     } // end cell loop
