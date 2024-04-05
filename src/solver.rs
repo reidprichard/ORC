@@ -57,7 +57,7 @@ pub fn solve_steady(
     match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                build_momentum_matrices(
+                build_momentum_advection_matrices(
                     &mut a_u,
                     &mut a_v,
                     &mut a_w,
@@ -323,7 +323,7 @@ pub fn initialize_flow(
     let mut b_w = dvector_zeros!(n);
 
     initialize_pressure_field(mesh, &mut p, iteration_count);
-    build_momentum_matrices(
+    build_momentum_advection_matrices(
         &mut a_u,
         &mut a_v,
         &mut a_w,
@@ -620,17 +620,6 @@ pub fn get_face_flux(
                         a_w,
                         &outward_face_normal
                     );
-                    // if Float::max(a_i, a_j) / Float::min(a_i, a_j) > 100. {
-                    //     println!(
-                    //         "{cell_index}: {:.1e}, {:.1e}, {:.1e}\t{neighbor_cell_index}: {:.1e}, {:.1e}, {:.1e}",
-                    //         a_u.get(cell_index, cell_index),
-                    //         a_v.get(cell_index, cell_index),
-                    //         a_w.get(cell_index, cell_index),
-                    //         a_u.get(neighbor_cell_index, neighbor_cell_index),
-                    //         a_v.get(neighbor_cell_index, neighbor_cell_index),
-                    //         a_w.get(neighbor_cell_index, neighbor_cell_index)
-                    //     )
-                    // }
                     let p_grad_i =
                         calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
                     let p_grad_j =
@@ -642,31 +631,9 @@ pub fn get_face_flux(
                     let term_2 = (cell_vol_i / a_i + cell_vol_j / a_j)
                         * (p[cell_index] - p[neighbor_cell_index])
                         / cell_centroid_vector.norm();
-                    // println!(
-                    //     "({:.1e}/{:.1e} + {:.1e}/{:.1e}) * ({:.1e} - {:.1e}) / {:.1e} = {:.1e}",
-                    //     cell_vol_i,
-                    //     a_i,
-                    //     cell_vol_j,
-                    //     a_j,
-                    //     p[cell_index],
-                    //     p[neighbor_cell_index],
-                    //     cell_centroid_vector.norm(),
-                    //     term_2
-                    // );
                     let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
                         .dot(&cell_centroid_vector.unit());
                     let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
-                    // print!(
-                    //     "a_{} = {:.1e}, a_{} = {:.1e}, v_{} = {:.1e} (RC), {:.1e} (linear)",
-                    //     cell_index,
-                    //     a_i,
-                    //     neighbor_cell_index,
-                    //     a_j,
-                    //     face_index,
-                    //     face_velocity_magnitude,
-                    //     (vel_i + vel_j).dot(&outward_face_normal) / 2.
-                    // );
-                    // println!(",\t| {:.1e} | {:.1e} | {:.1e} | v = {:.1e}", term_1, term_2, term_3, face_velocity_magnitude);
                     face_velocity_magnitude * face.area
                 }
             }

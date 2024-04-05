@@ -123,7 +123,7 @@ pub fn build_momentum_diffusion_matrix(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn build_momentum_matrices(
+pub fn build_momentum_advection_matrices(
     a_u: &mut CsrMatrix<Float>,
     a_v: &mut CsrMatrix<Float>,
     a_w: &mut CsrMatrix<Float>,
