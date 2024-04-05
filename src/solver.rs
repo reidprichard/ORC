@@ -343,11 +343,14 @@ pub fn initialize_flow(
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         rho,
     );
+    // TODO: Consider initializing velocity field by the following:
+    // Solve with only diffusive term
+    // Slowly ramp up to diffusive + advective
 
     println!("Initializing velocity field...");
     // NOTE: Initializing with multigrid was diverging, so using BiCGSTAB
     iterative_solve(
-        &(&a_u + &a_di),
+        &a_u,
         &b_u,
         &mut u,
         iteration_count,
@@ -357,7 +360,7 @@ pub fn initialize_flow(
         PreconditionMethod::Jacobi,
     );
     iterative_solve(
-        &(&a_v + &a_di),
+        &a_v,
         &b_v,
         &mut v,
         iteration_count,
@@ -367,7 +370,7 @@ pub fn initialize_flow(
         PreconditionMethod::Jacobi,
     );
     iterative_solve(
-        &(&a_w + &a_di),
+        &a_w,
         &b_w,
         &mut w,
         iteration_count,
