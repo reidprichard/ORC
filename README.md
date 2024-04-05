@@ -40,8 +40,8 @@ Roadmap:
 - [X] Add under-relaxation
 - [X] Implement Rhie-Chow interpolation (very unstable for now)
 - [X] Improve Rhie-Chow stability or use another scheme
-- [ ] Fix velocity inlet BC
-- [ ] Add moving wall BC
+- [ ] Fix velocity inlet BC (50%)
+- [ ] Add moving wall BC (50%)
 - [ ] Implement bounded high-order momentum schemes, e.g. Jasak et al.'s bounded central differencing
 - [ ] Add cross diffusion correction
 - [X] Multigrid
