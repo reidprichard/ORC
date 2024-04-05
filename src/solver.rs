@@ -309,6 +309,7 @@ pub fn initialize_flow(
     DVector<Float>,
     DVector<Float>,
 ) {
+    check_boundary_conditions(mesh);
     let n = mesh.cells.len();
     let mut u = dvector_zeros!(n);
     let mut v = dvector_zeros!(n);
@@ -435,6 +436,25 @@ pub fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
+fn check_boundary_conditions(mesh: &Mesh) {
+    for face_zone in mesh.face_zones.values() {
+        match face_zone.zone_type {
+            FaceConditionTypes::Wall => {
+                for face in mesh.faces.values() {
+                    if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
+                        panic!("Wall velocity must be tangent to faces in zone.");
+                    }
+                }
+            }
+            _ => {
+                // TODO: Handle other zone types. Could check if scalar_value/vector_value are
+                // set/not set appropriately, could check if system is overdefined/underdefined,
+                // etc.
+            },
+        }
+    }
+}
+
 pub fn calculate_velocity_gradient(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -513,7 +533,7 @@ fn get_face_velocity(
     let face_zone = &mesh.face_zones[&face.zone];
     let cell_index = face.cell_indices[0];
     match face_zone.zone_type {
-        FaceConditionTypes::Wall => Vector3::zero(),
+        FaceConditionTypes::Wall => face_zone.vector_value,
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
         FaceConditionTypes::PressureInlet
         | FaceConditionTypes::PressureOutlet
