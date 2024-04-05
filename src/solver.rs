@@ -1,11 +1,8 @@
-#![allow(unreachable_patterns)]
-
 use crate::discretization::*;
 use crate::io::{
     linear_system_to_string, matrix_to_string, print_linear_system, print_matrix,
     print_vec_scientific,
 };
-use crate::linear_algebra::*;
 use crate::mesh::*;
 use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
@@ -13,8 +10,6 @@ use crate::settings::*;
 use log::{debug, log_enabled, trace};
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
-// use rayon::prelude::*;
-use std::thread;
 use std::time::Instant;
 
 const MAX_PRINT_ROWS: usize = 64;
@@ -71,11 +66,6 @@ pub fn solve_steady(
                     w,
                     p,
                     numerical_settings.momentum,
-                    if iter_number > 10 {
-                        numerical_settings.velocity_interpolation
-                    } else {
-                        VelocityInterpolation::LinearWeighted
-                    },
                     numerical_settings.pressure_interpolation,
                     numerical_settings.gradient_reconstruction,
                     rho,
@@ -95,105 +85,20 @@ pub fn solve_steady(
                     debug!("{}", linear_system_to_string(&a_w, &b_w));
                 }
 
-                if !log_enabled!(log::Level::Trace) {
-                    thread::scope(|s| {
-                        s.spawn(|| {
-                            trace!("solving u");
-                            iterative_solve(
-                                &a_u,
-                                &b_u,
-                                u,
-                                numerical_settings.matrix_solver.iterations,
-                                numerical_settings.matrix_solver.solver_type,
-                                numerical_settings.matrix_solver.relaxation,
-                                numerical_settings
-                                    .matrix_solver
-                                    .relative_convergence_threshold,
-                                numerical_settings.matrix_solver.preconditioner,
-                            );
-                        });
-                        s.spawn(|| {
-                            trace!("solving v");
-                            iterative_solve(
-                                &a_v,
-                                &b_v,
-                                v,
-                                numerical_settings.matrix_solver.iterations,
-                                numerical_settings.matrix_solver.solver_type,
-                                numerical_settings.matrix_solver.relaxation,
-                                numerical_settings
-                                    .matrix_solver
-                                    .relative_convergence_threshold,
-                                numerical_settings.matrix_solver.preconditioner,
-                            );
-                        });
-                        s.spawn(|| {
-                            trace!("solving w");
-                            iterative_solve(
-                                &a_w,
-                                &b_w,
-                                w,
-                                numerical_settings.matrix_solver.iterations,
-                                numerical_settings.matrix_solver.solver_type,
-                                numerical_settings.matrix_solver.relaxation,
-                                numerical_settings
-                                    .matrix_solver
-                                    .relative_convergence_threshold,
-                                numerical_settings.matrix_solver.preconditioner,
-                            );
-                        });
-                    });
-                } else {
-                    trace!("solving u");
-                    iterative_solve(
-                        &a_u,
-                        &b_u,
-                        u,
-                        numerical_settings.matrix_solver.iterations,
-                        numerical_settings.matrix_solver.solver_type,
-                        numerical_settings.matrix_solver.relaxation,
-                        numerical_settings
-                            .matrix_solver
-                            .relative_convergence_threshold,
-                        numerical_settings.matrix_solver.preconditioner,
-                    );
-                    trace!("solving v");
-                    iterative_solve(
-                        &a_v,
-                        &b_v,
-                        v,
-                        numerical_settings.matrix_solver.iterations,
-                        numerical_settings.matrix_solver.solver_type,
-                        numerical_settings.matrix_solver.relaxation,
-                        numerical_settings
-                            .matrix_solver
-                            .relative_convergence_threshold,
-                        numerical_settings.matrix_solver.preconditioner,
-                    );
-                    trace!("solving w");
-                    iterative_solve(
-                        &a_w,
-                        &b_w,
-                        w,
-                        numerical_settings.matrix_solver.iterations,
-                        numerical_settings.matrix_solver.solver_type,
-                        numerical_settings.matrix_solver.relaxation,
-                        numerical_settings
-                            .matrix_solver
-                            .relative_convergence_threshold,
-                        numerical_settings.matrix_solver.preconditioner,
-                    );
-                }
+                trace!("solving u");
+                iterative_solve(&a_u, &b_u, u, numerical_settings.matrix_solver.iterations);
+                trace!("solving v");
+                iterative_solve(&a_v, &b_v, v, numerical_settings.matrix_solver.iterations);
+                trace!("solving w");
+                iterative_solve(&a_w, &b_w, w, numerical_settings.matrix_solver.iterations);
                 let pressure_correction_matrices = build_pressure_correction_matrices(
                     mesh,
                     u,
                     v,
                     w,
-                    p,
                     &a_u,
                     &a_v,
                     &a_w,
-                    numerical_settings,
                     rho,
                 );
                 if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
@@ -220,12 +125,6 @@ pub fn solve_steady(
                     &pressure_correction_matrices.b,
                     &mut p_prime,
                     numerical_settings.matrix_solver.iterations,
-                    numerical_settings.matrix_solver.solver_type,
-                    numerical_settings.matrix_solver.relaxation,
-                    numerical_settings
-                        .matrix_solver
-                        .relative_convergence_threshold,
-                    numerical_settings.matrix_solver.preconditioner,
                 );
 
                 if log_enabled!(log::Level::Info) && u.nrows() < 64 {
@@ -272,7 +171,6 @@ pub fn solve_steady(
                 }
             }
         }
-        _ => panic!("unsupported pressure-velocity coupling"),
     }
 
     let mut pressure_grad_mean = Vector3::zero();
@@ -338,50 +236,18 @@ pub fn initialize_flow(
         &w,
         &p,
         MomentumDiscretization::UD,
-        VelocityInterpolation::LinearWeighted,
         PressureInterpolation::LinearWeighted,
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         rho,
     );
 
-    println!("Initializing velocity field...");
-    // NOTE: Initializing with multigrid was diverging, so using BiCGSTAB
-    iterative_solve(
-        &(&a_u + &a_di),
-        &b_u,
-        &mut u,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
-    iterative_solve(
-        &(&a_v + &a_di),
-        &b_v,
-        &mut v,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
-    iterative_solve(
-        &(&a_w + &a_di),
-        &b_w,
-        &mut w,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
-    println!("Done!");
+    iterative_solve(&(&a_u + &a_di), &b_u, &mut u, iteration_count);
+    iterative_solve(&(&a_v + &a_di), &b_v, &mut v, iteration_count);
+    iterative_solve(&(&a_w + &a_di), &b_w, &mut w, iteration_count);
     (u, v, w, p)
 }
 
 fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
-    println!("Initializing pressure field...");
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
     // - Wall: d/dn (psi) = 0
@@ -418,17 +284,7 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
         a_coo.push(*i, *i, a_ii);
     }
     let a = &CsrMatrix::from(&a_coo);
-    iterative_solve(
-        a,
-        &b,
-        p,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
-    println!("Done!");
+    iterative_solve(a, &b, p, iteration_count);
 }
 
 pub fn get_velocity_source_term(_location: Vector3) -> Vector3 {
@@ -452,13 +308,12 @@ fn check_boundary_conditions(mesh: &Mesh) {
                         panic!("VelocityInlet velocity must not be tangent to faces in zone.");
                     }
                 }
-                
             }
             _ => {
                 // TODO: Handle other zone types. Could check if scalar_value/vector_value are
                 // set/not set appropriately, could check if system is overdefined/underdefined,
                 // etc.
-            },
+            }
         }
     }
 }
@@ -484,15 +339,12 @@ pub fn calculate_velocity_gradient(
                         v,
                         w,
                         *face_index,
-                        // NOTE: Is LinearWeighted sufficient?
-                        VelocityInterpolation::LinearWeighted,
                     );
                     acc + face_value.outer(
                         &(get_outward_face_normal(face, cell_index) * (face.area / cell.volume)),
                     )
                 })
         }
-        _ => panic!("unsupported gradient scheme"),
     }
 }
 
@@ -515,16 +367,13 @@ pub fn calculate_pressure_gradient(
                         p,
                         *face_index,
                         PressureInterpolation::LinearWeighted,
-                        gradient_scheme,
                     );
                     face_value
                         * (face.area / cell.volume)
                         * get_outward_face_normal(face, cell_index)
                 })
                 .fold(Vector3::zero(), |acc, v| acc + v),
-            _ => panic!("unsupported Green-Gauss scheme"),
         },
-        _ => panic!("unsupported gradient scheme"),
     }
 }
 
@@ -534,7 +383,6 @@ fn get_face_velocity(
     v: &DVector<Float>,
     w: &DVector<Float>,
     face_index: usize,
-    interpolation_scheme: VelocityInterpolation,
 ) -> Vector3 {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -562,16 +410,9 @@ fn get_face_velocity(
                 y: v[neighbor_index],
                 z: w[neighbor_index],
             };
-            match interpolation_scheme {
-                VelocityInterpolation::LinearWeighted => {
-                    let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
-                    let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
-                    vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)
-                }
-                VelocityInterpolation::RhieChow => {
-                    panic!("unsupported");
-                }
-            }
+            let dx0 = (mesh.cells[&cell_index].centroid - face.centroid).norm();
+            let dx1 = (mesh.cells[&neighbor_index].centroid - face.centroid).norm();
+            vel0 + (vel1 - vel0) * dx0 / (dx0 + dx1)
         }
         _ => panic!("unsupported face zone type"),
     }
@@ -584,14 +425,8 @@ pub fn get_face_flux(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
-    p: &DVector<Float>,
     face_index: usize,
     cell_index: usize,
-    interpolation_scheme: VelocityInterpolation,
-    gradient_scheme: GradientReconstructionMethods,
-    a_u: &CsrMatrix<Float>,
-    a_v: &CsrMatrix<Float>,
-    a_w: &CsrMatrix<Float>,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -609,64 +444,15 @@ pub fn get_face_flux(
                 v,
                 w,
                 face_index,
-                VelocityInterpolation::LinearWeighted, // Don't think it makes sense to need
-                                                       // Rhie-Chow here
             ))
         }
-        FaceConditionTypes::Interior => {
-            match interpolation_scheme {
-                VelocityInterpolation::LinearWeighted => outward_face_normal.dot(
-                    &get_face_velocity(mesh, u, v, w, face_index, interpolation_scheme),
-                ),
-                VelocityInterpolation::RhieChow => {
-                    let mut neighbor_cell_index = face.cell_indices[0];
-                    if neighbor_cell_index == cell_index {
-                        neighbor_cell_index = face.cell_indices[1];
-                    }
-                    let vel_i = Vector3 {
-                        x: u[cell_index],
-                        y: v[cell_index],
-                        z: w[cell_index],
-                    };
-                    let vel_j = Vector3 {
-                        x: u[neighbor_cell_index],
-                        y: v[neighbor_cell_index],
-                        z: w[neighbor_cell_index],
-                    };
-                    let cell_centroid_vector = mesh.cells[&neighbor_cell_index].centroid
-                        - mesh.cells[&cell_index].centroid;
-                    let a_i = get_normal_momentum_coefficient!(
-                        cell_index,
-                        a_u,
-                        a_v,
-                        a_w,
-                        &outward_face_normal
-                    );
-                    let a_j = get_normal_momentum_coefficient!(
-                        neighbor_cell_index,
-                        a_u,
-                        a_v,
-                        a_w,
-                        &outward_face_normal
-                    );
-                    let p_grad_i =
-                        calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
-                    let p_grad_j =
-                        calculate_pressure_gradient(mesh, p, neighbor_cell_index, gradient_scheme);
-                    let cell_vol_i = mesh.cells[&cell_index].volume;
-                    let cell_vol_j = mesh.cells[&neighbor_cell_index].volume;
-
-                    let term_1 = (vel_i + vel_j).dot(&outward_face_normal);
-                    let term_2 = (cell_vol_i / a_i + cell_vol_j / a_j)
-                        * (p[cell_index] - p[neighbor_cell_index])
-                        / cell_centroid_vector.norm();
-                    let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
-                        .dot(&cell_centroid_vector.unit());
-                    let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
-                    face_velocity_magnitude * face.area
-                }
-            }
-        }
+        FaceConditionTypes::Interior => outward_face_normal.dot(&get_face_velocity(
+            mesh,
+            u,
+            v,
+            w,
+            face_index,
+        )),
         _ => panic!("unsupported face zone type"),
     }
 }
@@ -676,7 +462,6 @@ pub fn get_face_pressure(
     p: &DVector<Float>,
     face_index: usize,
     interpolation_scheme: PressureInterpolation,
-    gradient_scheme: GradientReconstructionMethods,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[&face_index];
@@ -701,21 +486,6 @@ pub fn get_face_pressure(
                     let x1 = (mesh.cells[&c1].centroid - face.centroid).norm();
                     p[c0] + (p[c1] - p[c0]) * x0 / (x0 + x1)
                 }
-                PressureInterpolation::Standard => {
-                    // requires momentum matrix coeffs; seems expensive to have to pass that whole
-                    // matrix each time
-                    panic!("`standard` pressure interpolation unsupported");
-                }
-                PressureInterpolation::SecondOrder => {
-                    let c0_grad = calculate_pressure_gradient(mesh, p, c0, gradient_scheme);
-                    // println!("Pressure gradient: {c0_grad}");
-                    // println!("Cell volume: {}", &mesh.cells[&c0].volume);
-                    let c1_grad = calculate_pressure_gradient(mesh, p, c1, gradient_scheme);
-                    let r_c0 = face.centroid - mesh.cells[&c0].centroid;
-                    let r_c1 = face.centroid - mesh.cells[&c1].centroid;
-                    0.5 * ((p[c0] + p[c1]) + (c0_grad.dot(&r_c0) + c1_grad.dot(&r_c1)))
-                }
-                _ => panic!("unsupported pressure interpolation"),
             }
         }
         _ => panic!("unsupported face zone type"),
@@ -796,4 +566,28 @@ fn apply_pressure_correction(
         velocity_corr_sum += velocity_correction.norm().powi(2);
     }
     (p_prime.norm(), velocity_corr_sum.sqrt())
+}
+
+fn iterative_solve(
+    a: &CsrMatrix<Float>,
+    b: &DVector<Float>,
+    solution_vector: &mut DVector<Float>,
+    iteration_count: Uint,
+) {
+    let mut a_prime = a.clone();
+    a_prime
+        .triplet_iter_mut()
+        .for_each(|(i, j, v)| *v = if i == j { 0. } else { *v / a.get(i, i) });
+    let b_prime: DVector<Float> = DVector::from_iterator(
+        b.nrows(),
+        b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
+    );
+    for _ in 0..iteration_count {
+        for v in solution_vector.iter() {
+            if v.is_nan() {
+                panic!("diverged");
+            }
+        }
+        *solution_vector = &b_prime - &a_prime * &*solution_vector;
+    }
 }

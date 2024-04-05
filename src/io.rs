@@ -2,8 +2,6 @@
 
 use crate::mesh::*;
 use crate::numerical_types::*;
-use crate::settings::GradientReconstructionMethods;
-use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
 use ahash::RandomState;
 use itertools::Itertools;
 use log::info;
@@ -28,17 +26,11 @@ macro_rules! skip_zone_zero {
 }
 
 pub fn read_mesh(mesh_path: &str) -> Mesh {
-    println!("Beginning reading mesh from {mesh_path}");
-
-    let format_pos_padded = |n: Float| -> String { format!("{n:<10.2e}") };
-    let format_pos = |n: Float| -> String { format!("{n:.2e}") };
-
     fn read_mesh_lines(filename: &str) -> io::Result<io::Lines<io::BufReader<File>>> {
         // Example had filename generic type P and ... where P: AsRef<Path> ... in signature but I
         // don't understand it ¯\_(ツ)_/¯
         let file = File::open(filename)?;
         // let metadata = file.metadata()?;
-        // println!("File len: {}", metadata.len());
         Ok(io::BufReader::new(file).lines())
     }
 
@@ -424,60 +416,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         // );
     }
 
-    println!(
-        "Done reading mesh.\nCells: {}\nFaces: {}\nNodes: {}",
-        cells.len(),
-        faces.len(),
-        vertices.len()
-    );
-
-    // TODO: Rewrite more concisely
-    // Very ugly way to do this
-    let node_positions: Vec<Vector3> = vertices.values().map(|n| n.position).collect();
-    let x_min = node_positions
-        .iter()
-        .fold(Float::INFINITY, |acc, &n| acc.min(n.x));
-    let x_max = node_positions
-        .iter()
-        .fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.x));
-    let y_min = node_positions
-        .iter()
-        .fold(Float::INFINITY, |acc, &n| acc.min(n.y));
-    let y_max = node_positions
-        .iter()
-        .fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.y));
-    let z_min = node_positions
-        .iter()
-        .fold(Float::INFINITY, |acc, &n| acc.min(n.z));
-    let z_max = node_positions
-        .iter()
-        .fold(Float::NEG_INFINITY, |acc, &n| acc.max(n.z));
-
-    println!(
-        "Domain extents:\nX: ({}, {})\nY: ({}, {})\nZ: ({}, {})",
-        format_pos_padded(x_min),
-        format_pos(x_max),
-        format_pos_padded(y_min),
-        format_pos(y_max),
-        format_pos_padded(z_min),
-        format_pos(z_max)
-    );
-
-    for (cell_zone_index, cell_zone) in &cell_zones {
-        println!(
-            "Cell zone {}: {}",
-            cell_zone_index,
-            get_cell_zone_types()[&cell_zone.zone_type],
-        );
-    }
-
-    for (face_zone_index, face_zone) in &face_zones {
-        println!(
-            "Face zone {}: {} ({})",
-            face_zone_index, face_zone.zone_type, face_zone.name
-        );
-    }
-
     Mesh {
         vertices,
         faces,
@@ -486,8 +424,6 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         cell_zones,
     }
 }
-
-pub fn read_settings() {}
 
 pub fn read_data(
     data_file_path: &str,
@@ -562,77 +498,6 @@ pub fn write_data(
         .unwrap();
     }
 }
-
-pub fn write_data_with_precision(
-    mesh: &Mesh,
-    u: &DVector<Float>,
-    v: &DVector<Float>,
-    w: &DVector<Float>,
-    p: &DVector<Float>,
-    output_file_name: &str,
-    decimal_precision: usize,
-) {
-    let mut file = File::create(output_file_name).unwrap();
-    println!("Writing data to {output_file_name}...");
-    for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[&cell_index];
-        writeln!(
-            file,
-            "{}\t({:.prec$e}, {:.prec$e}, {:.prec$e})\t{:.prec$e}",
-            cell.centroid,
-            u[cell_index],
-            v[cell_index],
-            w[cell_index],
-            p[cell_index],
-            prec = decimal_precision
-        )
-        .unwrap();
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn write_gradients(
-    mesh: &Mesh,
-    u: &DVector<Float>,
-    v: &DVector<Float>,
-    w: &DVector<Float>,
-    p: &DVector<Float>,
-    output_file_name: &str,
-    decimal_precision: usize,
-    gradient_scheme: GradientReconstructionMethods,
-) {
-    let mut file = File::create(output_file_name).unwrap();
-    println!("Writing data to {output_file_name}...");
-    for cell_index in 0..mesh.cells.len() {
-        let mut velocity_gradient_str = String::new();
-        calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme)
-            .flatten()
-            .iter()
-            .for_each(|v| {
-                velocity_gradient_str +=
-                    &format!("{:.prec$e}, ", v, prec = decimal_precision).to_string();
-            });
-        velocity_gradient_str.strip_suffix(", ").unwrap();
-
-        let mut pressure_gradient_str = String::new();
-        calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme)
-            .to_vec()
-            .iter()
-            .for_each(|v| {
-                pressure_gradient_str +=
-                    &format!("{:.prec$e}, ", v, prec = decimal_precision).to_string();
-            });
-        pressure_gradient_str.strip_suffix(", ").unwrap();
-        writeln!(
-            file,
-            "{}\t({})\t({})",
-            &mesh.cells[&cell_index].centroid, velocity_gradient_str, pressure_gradient_str
-        )
-        .unwrap();
-    }
-}
-
-pub fn write_settings() {}
 
 pub fn dvector_to_str(a: &DVector<Float>) -> String {
     let mut output = String::from("[");

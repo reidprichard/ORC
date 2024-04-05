@@ -1,4 +1,3 @@
-use crate::io::print_linear_system;
 use crate::mesh::*;
 use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
@@ -137,7 +136,6 @@ pub fn build_momentum_advection_matrices(
     w: &DVector<Float>,
     p: &DVector<Float>,
     momentum_discretization: MomentumDiscretization,
-    velocity_interpolation: VelocityInterpolation,
     pressure_interpolation: PressureInterpolation,
     gradient_scheme: GradientReconstructionMethods,
     rho: Float,
@@ -175,14 +173,8 @@ pub fn build_momentum_advection_matrices(
                 u,
                 v,
                 w,
-                p,
                 *face_index,
                 *cell_index,
-                velocity_interpolation,
-                gradient_scheme,
-                a_u,
-                a_v,
-                a_w,
             );
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
@@ -194,7 +186,6 @@ pub fn build_momentum_advection_matrices(
                 p,
                 *face_index,
                 pressure_interpolation,
-                gradient_scheme,
             );
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
@@ -330,11 +321,9 @@ pub fn build_pressure_correction_matrices(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
-    p: &DVector<Float>,
     a_u: &CsrMatrix<Float>,
     a_v: &CsrMatrix<Float>,
     a_w: &CsrMatrix<Float>,
-    numerical_settings: &NumericalSettings,
     rho: Float,
 ) -> LinearSystem {
     let cell_count = mesh.cells.len();
@@ -353,14 +342,8 @@ pub fn build_pressure_correction_matrices(
                 u,
                 v,
                 w,
-                p,
                 *face_index,
                 *cell_index,
-                numerical_settings.velocity_interpolation,
-                numerical_settings.gradient_reconstruction,
-                a_u,
-                a_v,
-                a_w,
             );
             let inward_face_normal = get_inward_face_normal(face, *cell_index);
             // The net mass flow rate through this face into this cell

@@ -1,6 +1,5 @@
 pub mod discretization;
 pub mod io;
-pub mod linear_algebra;
 pub mod mesh;
 pub mod solver;
 
@@ -48,14 +47,13 @@ pub mod settings {
         // Using a preconditioner should make the solver more stable. There is a ~20% performance
         // hit for the Jacobi preconditioner, but it is almost always worth it, allowing more
         // aggressive numerics elsewhere (e.g. fewer iterations)
-        pub preconditioner: PreconditionMethod,
     }
 
     impl Default for NumericalSettings {
         fn default() -> Self {
             NumericalSettings {
                 pressure_velocity_coupling: PressureVelocityCoupling::SIMPLE,
-                momentum: MomentumDiscretization::CD1,
+                momentum: MomentumDiscretization::UD,
                 diffusion: DiffusionScheme::CD,
                 pressure_interpolation: PressureInterpolation::LinearWeighted,
                 velocity_interpolation: VelocityInterpolation::LinearWeighted,
@@ -63,7 +61,7 @@ pub mod settings {
                     GreenGaussVariants::CellBased,
                 ),
                 pressure_relaxation: 0.01,
-                momentum_relaxation: 0.5,
+                momentum_relaxation: 1.,
                 matrix_solver: MatrixSolverSettings::default(),
             }
         }
@@ -72,11 +70,10 @@ pub mod settings {
     impl Default for MatrixSolverSettings {
         fn default() -> Self {
             MatrixSolverSettings {
-                solver_type: SolutionMethod::Multigrid,
+                solver_type: SolutionMethod::Jacobi,
                 iterations: 20,
-                relaxation: 0.5,
+                relaxation: 1.,
                 relative_convergence_threshold: 1e-3,
-                preconditioner: PreconditionMethod::Jacobi,
             }
         }
     }
@@ -114,47 +111,26 @@ pub mod settings {
     pub enum PressureInterpolation {
         Linear,
         LinearWeighted,
-        Standard,
-        SecondOrder,
     }
 
     #[derive(Copy, Clone)]
     pub enum VelocityInterpolation {
         LinearWeighted,
-        // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
-        RhieChow,
     }
 
     #[derive(Copy, Clone)]
     pub enum GreenGaussVariants {
         CellBased,
-        NodeBased,
     }
 
     #[derive(Copy, Clone)]
     pub enum GradientReconstructionMethods {
         GreenGauss(GreenGaussVariants),
-        LeastSquares,
-    }
-
-    #[derive(Copy, Clone)]
-    pub enum TurbulenceModel {
-        None,
-        StandardKEpsilon,
     }
 
     // TODO: GMRES, ILU
     #[derive(Copy, Clone)]
     pub enum SolutionMethod {
-        GaussSeidel, // TODO: add backward sweep
-        Jacobi,
-        Multigrid,
-        BiCGSTAB,
-    }
-
-    #[derive(Copy, Clone)]
-    pub enum PreconditionMethod {
-        None,
         Jacobi,
     }
 
