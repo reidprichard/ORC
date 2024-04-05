@@ -55,7 +55,7 @@ pub mod settings {
                 pressure_velocity_coupling: PressureVelocityCoupling::SIMPLE,
                 momentum: MomentumDiscretization::UD,
                 diffusion: DiffusionScheme::CD,
-                pressure_interpolation: PressureInterpolation::LinearWeighted,
+                pressure_interpolation: PressureInterpolation::Linear,
                 velocity_interpolation: VelocityInterpolation::LinearWeighted,
                 gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
                     GreenGaussVariants::CellBased,

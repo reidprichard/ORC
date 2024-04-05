@@ -14,10 +14,6 @@ use std::time::Instant;
 
 const MAX_PRINT_ROWS: usize = 64;
 
-// TODO: Normalize mesh lengths to reduce roundoff error
-// TODO: Measure impact of logging on performance
-
-// TODO: Make struct to encapsulate all settings so I don't have a million args
 #[allow(clippy::too_many_arguments)]
 pub fn solve_steady(
     mesh: &mut Mesh,
@@ -33,7 +29,7 @@ pub fn solve_steady(
 ) {
     let cell_count: usize = mesh.cells.len();
 
-    let a_di = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
+    let a_di = build_momentum_diffusion_matrix(mesh, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);
@@ -207,13 +203,12 @@ pub fn initialize_flow(
     DVector<Float>,
     DVector<Float>,
 ) {
-    check_boundary_conditions(mesh);
     let n = mesh.cells.len();
     let mut u = dvector_zeros!(n);
     let mut v = dvector_zeros!(n);
     let mut w = dvector_zeros!(n);
     let mut p = dvector_zeros!(n);
-    let a_di = build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
+    let a_di = build_momentum_diffusion_matrix(mesh, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);

@@ -37,13 +37,8 @@ pub(crate) use get_normal_momentum_coefficient;
 
 pub fn build_momentum_diffusion_matrix(
     mesh: &Mesh,
-    diffusion_scheme: DiffusionScheme,
     mu: Float,
 ) -> CsrMatrix<Float> {
-    if !matches!(diffusion_scheme, DiffusionScheme::CD) {
-        panic!("unsupported diffusion scheme");
-    }
-
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
 

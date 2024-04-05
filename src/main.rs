@@ -59,9 +59,6 @@ fn main() {
     mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
     mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
 
-    // ************* Set numerical methods ***************
-    let settings = NumericalSettings::default();
-
     // ************ Solve **************
     let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 1000);
     solve_steady(
@@ -70,7 +67,7 @@ fn main() {
         &mut v,
         &mut w,
         &mut p,
-        &settings,
+        &NumericalSettings::default(),
         rho,
         mu,
         1000,

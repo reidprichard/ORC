@@ -1,5 +1,3 @@
-#![allow(unused_labels)]
-
 use crate::mesh::*;
 use crate::numerical_types::*;
 use ahash::RandomState;
@@ -65,7 +63,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             let section_header_blocks: Vec<&str> =
                 section_header_line.split_ascii_whitespace().collect();
             match section_header_blocks[0] {
-                "(0" => 'read_comment: {
+                "(0" => {
                     zone_name = section_header_line
                         .rsplit_once(' ')
                         .expect("comment has a space")
