@@ -36,8 +36,11 @@ pub mod settings {
     pub struct TurbulenceModelSettings {}
 
     pub struct MatrixSolverSettings {
+        // The type of matrix solver that will be employed. Multigrid is almost always the best
+        // choice.
         pub solver_type: SolutionMethod,
-        // It seems like too many iterations can cause pv coupling to go crazy
+        // Solver iteration count. I've found stability issues with fewer than ~50.
+        // For multigrid, this is the number of iterations per level.
         pub iterations: Uint,
         // Reducing this value increases the solver stability but reduces convergence rate.
         pub relaxation: Float,
@@ -73,7 +76,7 @@ pub mod settings {
         fn default() -> Self {
             MatrixSolverSettings {
                 solver_type: SolutionMethod::Multigrid,
-                iterations: 20,
+                iterations: 50,
                 relaxation: 0.5,
                 relative_convergence_threshold: 1e-3,
                 preconditioner: PreconditionMethod::Jacobi,
