@@ -8,8 +8,8 @@ pub mod settings {
     use crate::numerical_types::*;
     use nalgebra::DVector;
     use nalgebra_sparse::CsrMatrix;
+
     // ****** Solver numerical settings structs ******
-    // TODO: make this hierarchical
     pub struct NumericalSettings {
         pub pressure_velocity_coupling: PressureVelocityCoupling,
         pub momentum: MomentumDiscretization,
@@ -132,7 +132,6 @@ pub mod settings {
     pub enum SolutionMethod {
         GaussSeidel, // TODO: add backward sweep
         Jacobi,
-        // HashSet.
         Multigrid,
         BiCGSTAB,
     }
@@ -570,7 +569,12 @@ pub mod nalgebra {
 
     impl GetEntry<Float> for CsrMatrix<Float> {
         fn get(&self, i: usize, j: usize) -> Float {
-            self.get_entry(i, j).unwrap().into_value()
+            match self.get_entry(i, j).unwrap() {
+                nalgebra_sparse::SparseEntry::NonZero(v) => *v,
+                nalgebra_sparse::SparseEntry::Zero => {
+                    panic!("Tried to access CsrMatrix element that hasn't been stored yet.")
+                }
+            }
         }
     }
     macro_rules! dvector_zeros {
