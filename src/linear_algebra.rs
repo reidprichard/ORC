@@ -7,7 +7,7 @@ use nalgebra_sparse::{CooMatrix, CsrMatrix};
 use std::collections::HashSet;
 
 const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
-const MULTIGRID_COARSENING_LEVELS: Uint = 4;
+const MULTIGRID_COARSENING_LEVELS: Uint = 6;
 
 fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) -> CsrMatrix<Float> {
     let n = a.ncols() / 2 + a.ncols() % 2; // half rounded up
