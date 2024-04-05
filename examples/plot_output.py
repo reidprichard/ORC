@@ -1,3 +1,4 @@
+import argparse
 import math
 import matplotlib
 import matplotlib.pyplot as plt
@@ -129,7 +130,7 @@ def interpolate_to_grid(x_list, y_list, z_list, n_x=100, n_y=100):
     return (x_grid, y_grid, z_grid)
 
 
-def plot_channel_flow():
+def plot_2d(root: str, plot_title: str | None = None):
     MU = 0.1
     DP = -10
     DX = 0.002
@@ -139,7 +140,7 @@ def plot_channel_flow():
     VECTOR = f"\\(({FLOAT}),\\s+({FLOAT}),\\s+({FLOAT})\\)"
     datafile_pattern = re.compile(f"{VECTOR}\\t{VECTOR}\\t({FLOAT})")
     row_values = []
-    with open("./examples/channel_flow.csv") as simulation_data:
+    with open(f"./examples/{root}.csv") as simulation_data:
         lines = simulation_data.readlines()
         for line in lines:
             match = datafile_pattern.match(line)
@@ -151,21 +152,22 @@ def plot_channel_flow():
     y2 = []
     velocity_gradient = []
     pressure_gradient = []
-    with open("./examples/channel_flow_gradients.csv") as simulation_data:
+    with open(f"./examples/{root}_gradients.csv") as simulation_data:
         for line in simulation_data.readlines():
-            centroid, vel_grad, p_grad = [s.split(', ') for s in line.replace('(','').replace(')','').split('\t')]
+            centroid, vel_grad, p_grad = [s.split(", ") for s in line.replace("(", "").replace(")", "").split("\t")]
             x2.append(float(centroid[0]))
             y2.append(float(centroid[1]))
             # There should only be 9 elements, but sometimes a trailing comma adds a 10th empty one
-            velocity_gradient.append(np.reshape(np.array(vel_grad[:9]),(3,3)))
+            velocity_gradient.append(np.reshape(np.array(vel_grad[:9]), (3, 3)))
             # There should only be 3 elements, but sometimes a trailing comma adds a 4th empty one
             pressure_gradient.append(np.array(p_grad[:3]))
-    velocity_gradient = np.array(velocity_gradient)
-    pressure_gradient = np.array(pressure_gradient)
+    velocity_gradient = np.array(velocity_gradient)  # type: ignore[assignment]
+    pressure_gradient = np.array(pressure_gradient)  # type: ignore[assignment]
 
     # *** Figure 1 ***
     fig, axs = plt.subplots(nrows=2, layout="constrained", sharex=True, sharey=True)
-    fig.suptitle("Pressure-Driven Channel Flow")
+    if plot_title is not None:
+        fig.suptitle(plot_title)
     x_interpolated, y_interpolated, p_interpolated = interpolate_to_grid(x, y, p)
     cm = axs[0].contourf(x_interpolated, y_interpolated, p_interpolated, levels=10)
     fig.colorbar(cm, label="Gage Pressure [Pa]")
@@ -174,7 +176,7 @@ def plot_channel_flow():
     axs[0].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
 
-    x2_interpolated, y2_interpolated, du_dy = interpolate_to_grid(x2,y2,velocity_gradient[:,0,1])
+    x2_interpolated, y2_interpolated, du_dy = interpolate_to_grid(x2, y2, velocity_gradient[:, 0, 1])
     cm = axs[1].contourf(x2_interpolated, y2_interpolated, du_dy, cmap="RdBu", levels=50)
     # dp_dx = interpolate_to_grid(x2, y2, pressure_gradient[:,0])[-1]
     # dp_dy = interpolate_to_grid(x2, y2, pressure_gradient[:,1])[-1]
@@ -182,14 +184,15 @@ def plot_channel_flow():
     axs[1].set_title(r"$\frac{du}{dy}$")
     axs[1].set_xlabel("X [m]")
     axs[1].set_ylabel("Y [m]")
-    axs[1].ticklabel_format(style="scientific", scilimits=(0,0))
+    axs[1].ticklabel_format(style="scientific", scilimits=(0, 0))
 
     fig.colorbar(cm, label="Velocity gradient [1/s]")
     # fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
     fig, ax = plt.subplots()
-    fig.suptitle("Pressure-Driven Channel Flow")
+    if plot_title is not None:
+        fig.suptitle(plot_title)
     a = CHANNEL_HEIGHT
     y_linear = np.linspace(np.min(y), np.max(y), 100)
     u_analytical = 1 / (2 * MU) * DP / DX * (y_linear**2 - a * y_linear)
@@ -203,4 +206,8 @@ def plot_channel_flow():
 
 
 if __name__ == "__main__":
-    plot_channel_flow()
+    parser = argparse.ArgumentParser(prog="CfdPlotter", description="Plots solution fields of CFD data")
+    parser.add_argument("data_file_root")
+    parser.add_argument("-t", "--title", default=None)
+    args = parser.parse_args()
+    plot_2d(args.data_file_root, args.title)
