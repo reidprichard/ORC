@@ -1,4 +1,3 @@
-use crate::io::print_linear_system;
 use crate::mesh::*;
 use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
@@ -166,6 +165,9 @@ pub fn build_momentum_advection_matrices(
         // The current cell's coefficients (matrix diagonal)
         let a_ii_di = a_di.get(cell_index, cell_index);
         let mut a_p = Vector3::zero();
+        // TODO: Consider directly representing gradient term in solution matrices
+        // Green-Gauss face values are a function of neighboring cell values, so they can be
+        // represented in the matrix
         let cell_velocity_gradient =
             calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme);
         // println!("\n{cell_velocity_gradient}");
