@@ -51,13 +51,17 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         items
     }
 
-    let hash_builder = RandomState::with_seeds(0, 1, 2, 3);
+    macro_rules! new_hashmap {
+        () => {
+            HashMap::with_hasher(RandomState::with_seeds(0, 1, 2, 3))
+        };
+    }
 
-    let mut vertices: HashMap<usize, Vertex, RandomState> = HashMap::with_hasher(hash_builder.clone());
-    let mut faces: HashMap<usize, Face, RandomState> = HashMap::with_hasher(hash_builder.clone());
-    let mut cells: HashMap<usize, Cell, RandomState> = HashMap::with_hasher(hash_builder.clone());
-    let mut face_zones: HashMap<Uint, FaceZone, RandomState> = HashMap::with_hasher(hash_builder.clone());
-    let mut cell_zones: HashMap<Uint, CellZone, RandomState> = HashMap::with_hasher(hash_builder.clone());
+    let mut vertices: HashMap<usize, Vertex, RandomState> = new_hashmap!();
+    let mut faces: HashMap<usize, Face, RandomState> = new_hashmap!();
+    let mut cells: HashMap<usize, Cell, RandomState> = new_hashmap!();
+    let mut face_zones: HashMap<Uint, FaceZone, RandomState> = new_hashmap!();
+    let mut cell_zones: HashMap<Uint, CellZone, RandomState> = new_hashmap!();
 
     let mut dimensions: u8 = 0;
 
