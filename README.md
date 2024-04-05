@@ -39,7 +39,9 @@ Roadmap:
 - [X] Iterate steady
 - [X] Add under-relaxation
 - [X] Implement Rhie-Chow interpolation (very unstable for now)
-- [ ] Improve Rhie-Chow stability or use another scheme
+- [X] Improve Rhie-Chow stability or use another scheme
+- [ ] Fix velocity inlet BC
+- [ ] Add moving wall BC
 - [ ] Implement bounded high-order momentum schemes, e.g. Jasak et al.'s bounded central differencing
 - [ ] Add cross diffusion correction
 - [X] Multigrid
@@ -50,7 +52,7 @@ Roadmap:
 - [ ] Standard k-epsilon turbulence model?
 - [ ] Add other mesh formats?
 - [ ] Add validation of canonical flows
-- [ ] Optimize performance (10%; preliminary profiling and adjustment has been done)
+- [ ] Optimize performance (20%; preliminary profiling and adjustment has been done)
 
 Validation:
 Only very preliminary validation has been performed. As seen below, the
