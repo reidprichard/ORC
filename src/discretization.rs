@@ -225,6 +225,16 @@ pub fn build_momentum_advection_matrices(
                         z: a_nb,
                     }
                 }
+                MomentumDiscretization::CD1 => {
+                    // Neighbor only affects this cell if flux is into this
+                    // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
+                    let a_nb = f_i / 2.;
+                    Vector3 {
+                        x: a_nb,
+                        y: a_nb,
+                        z: a_nb,
+                    }
+                }
                 MomentumDiscretization::TVD(psi) => {
                     if neighbor_cell_index == usize::MAX {
                         let a_nb = Float::min(f_i, 0.);
