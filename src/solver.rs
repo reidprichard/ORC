@@ -11,7 +11,7 @@ use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
 use crate::settings::*;
 use log::{debug, log_enabled, trace};
-use nalgebra::DVector;
+use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 // use rayon::prelude::*;
 use std::thread;
@@ -472,6 +472,8 @@ fn check_boundary_conditions(mesh: &Mesh) {
     }
 }
 
+// TODO: Find a clean way to integrate all of the `fn ____velocity____` and `fn ____pressure_____`
+// into general `fn ____scalar____` functions
 pub fn calculate_velocity_gradient(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -500,6 +502,73 @@ pub fn calculate_velocity_gradient(
                         &(get_outward_face_normal(face, cell_index) * (face.area / cell.volume)),
                     )
                 })
+        }
+        GradientReconstructionMethods::LeastSquares => {
+            let n = cell.face_indices.len();
+            let mut a_data: Vec<Float> = Vec::with_capacity(3 * n);
+            let mut b_u_data: Vec<Float> = Vec::with_capacity(n);
+            let mut b_v_data: Vec<Float> = Vec::with_capacity(n);
+            let mut b_w_data: Vec<Float> = Vec::with_capacity(n);
+
+            let cell_centroid = mesh.cells[cell_index].centroid;
+
+            cell.face_indices.iter().for_each(|f| {
+                let face = &mesh.faces[*f];
+                let zone = &mesh.face_zones[&face.zone];
+                let (x, u) = match zone.zone_type {
+                    FaceConditionTypes::Interior => {
+                        let mut neighbor_cell_index = face.cell_indices[0];
+                        if neighbor_cell_index == cell_index {
+                            neighbor_cell_index = face.cell_indices[1];
+                        }
+                        (
+                            mesh.cells[neighbor_cell_index].centroid - cell_centroid,
+                            (
+                                u[neighbor_cell_index] - u[cell_index],
+                                v[neighbor_cell_index] - v[cell_index],
+                                w[neighbor_cell_index] - w[cell_index],
+                            ),
+                        )
+                    }
+                    _ => {
+                        let face_velocity =
+                            get_face_velocity(&mesh, &u, &v, &w, *f, VelocityInterpolation::None);
+                        (
+                            face.centroid - cell_centroid,
+                            (face_velocity.x, face_velocity.y, face_velocity.z),
+                        )
+                    }
+                };
+                a_data.push(x.x);
+                a_data.push(x.y);
+                a_data.push(x.z);
+                b_u_data.push(u.0);
+                b_v_data.push(u.1);
+                b_w_data.push(u.2);
+            });
+            let mut a: DMatrix<Float> = DMatrix::from_row_slice(n, 3, &a_data[..]);
+            let mut b_u: DVector<Float> = DVector::from_vec(b_u_data);
+            let mut b_v: DVector<Float> = DVector::from_vec(b_v_data);
+            let mut b_w: DVector<Float> = DVector::from_vec(b_w_data);
+
+            b_u = &a.transpose() * &b_u;
+            b_v = &a.transpose() * &b_v;
+            b_w = &a.transpose() * &b_w;
+            a = &a.transpose() * &a;
+
+            let a_inv = a.try_inverse().unwrap();
+
+            let grad_u = &a_inv * b_u;
+            let grad_v = &a_inv * b_v;
+            let grad_w = &a_inv * b_w;
+
+            // let grad_u = iterative_solve(&a, b, solution_vector, iteration_count, method, relaxation_factor, convergence_threshold, preconditioner)
+
+            Tensor3 {
+                x: Vector3::from_dvector(&grad_u),
+                y: Vector3::from_dvector(&grad_v),
+                z: Vector3::from_dvector(&grad_w),
+            }
         }
         _ => panic!("unsupported gradient scheme"),
     }
@@ -533,6 +602,51 @@ pub fn calculate_pressure_gradient(
                 .fold(Vector3::zero(), |acc, v| acc + v),
             _ => panic!("unsupported Green-Gauss scheme"),
         },
+        GradientReconstructionMethods::LeastSquares => {
+            let n = cell.face_indices.len();
+            let mut a_data: Vec<Float> = Vec::with_capacity(3 * n);
+            let mut b_data: Vec<Float> = Vec::with_capacity(n);
+            let cell_centroid = mesh.cells[cell_index].centroid;
+
+            cell.face_indices.iter().for_each(|f| {
+                let face = &mesh.faces[*f];
+                let zone = &mesh.face_zones[&face.zone];
+                let (x, p) = match zone.zone_type {
+                    FaceConditionTypes::Interior => {
+                        let mut neighbor_cell_index = face.cell_indices[0];
+                        if neighbor_cell_index == cell_index {
+                            neighbor_cell_index = face.cell_indices[1];
+                        }
+                        (
+                            mesh.cells[neighbor_cell_index].centroid - cell_centroid,
+                            p[neighbor_cell_index] - p[cell_index],
+                        )
+                    }
+                    _ => (
+                        face.centroid - cell_centroid,
+                        get_face_pressure(
+                            &mesh,
+                            &p,
+                            *f,
+                            PressureInterpolation::None,
+                            GradientReconstructionMethods::None,
+                        ),
+                    ),
+                };
+                a_data.push(x.x);
+                a_data.push(x.y);
+                a_data.push(x.z);
+                b_data.push(p);
+            });
+            let mut a: DMatrix<Float> = DMatrix::from_row_slice(n, 3, &a_data[..]);
+            let mut b: DVector<Float> = DVector::from_vec(b_data);
+
+            b = &a.transpose() * &b;
+            a = &a.transpose() * &a;
+
+            let a_inv = a.try_inverse().unwrap();
+            Vector3::from_dvector(&(a_inv * b))
+        }
         _ => panic!("unsupported gradient scheme"),
     }
 }
@@ -580,6 +694,9 @@ fn get_face_velocity(
                 VelocityInterpolation::RhieChow => {
                     panic!("unsupported");
                 }
+                VelocityInterpolation::None => {
+                    panic!("`None` VelocityInterpolation cannot be sed for interior faces")
+                }
             }
         }
         _ => panic!("unsupported face zone type"),
@@ -618,8 +735,8 @@ pub fn get_face_flux(
                 v,
                 w,
                 face_index,
-                VelocityInterpolation::LinearWeighted, // Don't think it makes sense to need
-                                                       // Rhie-Chow here
+                VelocityInterpolation::None, // If it's a boundary face, no interpolation will be
+                                             // needed
             ))
         }
         FaceConditionTypes::Interior => {
@@ -674,6 +791,9 @@ pub fn get_face_flux(
                     let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
                     face_velocity_magnitude * face.area
                 }
+                VelocityInterpolation::None => {
+                    panic!("`None` VelocityInterpolation cannot be used for interior faces")
+                }
             }
         }
         _ => panic!("unsupported face zone type"),
@@ -711,14 +831,11 @@ pub fn get_face_pressure(
                     p[c0] + (p[c1] - p[c0]) * x0 / (x0 + x1)
                 }
                 PressureInterpolation::Standard => {
-                    // requires momentum matrix coeffs; seems expensive to have to pass that whole
-                    // matrix each time
+                    // requires momentum matrix coeffs
                     panic!("`standard` pressure interpolation unsupported");
                 }
                 PressureInterpolation::SecondOrder => {
                     let c0_grad = calculate_pressure_gradient(mesh, p, c0, gradient_scheme);
-                    // println!("Pressure gradient: {c0_grad}");
-                    // println!("Cell volume: {}", &mesh.cells[&c0].volume);
                     let c1_grad = calculate_pressure_gradient(mesh, p, c1, gradient_scheme);
                     let r_c0 = face.centroid - mesh.cells[c0].centroid;
                     let r_c1 = face.centroid - mesh.cells[c1].centroid;
