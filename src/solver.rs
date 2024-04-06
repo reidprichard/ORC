@@ -348,37 +348,41 @@ pub fn initialize_flow(
     // Slowly ramp up to diffusive + advective
 
     println!("Initializing velocity field...");
-    // NOTE: Initializing with multigrid was diverging, so using BiCGSTAB
-    iterative_solve(
-        &a_u,
-        &b_u,
-        &mut u,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
-    iterative_solve(
-        &a_v,
-        &b_v,
-        &mut v,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
-    iterative_solve(
-        &a_w,
-        &b_w,
-        &mut w,
-        iteration_count,
-        SolutionMethod::BiCGSTAB,
-        0.5,
-        1e-6,
-        PreconditionMethod::Jacobi,
-    );
+
+    let mut diffusion_fraction = 1.;
+    while diffusion_fraction >= 0. {
+        iterative_solve(
+            &(&a_u * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
+            &b_u,
+            &mut u,
+            iteration_count,
+            SolutionMethod::BiCGSTAB,
+            0.5,
+            1e-6,
+            PreconditionMethod::Jacobi,
+        );
+        iterative_solve(
+            &(&a_v * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
+            &b_v,
+            &mut v,
+            iteration_count,
+            SolutionMethod::BiCGSTAB,
+            0.5,
+            1e-6,
+            PreconditionMethod::Jacobi,
+        );
+        iterative_solve(
+            &(&a_w * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
+            &b_w,
+            &mut w,
+            iteration_count,
+            SolutionMethod::BiCGSTAB,
+            0.5,
+            1e-6,
+            PreconditionMethod::Jacobi,
+        );
+        diffusion_fraction -= 0.2;
+    }
     println!("Done!");
     (u, v, w, p)
 }
@@ -638,8 +642,8 @@ pub fn get_face_flux(
                         y: v[neighbor_cell_index],
                         z: w[neighbor_cell_index],
                     };
-                    let cell_centroid_vector = mesh.cells[neighbor_cell_index].centroid
-                        - mesh.cells[cell_index].centroid;
+                    let cell_centroid_vector =
+                        mesh.cells[neighbor_cell_index].centroid - mesh.cells[cell_index].centroid;
                     let a_i = get_normal_momentum_coefficient!(
                         cell_index,
                         a_u,
@@ -757,7 +761,7 @@ fn apply_pressure_correction(
     p: &mut DVector<Float>,
     numerical_settings: &NumericalSettings,
 ) -> (Float, Float) {
-    let mut velocity_corr_sum:Float = 0.;
+    let mut velocity_corr_sum: Float = 0.;
     for cell_index in 0..mesh.cells.len() {
         let cell = &mesh.cells.get_mut(cell_index).unwrap();
         let pressure_correction = *p_prime.get(cell_index).unwrap_or(&0.);
