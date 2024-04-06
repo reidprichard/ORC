@@ -7,7 +7,7 @@ use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
 const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
-const MULTIGRID_COARSENING_LEVELS: Uint = 6;
+const MULTIGRID_COARSENING_LEVELS: Uint = 3;
 
 fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) -> CsrMatrix<Float> {
     let n = a.ncols() / 2 + a.ncols() % 2; // half rounded up
@@ -31,8 +31,7 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
             // For each row, find the most negative off-diagonal value
             // If that cell hasn't already been combined, combine it with diagonal
             // If it *has* been combined, find the next largest and so on.
-            let mut combined_cells =
-                HashSet::<usize>::with_capacity_and_hasher(n, RandomState::with_seeds(3, 1, 4, 1)); // TODO: pre-seeded hasher
+            let mut combined_cells = HashSet::<usize>::with_capacity_and_hasher(n, RandomState::with_seeds(3, 1, 4, 1));
             a.row_iter().enumerate().for_each(|(i, row)| {
                 let mut strongest_coeff: Float = Float::MAX;
                 let strongest_unmerged_neighbor =
@@ -238,7 +237,6 @@ pub fn iterative_solve(
         }
         SolutionMethod::BiCGSTAB => {
             // TODO: Optimize this
-            // TODO: Try preconditioning by matrix diagonal
             let mut r = b_preconditioned - a_preconditioned * &*solution_vector;
             // TODO: Set search direction more intelligently
             let r_hat_0 = DVector::from_column_slice(&vec![1.; r.nrows()]);
