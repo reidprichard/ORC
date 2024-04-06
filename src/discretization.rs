@@ -9,8 +9,6 @@ use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix, SparseEntryMut::*};
 
 macro_rules! get_normal_momentum_coefficient {
-    // TODO: Should these be multiplied by abs val of compoments?
-    // Or should it just be dot product?
     ($i: expr, $a_u: expr, $a_v: expr, $a_w: expr, $n: expr) => {
         Vector3 {
             x: $a_u.get($i, $i) * $n.x,
@@ -165,11 +163,6 @@ pub fn build_momentum_advection_matrices(
         // The current cell's coefficients (matrix diagonal)
         let a_ii_di = a_di.get(cell_index, cell_index);
         let mut a_p = Vector3::zero();
-        // TODO: Consider directly representing gradient term in solution matrices
-        // Green-Gauss face values are a function of neighboring cell values, so they can be
-        // represented in the matrix
-        let cell_velocity_gradient =
-            calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme);
         // println!("\n{cell_velocity_gradient}");
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
@@ -244,6 +237,12 @@ pub fn build_momentum_advection_matrices(
                             z: a_nb,
                         }
                     } else {
+                        // TODO: Consider directly representing gradient term in solution matrices
+                        // Green-Gauss face values are a function of neighboring cell values, so they can be
+                        // represented in the matrix
+                        let cell_velocity_gradient =
+                            calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme);
+
                         let downstream_cell = if f_i > 0. {
                             neighbor_cell_index
                         } else {
