@@ -176,7 +176,7 @@ def plot_2d(root: str, plot_title: str | None = None):
     axs[0].set_ylabel("Y [m]")
 
     x2_interpolated, y2_interpolated, du_dy = interpolate_to_grid(x2, y2, velocity_gradient[:, 0, 1])  # type: ignore[call-overload]
-    cm = axs[1].contourf(x2_interpolated, y2_interpolated, du_dy, cmap="RdBu", levels=50)
+    cm = axs[1].contourf(x2_interpolated, y2_interpolated, du_dy, cmap="RdBu", levels=20)
     # dp_dx = interpolate_to_grid(x2, y2, pressure_gradient[:,0])[-1]
     # dp_dy = interpolate_to_grid(x2, y2, pressure_gradient[:,1])[-1]
     # axs[1].quiver(x2_interpolated, y2_interpolated, dp_dx, dp_dy)
