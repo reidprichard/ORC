@@ -123,9 +123,13 @@ pub mod settings {
 
     #[derive(Copy, Clone)]
     pub enum VelocityInterpolation {
+        // Distance-weighted average
         LinearWeighted,
         // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
+        // TODO: Rhie-Chow is causing crazy boundary effects
         RhieChow,
+        // For internal use only! Designates a function call where it is known that no interpolation will be needed, e.g. getting flux through a boundary face
+        None,
     }
 
     #[derive(Copy, Clone)]
@@ -183,6 +187,8 @@ pub mod numerical_types {
         fmt,
         ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
     };
+
+    use nalgebra::DVector;
 
     pub type Int = i64;
     pub type Float = f64;
@@ -290,6 +296,22 @@ pub mod numerical_types {
                 x: xyz[0],
                 y: xyz[1],
                 z: xyz[2],
+            }
+        }
+
+        pub fn from_dvector(v: &DVector<Float>) -> Self {
+            Vector3 {
+                x: v[0],
+                y: v[1],
+                z: v[2]
+            }
+        }
+
+        pub fn from_vec(v: &Vec<Float>) -> Self {
+            Vector3 {
+                x: v[0],
+                y: v[1],
+                z: v[2]
             }
         }
 
