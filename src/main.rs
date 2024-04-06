@@ -87,7 +87,7 @@ fn validate_solvers() {
 fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
-    let mu = 0.01;
+    let mu = 0.1;
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
@@ -117,14 +117,14 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
-        momentum_relaxation: 0.8,
+        momentum_relaxation: 0.5,
         // This needs to be EXTREMELY low (~0.01)
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
-        momentum: TVD_QUICK,
+        momentum: MomentumDiscretization::CD1,
         pressure_interpolation: PressureInterpolation::LinearWeighted,
-        velocity_interpolation: VelocityInterpolation::RhieChow,
+        velocity_interpolation: VelocityInterpolation::LinearWeighted,
         ..NumericalSettings::default()
     };
 
