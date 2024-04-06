@@ -119,6 +119,8 @@ pub mod settings {
         LinearWeighted,
         Standard,
         SecondOrder,
+        // For internal use only! Designates a function call where it is known that no interpolation will be needed, e.g. getting flux through a boundary face
+        None,
     }
 
     #[derive(Copy, Clone)]
@@ -142,6 +144,9 @@ pub mod settings {
     pub enum GradientReconstructionMethods {
         GreenGauss(GreenGaussVariants),
         LeastSquares,
+        // For internal use only! Designates a function call where it is known that gradient
+        // reconstruction will not be needed
+        None,
     }
 
     #[derive(Copy, Clone)]
@@ -303,7 +308,7 @@ pub mod numerical_types {
             Vector3 {
                 x: v[0],
                 y: v[1],
-                z: v[2]
+                z: v[2],
             }
         }
 
@@ -311,7 +316,7 @@ pub mod numerical_types {
             Vector3 {
                 x: v[0],
                 y: v[1],
-                z: v[2]
+                z: v[2],
             }
         }
 
