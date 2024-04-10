@@ -3,6 +3,9 @@
 use log::log_enabled;
 use nalgebra::DVector;
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
+use orc::discretization::{
+    build_momentum_advection_matrices, build_momentum_diffusion_matrix, initialize_momentum_matrix,
+};
 use orc::io::{print_vec_scientific, read_data, read_mesh};
 use orc::io::{write_data, write_gradients};
 use orc::linear_algebra::iterative_solve;
@@ -13,6 +16,8 @@ use orc::settings::*;
 use orc::solver::*;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
+use std::fs::File;
+use std::io::Write;
 use std::time::Instant;
 use tracing::{info, Level};
 use tracing_appender::rolling::{self, RollingFileAppender};
@@ -173,7 +178,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
-    let mu = 0.1;
+    let mu = 10.;
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
@@ -184,6 +189,8 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Set boundary conditions **********
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
+    // mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
+    // mesh.get_face_zone("INLET").vector_value = Vector3 { x: 2e-5, y: 0., z: 0.};
     mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
     mesh.get_face_zone("INLET").scalar_value = -dp;
 
@@ -200,10 +207,12 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
-        momentum: TVD_UMIST,
-        pressure_interpolation: PressureInterpolation::LinearWeighted,
-        velocity_interpolation: VelocityInterpolation::LinearWeighted,
-        gradient_reconstruction: GradientReconstructionMethods::LeastSquares,
+        momentum: MomentumDiscretization::UD,
+        pressure_interpolation: PressureInterpolation::SecondOrder,
+        velocity_interpolation: VelocityInterpolation::Linear,
+        gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
+            GreenGaussVariants::CellBased,
+        ),
         ..NumericalSettings::default()
     };
 
@@ -231,8 +240,68 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         &p,
         "./examples/channel_flow_gradients.csv",
         7,
-        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        settings.gradient_reconstruction,
     );
+
+    let mut a_u = initialize_momentum_matrix(&mesh);
+    let mut a_v = initialize_momentum_matrix(&mesh);
+    let mut a_w = initialize_momentum_matrix(&mesh);
+    let a_di = build_momentum_diffusion_matrix(&mesh, settings.diffusion, mu);
+    let cell_count: usize = mesh.cells.len();
+    macro_rules! dvector_zeros {
+        ($n:expr) => {
+            DVector::from_column_slice(&vec![0.; $n])
+        };
+    }
+    let mut b_u = dvector_zeros!(cell_count);
+    let mut b_v = dvector_zeros!(cell_count);
+    let mut b_w = dvector_zeros!(cell_count);
+    build_momentum_advection_matrices(
+        &mut a_u,
+        &mut a_v,
+        &mut a_w,
+        &mut b_u,
+        &mut b_v,
+        &mut b_w,
+        &a_di,
+        &mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        settings.momentum,
+        settings.velocity_interpolation,
+        settings.pressure_interpolation,
+        settings.gradient_reconstruction,
+        rho,
+    );
+    for (filename, interpolation_method) in [
+        ("linear_face_velocities", VelocityInterpolation::Linear),
+        (
+            "linear_weighted_face_velocities",
+            VelocityInterpolation::LinearWeighted,
+        ),
+        ("rhie_chow_face_velocities", VelocityInterpolation::RhieChow),
+    ] {
+        let mut file = File::create(format!("./examples/{filename}.csv")).unwrap();
+        for face_index in 0..mesh.faces.len() {
+            let face_vel = get_face_velocity(
+                &mesh,
+                &u,
+                &v,
+                &w,
+                face_index,
+                VelocityInterpolation::LinearWeighted,
+            );
+            let cell_index = mesh.faces[face_index].cell_indices[0];
+            writeln!(
+                file,
+                "{}\t{}\t{}",
+                face_index, &mesh.faces[face_index].centroid, face_vel
+            )
+            .unwrap();
+        }
+    }
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
@@ -246,7 +315,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         print!("channel_flow flow validation failed.");
     }
     println!(" U_mean = {u_avg:.2e}; U_mean_analytical = {u_avg_analytical:.2e}");
-    println!(" U_max = {:.2e} = {:.1e}U_mean", u_max, u_max / u_avg);
+    println!(" U_max/U_mean = {:.2e}", u_max / u_avg);
 }
 
 fn main() {
@@ -320,8 +389,11 @@ fn test_2d(iteration_count: Uint) {
 
     mesh.get_face_zone("TOP").zone_type = FaceConditionTypes::Wall;
 
-    let (face_min_actual, face_max_actual) =
-        mesh.faces.iter().enumerate().fold((face_max, face_min), |acc, (_, f)| {
+    let (face_min_actual, face_max_actual) = mesh
+        .faces
+        .iter()
+        .enumerate()
+        .fold((face_max, face_min), |acc, (_, f)| {
             (Float::min(acc.0, f.area), Float::max(acc.1, f.area))
         });
     const AREA_TOL: Float = 0.001;
