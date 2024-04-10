@@ -213,33 +213,6 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         settings.gradient_reconstruction,
         rho,
     );
-    for (filename, interpolation_method) in [
-        ("linear_face_velocities", VelocityInterpolation::Linear),
-        (
-            "linear_weighted_face_velocities",
-            VelocityInterpolation::LinearWeighted,
-        ),
-        ("rhie_chow_face_velocities", VelocityInterpolation::RhieChow),
-    ] {
-        let mut file = File::create(format!("./examples/{filename}.csv")).unwrap();
-        for face_index in 0..mesh.faces.len() {
-            let face_vel = get_face_velocity(
-                &mesh,
-                &u,
-                &v,
-                &w,
-                face_index,
-                VelocityInterpolation::LinearWeighted,
-            );
-            let cell_index = mesh.faces[face_index].cell_indices[0];
-            writeln!(
-                file,
-                "{}\t{}\t{}",
-                face_index, &mesh.faces[face_index].centroid, face_vel
-            )
-            .unwrap();
-        }
-    }
 
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
