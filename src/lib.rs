@@ -107,6 +107,14 @@ pub mod settings {
     pub const TVD_LUD: MomentumDiscretization = MomentumDiscretization::TVD(|r| r);
     pub const TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
     pub const TVD_QUICK: MomentumDiscretization = MomentumDiscretization::TVD(|r| (3. + r) / 4.);
+    pub const TVD_UMIST: MomentumDiscretization = MomentumDiscretization::TVD(|r| {
+        Float::max(
+            0.,
+            [2. * r, (1. + 3. * r) / 4., (3. + r) / 4., 2.]
+                .iter()
+                .fold(Float::INFINITY, |acc, &n| acc.min(n)),
+        )
+    });
 
     #[derive(Copy, Clone)]
     pub enum DiffusionScheme {
