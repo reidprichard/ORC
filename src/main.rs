@@ -123,8 +123,8 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
         momentum: MomentumDiscretization::CD1,
-        pressure_interpolation: PressureInterpolation::LinearWeighted,
-        velocity_interpolation: VelocityInterpolation::LinearWeighted,
+        pressure_interpolation: PressureInterpolation::SecondOrder,
+        velocity_interpolation: VelocityInterpolation::RhieChow,
         ..NumericalSettings::default()
     };
 
@@ -200,9 +200,10 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
-        momentum: MomentumDiscretization::UD,
+        momentum: TVD_UMIST,
         pressure_interpolation: PressureInterpolation::LinearWeighted,
         velocity_interpolation: VelocityInterpolation::LinearWeighted,
+        gradient_reconstruction: GradientReconstructionMethods::LeastSquares,
         ..NumericalSettings::default()
     };
 
