@@ -73,8 +73,8 @@ pub fn build_momentum_diffusion_matrix(
                     // Diffusion coefficient
                     // TODO: Add source term contribution to diffusion since there's no cell on the other side
                     let d_i: Float = mu * face.area / (face.centroid - cell.centroid).norm();
-                    (d_i, usize::MAX);
-                    panic!("untested");
+                    println!("WARNING: VelocityInlet not finished.");
+                    (d_i, usize::MAX)
                 }
                 FaceConditionTypes::Interior => {
                     let mut neighbor_cell_index: usize = face.cell_indices[0];
