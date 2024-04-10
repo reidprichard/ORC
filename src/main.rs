@@ -116,7 +116,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
-    let mu = 10.;
+    let mu = 0.1;
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
@@ -145,9 +145,9 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         // What is causing the solution to oscillate?
         pressure_relaxation: 0.02,
         matrix_solver: MatrixSolverSettings::default(),
-        momentum: MomentumDiscretization::UD,
+        momentum: TVD_UMIST,
         pressure_interpolation: PressureInterpolation::SecondOrder,
-        velocity_interpolation: VelocityInterpolation::Linear,
+        velocity_interpolation: VelocityInterpolation::RhieChow,
         gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
             GreenGaussVariants::CellBased,
         ),
@@ -253,7 +253,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         print!("channel_flow flow validation failed.");
     }
     println!(" U_mean = {u_avg:.2e}; U_mean_analytical = {u_avg_analytical:.2e}");
-    println!(" U_max/U_mean = {:.2e}", u_max / u_avg);
+    println!(" U_max/U_mean = {:.2}", u_max / u_avg);
 }
 
 fn main() {
