@@ -441,7 +441,7 @@ pub fn calculate_velocity_gradient(
                         w,
                         *face_index,
                         // NOTE: Is LinearWeighted sufficient?
-                        VelocityInterpolation::LinearWeighted,
+                        VelocityInterpolation::Linear,
                     );
                     acc + face_value.outer(
                         &(get_outward_face_normal(face, cell_index) * (face.area / cell.volume)),
@@ -537,7 +537,8 @@ pub fn calculate_pressure_gradient(
                         mesh,
                         p,
                         *face_index,
-                        PressureInterpolation::LinearWeighted,
+                        // TODO: Evaluate if this is sufficient
+                        PressureInterpolation::Linear,
                         gradient_scheme,
                     );
                     face_value
