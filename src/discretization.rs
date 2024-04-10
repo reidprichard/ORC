@@ -21,10 +21,10 @@ macro_rules! get_normal_momentum_coefficient {
 
 macro_rules! get_face_normal_momentum_coefficient {
     ($i: expr, $j: expr, $a_u: expr, $a_v: expr, $a_w: expr, $n: expr) => {
-        Vector {
-            x: 0.5 * ($a_u.get($i, $i) + $a_u.get($j, $j)) * $n.x,
-            y: 0.5 * ($a_v.get($i, $i) + $a_v.get($j, $j)) * $n.y,
-            z: 0.5 * ($a_w.get($i, $i) + $a_w.get($j, $j)) * $n.z,
+        0.5 * Vector {
+            x: ($a_u.get($i, $i) + $a_u.get($j, $j)) * $n.x,
+            y: ($a_v.get($i, $i) + $a_v.get($j, $j)) * $n.y,
+            z: ($a_w.get($i, $i) + $a_w.get($j, $j)) * $n.z,
         }
         .norm()
     };
