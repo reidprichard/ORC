@@ -1,4 +1,4 @@
-use crate::nalgebra::{dvector_zeros, GetEntry};
+use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
 use ahash::{HashSet, RandomState};
@@ -61,130 +61,33 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
     CsrMatrix::from(&restriction_matrix_coo)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn multigrid_solve(
-    a: &CsrMatrix<Float>,
-    r: &DVector<Float>,
-    multigrid_level: Uint,
-    max_levels: Uint,
-    smooth_method: SolutionMethod,
-    smooth_iter_count: Uint,
-    smooth_relaxation: Float,
-    smooth_convergence_threshold: Float,
-    restriction_method: RestrictionMethods,
-    preconditioner: PreconditionMethod,
-) -> DVector<Float> {
-    // 1. Build restriction matrix R
-    // 5. If multigrid_level < max_level, recurse
-    let restriction_matrix = build_restriction_matrix(a, restriction_method);
-    // 2. Restrict r to r'
-    let r_prime = &restriction_matrix * r;
-    // 3. Create a' = R * a * R.⊺
-    let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
-    // 4. Solve a' * e' = r'
-    let mut e_prime: DVector<Float> = dvector_zeros!(a_prime.ncols());
-    iterative_solve(
-        &a_prime,
-        &r_prime,
-        &mut e_prime,
-        smooth_iter_count,
-        smooth_method,
-        smooth_relaxation,
-        smooth_convergence_threshold,
-        preconditioner,
-    );
-    let error_magnitude = (&r_prime - &a_prime * &e_prime).norm();
-    trace!(
-        "Multigrid level {}: |e| = {:.2e}",
-        multigrid_level,
-        error_magnitude
-    );
-    if error_magnitude.is_nan() {
-        panic!("Multigrid diverged");
-    }
-
-    // 5. Recurse to max desired coarsening level
-    // Only coarsen if the matrix is bigger than 16x16 because come on
-    if multigrid_level < max_levels && a_prime.nrows() > 16 {
-        e_prime += multigrid_solve(
-            &a_prime,
-            &r_prime,
-            multigrid_level + 1,
-            max_levels,
-            smooth_method,
-            smooth_iter_count,
-            smooth_relaxation,
-            smooth_convergence_threshold,
-            restriction_method,
-            preconditioner,
-        );
-        // Smooth after incorporating corrections from coarser grid
-        iterative_solve(
-            &a_prime,
-            &r_prime,
-            &mut e_prime,
-            smooth_iter_count,
-            smooth_method,
-            smooth_relaxation,
-            smooth_convergence_threshold / 10.,
-            preconditioner,
-        );
-        trace!(
-            "Multigrid level {}: |e| = {:.2e}",
-            multigrid_level,
-            (&r_prime - &a_prime * &e_prime).norm() // e_prime.norm()
-        );
-    }
-    // Prolong correction vector
-    &restriction_matrix.transpose() * e_prime
-}
 
 #[allow(clippy::too_many_arguments, unreachable_patterns)]
 pub fn iterative_solve(
     a: &CsrMatrix<Float>,
     b: &DVector<Float>,
     solution_vector: &mut DVector<Float>,
-    iteration_count: Uint,
-    method: SolutionMethod,
-    relaxation_factor: Float,
-    convergence_threshold: Float,
-    preconditioner: PreconditionMethod,
 ) {
-    // Surely there is a better way to do this...
-    let a_tmp: CsrMatrix<Float>;
-    let b_tmp: DVector<Float>;
-    let (a_preconditioned, b_preconditioned) = match preconditioner {
-        PreconditionMethod::None => (a, b),
-        PreconditionMethod::Jacobi => {
-            let mut p_inv = a.diagonal_as_csr();
-            p_inv
-                .triplet_iter_mut()
-                .for_each(|(_i, _j, v)| *v = 1. / *v);
-            a_tmp = &p_inv * a;
-            b_tmp = &p_inv * b;
-            (&a_tmp, &b_tmp)
-        }
-    };
-
-    let mut initial_residual: Float = 0.;
+    let method = SolutionMethod::BiCGSTAB;
+    let relaxation_factor = 0.5;
     match method {
         SolutionMethod::Jacobi => {
-            let mut a_prime = a_preconditioned.clone();
+            let mut a_prime = a.clone();
             a_prime.triplet_iter_mut().for_each(|(i, j, v)| {
                 *v = if i == j {
                     0.
                 } else {
-                    *v / a_preconditioned.get(i, i)
+                    *v / a.get(i, i)
                 }
             });
             let b_prime: DVector<Float> = DVector::from_iterator(
-                b_preconditioned.nrows(),
-                b_preconditioned
+                b.nrows(),
+                b
                     .iter()
                     .enumerate()
-                    .map(|(i, v)| *v / a_preconditioned.get(i, i)),
+                    .map(|(i, v)| *v / a.get(i, i)),
             );
-            for iter_num in 0..iteration_count {
+            for iter_num in 0..50 {
                 // if log_enabled!(log::Level::Trace) {
                 //     trace!("\nJacobi iteration {iter_num} = {solution_vector:?}");
                 // }
@@ -197,57 +100,21 @@ pub fn iterative_solve(
                 // turns this into Gauss-Seidel
                 *solution_vector = relaxation_factor * (&b_prime - &a_prime * &*solution_vector)
                     + &*solution_vector * (1. - relaxation_factor);
-
-                let r = (b_preconditioned - a_preconditioned * &*solution_vector).norm();
-                if iter_num == 1 {
-                    initial_residual = r;
-                } else if r / initial_residual < convergence_threshold {
-                    info!("Converged in {} iters", iter_num);
-                    break;
-                }
             }
-        }
-        SolutionMethod::GaussSeidel => {
-            for _iter_num in 0..iteration_count {
-                // if log_enabled!(log::Level::Trace) {
-                //     println!("Gauss-Seidel iteration {iter_num} = {solution_vector:?}");
-                // }
-                for i in 0..a_preconditioned.nrows() {
-                    solution_vector[i] = solution_vector[i] * (1. - relaxation_factor)
-                        + relaxation_factor
-                            * (b_preconditioned[i]
-                                - solution_vector
-                                    .iter() // par_iter is slower here with 1k cells; might be worth it with more cells
-                                    .enumerate()
-                                    .map(|(j, x)| {
-                                        if i != j {
-                                            a_preconditioned.get(i, j) * x
-                                        } else {
-                                            0.
-                                        }
-                                    })
-                                    .sum::<Float>())
-                            / a_preconditioned.get(i, i);
-                    if solution_vector[i].is_nan() {
-                        panic!("****** Solution diverged ******");
-                    }
-                }
-            }
-            panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::BiCGSTAB => {
             // TODO: Optimize this
-            let mut r = b_preconditioned - a_preconditioned * &*solution_vector;
+            let mut r = b - a * &*solution_vector;
             // TODO: Set search direction more intelligently
             let r_hat_0 = DVector::from_column_slice(&vec![1.; r.nrows()]);
             let mut rho = r.dot(&r_hat_0);
             let mut p = r.clone();
-            for _iter_num in 0..iteration_count {
-                let nu: DVector<Float> = a_preconditioned * &p;
+            for _iter_num in 0..50 {
+                let nu: DVector<Float> = a * &p;
                 let alpha: Float = rho / r_hat_0.dot(&nu);
                 let h: DVector<Float> = &*solution_vector + alpha * &p;
                 let s: DVector<Float> = &r - alpha * &nu;
-                let t: DVector<Float> = a_preconditioned * &s;
+                let t: DVector<Float> = a * &s;
                 let omega: Float = t.dot(&s) / t.dot(&t);
                 *solution_vector = &h + omega * &s;
                 r = &s - omega * &t;
@@ -256,33 +123,6 @@ pub fn iterative_solve(
                 let beta: Float = rho / rho_prev * alpha / omega;
                 p = &r + beta * (p - omega * &nu);
             }
-        }
-        SolutionMethod::Multigrid => {
-            // It seems that too many coarsening levels can cause stability issues.
-            // I wonder if this is why Fluent has more complex AMG cycles.
-            iterative_solve(
-                a_preconditioned,
-                b_preconditioned,
-                solution_vector,
-                iteration_count,
-                MULTIGRID_SMOOTHER,
-                relaxation_factor,
-                convergence_threshold,
-                preconditioner,
-            );
-            let r = b_preconditioned - a_preconditioned * &*solution_vector;
-            *solution_vector += multigrid_solve(
-                a_preconditioned,
-                &r,
-                1,
-                MULTIGRID_COARSENING_LEVELS,
-                MULTIGRID_SMOOTHER,
-                iteration_count,
-                relaxation_factor,
-                convergence_threshold,
-                RestrictionMethods::Strongest,
-                preconditioner,
-            );
         }
         _ => panic!("unsupported solution method"),
     }

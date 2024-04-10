@@ -3,7 +3,7 @@ use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
 use crate::settings::*;
 use crate::solver::{
-    calculate_velocity_gradient, get_face_flux, get_face_pressure, get_velocity_source_term,
+    get_face_flux, get_face_pressure, get_velocity_source_term,
 };
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix, SparseEntryMut::*};
@@ -35,13 +35,8 @@ pub(crate) use get_normal_momentum_coefficient;
 
 pub fn build_momentum_diffusion_matrix(
     mesh: &Mesh,
-    diffusion_scheme: DiffusionScheme,
     mu: Float,
 ) -> CsrMatrix<Float> {
-    if !matches!(diffusion_scheme, DiffusionScheme::CD) {
-        panic!("unsupported diffusion scheme");
-    }
-
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
 
@@ -134,10 +129,6 @@ pub fn build_momentum_advection_matrices(
     v: &DVector<Float>,
     w: &DVector<Float>,
     p: &DVector<Float>,
-    momentum_discretization: MomentumDiscretization,
-    velocity_interpolation: VelocityInterpolation,
-    pressure_interpolation: PressureInterpolation,
-    gradient_scheme: GradientReconstructionMethods,
     rho: Float,
 ) {
     // Iterate over all cells in the mesh
@@ -177,11 +168,6 @@ pub fn build_momentum_advection_matrices(
                 p,
                 *face_index,
                 cell_index,
-                velocity_interpolation,
-                gradient_scheme,
-                a_u,
-                a_v,
-                a_w,
             );
             // TODO: Consider flipping convention of face normal direction and/or potentially
             // make it an area vector
@@ -192,8 +178,6 @@ pub fn build_momentum_advection_matrices(
                 mesh,
                 p,
                 *face_index,
-                pressure_interpolation,
-                gradient_scheme,
             );
             let neighbor_cell_index = if face.cell_indices.len() == 1 {
                 usize::MAX
@@ -207,82 +191,7 @@ pub fn build_momentum_advection_matrices(
                 face.cell_indices[0]
             };
 
-            let a_nb: Vector3 = match momentum_discretization {
-                MomentumDiscretization::UD => {
-                    // Neighbor only affects this cell if flux is into this
-                    // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
-                    let a_nb = Float::min(f_i, 0.);
-                    Vector3 {
-                        x: a_nb,
-                        y: a_nb,
-                        z: a_nb,
-                    }
-                }
-                MomentumDiscretization::CD1 => {
-                    // Neighbor only affects this cell if flux is into this
-                    // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
-                    let a_nb = f_i / 2.;
-                    Vector3 {
-                        x: a_nb,
-                        y: a_nb,
-                        z: a_nb,
-                    }
-                }
-                MomentumDiscretization::TVD(psi) => {
-                    // NOTE: On boundary, use UD
-                    // TODO: Consider strategy here
-                    if neighbor_cell_index == usize::MAX {
-                        let a_nb = Float::min(f_i, 0.);
-                        Vector3 {
-                            x: a_nb,
-                            y: a_nb,
-                            z: a_nb,
-                        }
-                    } else {
-                        // TODO: Consider directly representing gradient term in solution matrices
-                        // Green-Gauss face values are a function of neighboring cell values, so they can be
-                        // represented in the matrix
-                        let cell_velocity_gradient =
-                            calculate_velocity_gradient(mesh, u, v, w, cell_index, gradient_scheme);
-
-                        let downstream_cell = if f_i > 0. {
-                            neighbor_cell_index
-                        } else {
-                            cell_index
-                        };
-                        let downstream_velocity = Vector3 {
-                            x: u[downstream_cell],
-                            y: v[downstream_cell],
-                            z: w[downstream_cell],
-                        };
-                        let velocity = Vector3 {
-                            x: u[cell_index],
-                            y: v[cell_index],
-                            z: w[cell_index],
-                        };
-                        if (downstream_velocity - velocity).norm() == 0. {
-                            let a_nb = Float::min(f_i, 0.);
-                            Vector3 {
-                                x: a_nb,
-                                y: a_nb,
-                                z: a_nb,
-                            }
-                        } else {
-                            let r_pa = mesh.cells[neighbor_cell_index].centroid
-                                - mesh.cells[cell_index].centroid;
-                            let r = 2. * cell_velocity_gradient.inner(&r_pa)
-                                / (downstream_velocity - velocity)
-                                - 1.;
-                            f_i * Vector3 {
-                                x: psi(r.x),
-                                y: psi(r.y),
-                                z: psi(r.z),
-                            } / 2.
-                        }
-                    }
-                }
-                _ => panic!("unsupported momentum scheme"),
-            };
+            let a_nb: Vector3 = Float::min(f_i, 0.) * Vector3::ones();
 
             a_p += -a_nb + f_i;
             s_u += (-outward_face_normal) * face_pressure * face.area;
@@ -351,7 +260,6 @@ pub fn build_pressure_correction_matrices(
     a_u: &CsrMatrix<Float>,
     a_v: &CsrMatrix<Float>,
     a_w: &CsrMatrix<Float>,
-    numerical_settings: &NumericalSettings,
     rho: Float,
 ) -> LinearSystem {
     let cell_count = mesh.cells.len();
@@ -374,11 +282,6 @@ pub fn build_pressure_correction_matrices(
                 p,
                 *face_index,
                 cell_index,
-                numerical_settings.velocity_interpolation,
-                numerical_settings.gradient_reconstruction,
-                a_u,
-                a_v,
-                a_w,
             );
             let inward_face_normal = get_inward_face_normal(face, cell_index);
             // The net mass flow rate through this face into this cell
