@@ -206,26 +206,41 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
 
 def plot_face_velocities(filenames: list[str], save:bool=False):
     fig, axs = plt.subplots(nrows=len(filenames), layout="constrained", sharex=True,sharey=True)
-    for ax, fname in zip(axs, filenames):
-        x = []
-        y = []
-        u = []
-        v = []
+    x:list[list[float]] = []
+    y:list[list[float]] = []
+    u:list[list[float]] = []
+    v:list[list[float]] = []
+    for fname in filenames:
+        x.append([])
+        y.append([])
+        u.append([])
+        v.append([])
         with open(fname, "r") as f:
             lines = f.readlines()
             for line in lines:
                 if len(line.strip())==0:
                     continue
-                i, centroid, vel = line.split("\t")
-                xi, yi = centroid[1:-1].split(",")[:-1]
-                x.append(float(xi.strip()))
-                y.append(float(yi.strip()))
-                ui, vi = vel[1:-1].split(",")[:-1]
-                u.append(float(ui.strip()))
-                v.append(float(vi.strip()))
-        ax.contourf(*interpolate_to_grid(x,y,u))
-        ax.quiver(x, y, u, v)
+                _, centroid, vel = line.split("\t")
+                x_str, y_str = centroid[1:-1].split(",")[:-1]
+                x[-1].append(float(x_str.strip()))
+                y[-1].append(float(y_str.strip()))
+                u_str, v_str = vel[1:-1].split(",")[:-1]
+                u[-1].append(float(u_str.strip()))
+                v[-1].append(float(v_str.strip()))
+
+    nested_max = lambda l : max([max(i) for i in l])
+    nested_min = lambda l : min([min(i) for i in l])
+    
+    u_min, u_max = nested_min(u), nested_max(u)
+    v_min, v_max = nested_min(v), nested_max(v)
+
+    arrow_scale = (u_max**2 + v_max**2)**(1/2) * 30
+
+    for (ax, xi, yi, ui, vi) in zip(axs, x, y, u, v):
+        cm = ax.contourf(*interpolate_to_grid(xi,yi,ui), levels=np.linspace(u_min, u_max, 10))
+        ax.quiver(xi, yi, ui, vi, scale=arrow_scale, scale_units="width", width=0.002)
         ax.set_title(fname.split('/')[-1].split('\\')[-1])
+    fig.colorbar(cm)
     if save:
         fig.savefig("./examples/face_velocities.png", dpi=300)
 
