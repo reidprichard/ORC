@@ -9,7 +9,7 @@ unstructured grids with the following numerical schemes and details:
 - Co-located grid
 - Algebraic multigrid solver with BiCGSTAB, Jacobi, or Gauss-Seidel smoothing (GMRES will be evaluated)
 - Pressure-velocity coupling: SIMPLE (coupled solver may be added later)
-- Momentum discretization: UD, CD, LUD, QUICK (bounded higher-order schemes will be added)
+- Momentum discretization: UD, CD, LUD, QUICK, UMIST, or any arbitrary TVD flux limiter scheme.
 - Gradient reconstruction: Green-Gauss cell-based (least squares may be added)
 - Pressure interpolation: linear and second-order
 - Velocity interpolation: linear and Rhie-Chow distance-based
