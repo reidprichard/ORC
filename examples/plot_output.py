@@ -129,7 +129,7 @@ def interpolate_to_grid(x_list, y_list, z_list, n_x=200, n_y=200):
     return (x_grid, y_grid, z_grid)
 
 
-def plot_2d(root: str, plot_title: str | None = None):
+def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
     MU = 0.1
     DP = -10
     DX = 0.002
@@ -186,7 +186,8 @@ def plot_2d(root: str, plot_title: str | None = None):
     axs[1].ticklabel_format(style="scientific", scilimits=(0, 0))
 
     fig.colorbar(cm, label="Velocity gradient [1/s]")
-    # fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
+    if save:
+        fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
     fig, ax = plt.subplots()
@@ -199,12 +200,11 @@ def plot_2d(root: str, plot_title: str | None = None):
     ax.scatter(y, u)
     ax.set_xlabel("Y [m]")
     ax.set_ylabel("U [m/s]")
-    # fig.savefig("./examples/channel_flow_velocity_profile.png", dpi=300)
+    if save:
+        fig.savefig("./examples/channel_flow_velocity_profile.png", dpi=300)
 
-    tile_all_matplotlib_figures()
 
-
-def plot_face_velocities(filenames: list[str]):
+def plot_face_velocities(filenames: list[str], save:bool=False):
     fig, axs = plt.subplots(nrows=len(filenames), layout="constrained", sharex=True,sharey=True)
     for ax, fname in zip(axs, filenames):
         x = []
@@ -226,17 +226,18 @@ def plot_face_velocities(filenames: list[str]):
         ax.contourf(*interpolate_to_grid(x,y,u))
         ax.quiver(x, y, u, v)
         ax.set_title(fname.split('/')[-1].split('\\')[-1])
-        # ax.colorbar()
-    plt.show()
-
+    if save:
+        fig.savefig("./examples/face_velocities.png", dpi=300)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="CfdPlotter", description="Plots solution fields of CFD data")
     parser.add_argument("data_file_base", default=None, nargs="?")
     parser.add_argument("-t", "--title", default=None)
     parser.add_argument("--face-velocity-files", "-f", default=None, nargs="+")
+    parser.add_argument("--save", action="store_true", default=False)
     args = parser.parse_args()
     if args.data_file_base is not None:
-        plot_2d(args.data_file_base, args.title)
+        plot_2d(args.data_file_base, args.title, args.save)
     if args.face_velocity_files is not None:
-        plot_face_velocities(args.face_velocity_files)
+        plot_face_velocities(args.face_velocity_files, args.save)
+    tile_all_matplotlib_figures()
