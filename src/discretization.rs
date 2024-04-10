@@ -3,7 +3,7 @@ use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
 use crate::settings::*;
 use crate::solver::{
-    calculate_velocity_gradient, get_face_flux, get_face_pressure, get_velocity_source_term,
+    calculate_velocity_gradient, get_face_flux, get_face_pressure, get_momentum_source_term,
 };
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix, SparseEntryMut::*};
@@ -156,7 +156,7 @@ pub fn build_momentum_advection_matrices(
         // <sum of convection/diffusion of momentum into cell> = <momentum source>
 
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
-        let mut s_u = get_velocity_source_term(cell.centroid); // general source term
+        let mut s_u = get_momentum_source_term(cell.centroid); // general source term
         let s_u_dc = Vector3::zero(); // deferred correction source term TODO
         let s_d_cross = Vector3::zero(); // cross diffusion source term TODO
 

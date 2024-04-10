@@ -71,11 +71,7 @@ pub fn solve_steady(
                     w,
                     p,
                     numerical_settings.momentum,
-                    if iter_number > 10 {
-                        numerical_settings.velocity_interpolation
-                    } else {
-                        VelocityInterpolation::LinearWeighted
-                    },
+                    numerical_settings.velocity_interpolation,
                     numerical_settings.pressure_interpolation,
                     numerical_settings.gradient_reconstruction,
                     rho,
@@ -95,95 +91,45 @@ pub fn solve_steady(
                     debug!("{}", linear_system_to_string(&a_w, &b_w));
                 }
 
-                if !log_enabled!(log::Level::Trace) {
-                    thread::scope(|s| {
-                        s.spawn(|| {
-                            trace!("solving u");
-                            iterative_solve(
-                                &a_u,
-                                &b_u,
-                                u,
-                                numerical_settings.matrix_solver.iterations,
-                                numerical_settings.matrix_solver.solver_type,
-                                numerical_settings.matrix_solver.relaxation,
-                                numerical_settings
-                                    .matrix_solver
-                                    .relative_convergence_threshold,
-                                numerical_settings.matrix_solver.preconditioner,
-                            );
-                        });
-                        s.spawn(|| {
-                            trace!("solving v");
-                            iterative_solve(
-                                &a_v,
-                                &b_v,
-                                v,
-                                numerical_settings.matrix_solver.iterations,
-                                numerical_settings.matrix_solver.solver_type,
-                                numerical_settings.matrix_solver.relaxation,
-                                numerical_settings
-                                    .matrix_solver
-                                    .relative_convergence_threshold,
-                                numerical_settings.matrix_solver.preconditioner,
-                            );
-                        });
-                        s.spawn(|| {
-                            trace!("solving w");
-                            iterative_solve(
-                                &a_w,
-                                &b_w,
-                                w,
-                                numerical_settings.matrix_solver.iterations,
-                                numerical_settings.matrix_solver.solver_type,
-                                numerical_settings.matrix_solver.relaxation,
-                                numerical_settings
-                                    .matrix_solver
-                                    .relative_convergence_threshold,
-                                numerical_settings.matrix_solver.preconditioner,
-                            );
-                        });
-                    });
-                } else {
-                    trace!("solving u");
-                    iterative_solve(
-                        &a_u,
-                        &b_u,
-                        u,
-                        numerical_settings.matrix_solver.iterations,
-                        numerical_settings.matrix_solver.solver_type,
-                        numerical_settings.matrix_solver.relaxation,
-                        numerical_settings
-                            .matrix_solver
-                            .relative_convergence_threshold,
-                        numerical_settings.matrix_solver.preconditioner,
-                    );
-                    trace!("solving v");
-                    iterative_solve(
-                        &a_v,
-                        &b_v,
-                        v,
-                        numerical_settings.matrix_solver.iterations,
-                        numerical_settings.matrix_solver.solver_type,
-                        numerical_settings.matrix_solver.relaxation,
-                        numerical_settings
-                            .matrix_solver
-                            .relative_convergence_threshold,
-                        numerical_settings.matrix_solver.preconditioner,
-                    );
-                    trace!("solving w");
-                    iterative_solve(
-                        &a_w,
-                        &b_w,
-                        w,
-                        numerical_settings.matrix_solver.iterations,
-                        numerical_settings.matrix_solver.solver_type,
-                        numerical_settings.matrix_solver.relaxation,
-                        numerical_settings
-                            .matrix_solver
-                            .relative_convergence_threshold,
-                        numerical_settings.matrix_solver.preconditioner,
-                    );
-                }
+                trace!("solving u");
+                iterative_solve(
+                    &a_u,
+                    &b_u,
+                    u,
+                    numerical_settings.matrix_solver.iterations,
+                    numerical_settings.matrix_solver.solver_type,
+                    numerical_settings.matrix_solver.relaxation,
+                    numerical_settings
+                        .matrix_solver
+                        .relative_convergence_threshold,
+                    numerical_settings.matrix_solver.preconditioner,
+                );
+                trace!("solving v");
+                iterative_solve(
+                    &a_v,
+                    &b_v,
+                    v,
+                    numerical_settings.matrix_solver.iterations,
+                    numerical_settings.matrix_solver.solver_type,
+                    numerical_settings.matrix_solver.relaxation,
+                    numerical_settings
+                        .matrix_solver
+                        .relative_convergence_threshold,
+                    numerical_settings.matrix_solver.preconditioner,
+                );
+                trace!("solving w");
+                iterative_solve(
+                    &a_w,
+                    &b_w,
+                    w,
+                    numerical_settings.matrix_solver.iterations,
+                    numerical_settings.matrix_solver.solver_type,
+                    numerical_settings.matrix_solver.relaxation,
+                    numerical_settings
+                        .matrix_solver
+                        .relative_convergence_threshold,
+                    numerical_settings.matrix_solver.preconditioner,
+                );
                 let pressure_correction_matrices = build_pressure_correction_matrices(
                     mesh,
                     u,
@@ -439,38 +385,38 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
     println!("Done!");
 }
 
-pub fn get_velocity_source_term(_location: Vector3) -> Vector3 {
+pub fn get_momentum_source_term(_location: Vector3) -> Vector3 {
     // TODO!!!
     Vector3::zero()
 }
 
 fn check_boundary_conditions(mesh: &Mesh) {
     // TODO: get angle between vectors rather than using tols
-    // for face_zone in mesh.face_zones.values() {
-    //     match face_zone.zone_type {
-    //         FaceConditionTypes::Wall => {
-    //             for face_index in 0..mesh.faces.len() {
-    //                 let face = &mesh.faces[face_index];
-    //                 if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
-    //                     panic!("Wall velocity must be tangent to faces in zone.");
-    //                 }
-    //             }
-    //         }
-    //         FaceConditionTypes::VelocityInlet => {
-    //             for face_index in 0..mesh.faces.len() {
-    //                 let face = &mesh.faces[face_index];
-    //                 if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
-    //                     panic!("VelocityInlet velocity must not be tangent to faces in zone.");
-    //                 }
-    //             }
-    //         }
-    //         _ => {
-    //             // TODO: Handle other zone types. Could check if scalar_value/vector_value are
-    //             // set/not set appropriately, could check if system is overdefined/underdefined,
-    //             // etc.
-    //         }
-    //     }
-    // }
+    for face_zone in mesh.face_zones.values() {
+        match face_zone.zone_type {
+            FaceConditionTypes::Wall => {
+                for face_index in 0..mesh.faces.len() {
+                    let face = &mesh.faces[face_index];
+                    if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
+                        panic!("Wall velocity must be tangent to faces in zone.");
+                    }
+                }
+            }
+            FaceConditionTypes::VelocityInlet => {
+                for face_index in 0..mesh.faces.len() {
+                    let face = &mesh.faces[face_index];
+                    if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
+                        panic!("VelocityInlet velocity must not be tangent to faces in zone.");
+                    }
+                }
+            }
+            _ => {
+                // TODO: Handle other zone types. Could check if scalar_value/vector_value are
+                // set/not set appropriately, could check if system is overdefined/underdefined,
+                // etc.
+            }
+        }
+    }
 }
 
 // TODO: Find a clean way to integrate all of the `fn ____velocity____` and `fn ____pressure_____`
@@ -687,9 +633,7 @@ pub fn get_face_velocity(
                 z: w[neighbor_index],
             };
             match interpolation_scheme {
-                VelocityInterpolation::Linear => {
-                    (vel0 + vel1) / 2.
-                }
+                VelocityInterpolation::Linear => (vel0 + vel1) / 2.,
                 VelocityInterpolation::LinearWeighted => {
                     let dx0 = (mesh.cells[cell_index].centroid - face.centroid).norm();
                     let dx1 = (mesh.cells[neighbor_index].centroid - face.centroid).norm();
@@ -743,14 +687,16 @@ pub fn get_face_flux(
             ))
         }
         FaceConditionTypes::Interior => match interpolation_scheme {
-            VelocityInterpolation::Linear | VelocityInterpolation::LinearWeighted => outward_face_normal.dot(&get_face_velocity(
-                mesh,
-                u,
-                v,
-                w,
-                face_index,
-                interpolation_scheme,
-            )) * face.area,
+            VelocityInterpolation::Linear | VelocityInterpolation::LinearWeighted => {
+                outward_face_normal.dot(&get_face_velocity(
+                    mesh,
+                    u,
+                    v,
+                    w,
+                    face_index,
+                    interpolation_scheme,
+                ))
+            }
             VelocityInterpolation::RhieChow => {
                 let mut neighbor_cell_index = face.cell_indices[0];
                 if neighbor_cell_index == cell_index {
@@ -795,7 +741,7 @@ pub fn get_face_flux(
                 let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
                     .dot(&cell_centroid_vector.unit());
                 let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
-                face_velocity_magnitude * face.area
+                face_velocity_magnitude
             }
             VelocityInterpolation::None => {
                 panic!("`None` VelocityInterpolation cannot be used for interior faces")
