@@ -1,5 +1,5 @@
 import argparse
-import matplotlib
+import matplotlib.colors
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 from matplotlib.figure import Figure
@@ -176,7 +176,8 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
     axs[0].set_ylabel("Y [m]")
 
     x2_interpolated, y2_interpolated, du_dy = interpolate_to_grid(x2, y2, velocity_gradient[:, 0, 1])  # type: ignore[call-overload]
-    cm = axs[1].contourf(x2_interpolated, y2_interpolated, du_dy, cmap="RdBu", levels=20)
+    norm = matplotlib.colors.TwoSlopeNorm(0)
+    cm = axs[1].contourf(x2_interpolated, y2_interpolated, du_dy, cmap="RdBu", levels=20, norm=norm)
     # dp_dx = interpolate_to_grid(x2, y2, pressure_gradient[:,0])[-1]
     # dp_dy = interpolate_to_grid(x2, y2, pressure_gradient[:,1])[-1]
     # axs[1].quiver(x2_interpolated, y2_interpolated, dp_dx, dp_dy)
