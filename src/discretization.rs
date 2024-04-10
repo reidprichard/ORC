@@ -229,6 +229,8 @@ pub fn build_momentum_advection_matrices(
                     }
                 }
                 MomentumDiscretization::TVD(psi) => {
+                    // NOTE: On boundary, use UD
+                    // TODO: Consider strategy here
                     if neighbor_cell_index == usize::MAX {
                         let a_nb = Float::min(f_i, 0.);
                         Vector3 {
