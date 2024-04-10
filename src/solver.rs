@@ -739,63 +739,65 @@ pub fn get_face_flux(
                                              // needed
             ))
         }
-        FaceConditionTypes::Interior => {
-            match interpolation_scheme {
-                VelocityInterpolation::LinearWeighted => outward_face_normal.dot(
-                    &get_face_velocity(mesh, u, v, w, face_index, interpolation_scheme),
-                ),
-                VelocityInterpolation::RhieChow => {
-                    let mut neighbor_cell_index = face.cell_indices[0];
-                    if neighbor_cell_index == cell_index {
-                        neighbor_cell_index = face.cell_indices[1];
-                    }
-                    let vel_i = Vector3 {
-                        x: u[cell_index],
-                        y: v[cell_index],
-                        z: w[cell_index],
-                    };
-                    let vel_j = Vector3 {
-                        x: u[neighbor_cell_index],
-                        y: v[neighbor_cell_index],
-                        z: w[neighbor_cell_index],
-                    };
-                    let cell_centroid_vector =
-                        mesh.cells[neighbor_cell_index].centroid - mesh.cells[cell_index].centroid;
-                    let a_i = get_normal_momentum_coefficient!(
-                        cell_index,
-                        a_u,
-                        a_v,
-                        a_w,
-                        &outward_face_normal
-                    );
-                    let a_j = get_normal_momentum_coefficient!(
-                        neighbor_cell_index,
-                        a_u,
-                        a_v,
-                        a_w,
-                        &outward_face_normal
-                    );
-                    let p_grad_i =
-                        calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
-                    let p_grad_j =
-                        calculate_pressure_gradient(mesh, p, neighbor_cell_index, gradient_scheme);
-                    let cell_vol_i = mesh.cells[cell_index].volume;
-                    let cell_vol_j = mesh.cells[neighbor_cell_index].volume;
+        FaceConditionTypes::Interior => match interpolation_scheme {
+            VelocityInterpolation::LinearWeighted => outward_face_normal.dot(&get_face_velocity(
+                mesh,
+                u,
+                v,
+                w,
+                face_index,
+                VelocityInterpolation::LinearWeighted,
+            )),
+            VelocityInterpolation::RhieChow => {
+                let mut neighbor_cell_index = face.cell_indices[0];
+                if neighbor_cell_index == cell_index {
+                    neighbor_cell_index = face.cell_indices[1];
+                }
+                let vel_i = Vector3 {
+                    x: u[cell_index],
+                    y: v[cell_index],
+                    z: w[cell_index],
+                };
+                let vel_j = Vector3 {
+                    x: u[neighbor_cell_index],
+                    y: v[neighbor_cell_index],
+                    z: w[neighbor_cell_index],
+                };
+                let cell_centroid_vector =
+                    mesh.cells[neighbor_cell_index].centroid - mesh.cells[cell_index].centroid;
+                let a_i = get_normal_momentum_coefficient!(
+                    cell_index,
+                    a_u,
+                    a_v,
+                    a_w,
+                    &outward_face_normal
+                );
+                let a_j = get_normal_momentum_coefficient!(
+                    neighbor_cell_index,
+                    a_u,
+                    a_v,
+                    a_w,
+                    &outward_face_normal
+                );
+                let p_grad_i = calculate_pressure_gradient(mesh, p, cell_index, gradient_scheme);
+                let p_grad_j =
+                    calculate_pressure_gradient(mesh, p, neighbor_cell_index, gradient_scheme);
+                let cell_vol_i = mesh.cells[cell_index].volume;
+                let cell_vol_j = mesh.cells[neighbor_cell_index].volume;
 
-                    let term_1 = (vel_i + vel_j).dot(&outward_face_normal);
-                    let term_2 = (cell_vol_i / a_i + cell_vol_j / a_j)
-                        * (p[cell_index] - p[neighbor_cell_index])
-                        / cell_centroid_vector.norm();
-                    let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
-                        .dot(&cell_centroid_vector.unit());
-                    let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
-                    face_velocity_magnitude * face.area
-                }
-                VelocityInterpolation::None => {
-                    panic!("`None` VelocityInterpolation cannot be used for interior faces")
-                }
+                let term_1 = (vel_i + vel_j).dot(&outward_face_normal);
+                let term_2 = (cell_vol_i / a_i + cell_vol_j / a_j)
+                    * (p[cell_index] - p[neighbor_cell_index])
+                    / cell_centroid_vector.norm();
+                let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
+                    .dot(&cell_centroid_vector.unit());
+                let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
+                face_velocity_magnitude * face.area
             }
-        }
+            VelocityInterpolation::None => {
+                panic!("`None` VelocityInterpolation cannot be used for interior faces")
+            }
+        },
         _ => panic!("unsupported face zone type"),
     }
 }
