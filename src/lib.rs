@@ -133,6 +133,8 @@ pub mod settings {
 
     #[derive(Copy, Clone)]
     pub enum VelocityInterpolation {
+        // Arithmetic mean
+        Linear,
         // Distance-weighted average
         LinearWeighted,
         // Rhie-Chow is expensive! And it seems to be causing bad unphysical oscillations.
@@ -151,6 +153,7 @@ pub mod settings {
     #[derive(Copy, Clone)]
     pub enum GradientReconstructionMethods {
         GreenGauss(GreenGaussVariants),
+        // WARNING: Seems to be causing some unphysical pressure oscillations near the wall
         LeastSquares,
         // For internal use only! Designates a function call where it is known that gradient
         // reconstruction will not be needed

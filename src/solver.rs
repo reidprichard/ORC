@@ -445,31 +445,32 @@ pub fn get_velocity_source_term(_location: Vector3) -> Vector3 {
 }
 
 fn check_boundary_conditions(mesh: &Mesh) {
-    for face_zone in mesh.face_zones.values() {
-        match face_zone.zone_type {
-            FaceConditionTypes::Wall => {
-                for face_index in 0..mesh.faces.len() {
-                    let face = &mesh.faces[face_index];
-                    if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
-                        panic!("Wall velocity must be tangent to faces in zone.");
-                    }
-                }
-            }
-            FaceConditionTypes::VelocityInlet => {
-                for face_index in 0..mesh.faces.len() {
-                    let face = &mesh.faces[face_index];
-                    if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
-                        panic!("VelocityInlet velocity must not be tangent to faces in zone.");
-                    }
-                }
-            }
-            _ => {
-                // TODO: Handle other zone types. Could check if scalar_value/vector_value are
-                // set/not set appropriately, could check if system is overdefined/underdefined,
-                // etc.
-            }
-        }
-    }
+    // TODO: get angle between vectors rather than using tols
+    // for face_zone in mesh.face_zones.values() {
+    //     match face_zone.zone_type {
+    //         FaceConditionTypes::Wall => {
+    //             for face_index in 0..mesh.faces.len() {
+    //                 let face = &mesh.faces[face_index];
+    //                 if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
+    //                     panic!("Wall velocity must be tangent to faces in zone.");
+    //                 }
+    //             }
+    //         }
+    //         FaceConditionTypes::VelocityInlet => {
+    //             for face_index in 0..mesh.faces.len() {
+    //                 let face = &mesh.faces[face_index];
+    //                 if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
+    //                     panic!("VelocityInlet velocity must not be tangent to faces in zone.");
+    //                 }
+    //             }
+    //         }
+    //         _ => {
+    //             // TODO: Handle other zone types. Could check if scalar_value/vector_value are
+    //             // set/not set appropriately, could check if system is overdefined/underdefined,
+    //             // etc.
+    //         }
+    //     }
+    // }
 }
 
 // TODO: Find a clean way to integrate all of the `fn ____velocity____` and `fn ____pressure_____`
@@ -651,7 +652,7 @@ pub fn calculate_pressure_gradient(
     }
 }
 
-fn get_face_velocity(
+pub fn get_face_velocity(
     mesh: &Mesh,
     u: &DVector<Float>,
     v: &DVector<Float>,
@@ -686,6 +687,9 @@ fn get_face_velocity(
                 z: w[neighbor_index],
             };
             match interpolation_scheme {
+                VelocityInterpolation::Linear => {
+                    (vel0 + vel1) / 2.
+                }
                 VelocityInterpolation::LinearWeighted => {
                     let dx0 = (mesh.cells[cell_index].centroid - face.centroid).norm();
                     let dx1 = (mesh.cells[neighbor_index].centroid - face.centroid).norm();
@@ -728,7 +732,6 @@ pub fn get_face_flux(
         FaceConditionTypes::VelocityInlet
         | FaceConditionTypes::PressureInlet
         | FaceConditionTypes::PressureOutlet => {
-            // TODO: optimize
             outward_face_normal.dot(&get_face_velocity(
                 mesh,
                 u,
@@ -740,14 +743,14 @@ pub fn get_face_flux(
             ))
         }
         FaceConditionTypes::Interior => match interpolation_scheme {
-            VelocityInterpolation::LinearWeighted => outward_face_normal.dot(&get_face_velocity(
+            VelocityInterpolation::Linear | VelocityInterpolation::LinearWeighted => outward_face_normal.dot(&get_face_velocity(
                 mesh,
                 u,
                 v,
                 w,
                 face_index,
-                VelocityInterpolation::LinearWeighted,
-            )),
+                interpolation_scheme,
+            )) * face.area,
             VelocityInterpolation::RhieChow => {
                 let mut neighbor_cell_index = face.cell_indices[0];
                 if neighbor_cell_index == cell_index {
