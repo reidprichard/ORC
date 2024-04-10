@@ -13,8 +13,6 @@ use crate::settings::*;
 use log::{debug, log_enabled, trace};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
-// use rayon::prelude::*;
-use std::thread;
 use std::time::Instant;
 
 const MAX_PRINT_ROWS: usize = 64;
