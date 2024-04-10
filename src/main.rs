@@ -27,14 +27,32 @@ use tracing_subscriber::prelude::*;
 // TODO: Set this with command line arg
 const DEBUG: bool = false;
 
+fn write_couette_flow_analytical_profile(
+    output_path: &str,
+    channel_height: Float,
+    top_wall_velocity: Float,
+    dp_dx: Float,
+    mu: Float,
+    rho: Float,
+) {
+    let mut file = File::create(output_path).unwrap();
+    const N: u16 = 128;
+    for i in 0..N {
+        // 1 / (2 * MU) * DP / DX * (y_linear**2 - a * y_linear)
+        let y = (i as Float) / (N as Float) * channel_height;
+        let u = 1. / (2. * mu) * dp_dx * (y.powi(2) - channel_height * y);
+        writeln!(file, "{y:.3e},{u:.3e}");
+    }
+}
+
 fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
     let channel_height = 0.001;
     let mu = 0.1;
     let rho = 1000.;
-    let dp = -10.;
+    let dp = 10.;
     let dx = 0.002;
-    let top_wall_velocity = 1e-3;
+    let top_wall_velocity = 2e-3;
 
     // *********** Read mesh ************
     let mut mesh = orc::io::read_mesh("./examples/couette_flow_128x64x1.msh");
@@ -60,12 +78,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
-        momentum_relaxation: 0.5,
-        // This needs to be EXTREMELY low (~0.01)
-        // What is causing the solution to oscillate?
-        pressure_relaxation: 0.02,
-        matrix_solver: MatrixSolverSettings::default(),
-        momentum: MomentumDiscretization::CD1,
+        momentum: TVD_UMIST,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::RhieChow,
         ..NumericalSettings::default()
@@ -109,6 +122,14 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
     // } else {
     //     print!("couette_flow flow validation failed.");
     // }
+    write_couette_flow_analytical_profile(
+        "./examples/couette_flow_analytical.csv",
+        channel_height,
+        top_wall_velocity,
+        dp/dx,
+        mu,
+        rho,
+    );
     println!(" U_mean = {u_avg:.2e}; U_mean_analytical = {u_avg_analytical:.2e}");
     println!(" U_max = {:.2e} = {:.1e}U_mean", u_max, u_max / u_avg);
 }
@@ -254,7 +275,7 @@ fn main() {
         .parse()
         .expect("arg 2 should be an integer");
     // validate_solvers(); // TODO: Get this back up
-    channel_flow(iteration_count, reporting_interval);
+    // channel_flow(iteration_count, reporting_interval);
     couette_flow(iteration_count, reporting_interval);
     // test_3d_1x3(iteration_count);
     // Interface: allow user to choose from

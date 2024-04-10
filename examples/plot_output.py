@@ -195,10 +195,16 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
     if plot_title is not None:
         fig.suptitle(plot_title)
     a = CHANNEL_HEIGHT
-    y_linear = np.linspace(np.min(y), np.max(y), 100)
-    u_analytical = 1 / (2 * MU) * DP / DX * (y_linear**2 - a * y_linear)
-    ax.plot(y_linear, u_analytical)
-    ax.scatter(y, u)
+    ax.scatter(y, u, label="CFD data")
+    y_analytical:list[float] = []
+    u_analytical:list[float] = []
+    with open(f"./examples/{root}_analytical.csv", 'r') as analytical_data:
+        for line in analytical_data.readlines():
+            y_str, u_str = line.strip().split(',')
+            y_analytical.append(float(y_str))
+            u_analytical.append(float(u_str))
+    ax.plot(y_analytical, u_analytical, label="Analytical solution")
+    ax.legend()
     ax.set_xlabel("Y [m]")
     ax.set_ylabel("U [m/s]")
     if save:
