@@ -60,8 +60,8 @@ pub mod settings {
                 pressure_velocity_coupling: PressureVelocityCoupling::SIMPLE,
                 momentum: MomentumDiscretization::CD1,
                 diffusion: DiffusionScheme::CD,
-                pressure_interpolation: PressureInterpolation::LinearWeighted,
-                velocity_interpolation: VelocityInterpolation::LinearWeighted,
+                pressure_interpolation: PressureInterpolation::SecondOrder,
+                velocity_interpolation: VelocityInterpolation::RhieChow,
                 gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
                     GreenGaussVariants::CellBased,
                 ),

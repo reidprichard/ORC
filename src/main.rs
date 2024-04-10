@@ -34,7 +34,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
     let rho = 1000.;
     let dp = -10.;
     let dx = 0.002;
-    let top_wall_velocity = 0.;
+    let top_wall_velocity = 1e-3;
 
     // *********** Read mesh ************
     let mut mesh = orc::io::read_mesh("./examples/couette_flow_128x64x1.msh");
@@ -140,17 +140,9 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************* Set numerical methods ***************
     let settings = NumericalSettings {
-        momentum_relaxation: 0.5,
-        // This needs to be EXTREMELY low (~0.01)
-        // What is causing the solution to oscillate?
-        pressure_relaxation: 0.02,
-        matrix_solver: MatrixSolverSettings::default(),
         momentum: TVD_UMIST,
         pressure_interpolation: PressureInterpolation::SecondOrder,
         velocity_interpolation: VelocityInterpolation::RhieChow,
-        gradient_reconstruction: GradientReconstructionMethods::GreenGauss(
-            GreenGaussVariants::CellBased,
-        ),
         ..NumericalSettings::default()
     };
 
@@ -263,7 +255,7 @@ fn main() {
         .expect("arg 2 should be an integer");
     // validate_solvers(); // TODO: Get this back up
     channel_flow(iteration_count, reporting_interval);
-    // couette_flow(iteration_count, reporting_interval);
+    couette_flow(iteration_count, reporting_interval);
     // test_3d_1x3(iteration_count);
     // Interface: allow user to choose from
     // 1. Read mesh
