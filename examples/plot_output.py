@@ -117,7 +117,7 @@ def tile_all_matplotlib_figures() -> None:
         plt.show()
 
 
-def interpolate_to_grid(x_list, y_list, z_list, n_x=100, n_y=100):
+def interpolate_to_grid(x_list, y_list, z_list, n_x=200, n_y=200):
     x_linear = np.linspace(min(x_list), max(x_list), n_x)
     y_linear = np.linspace(min(y_list), max(y_list), n_y)
     triang = tri.Triangulation(x_list, y_list)
@@ -204,9 +204,39 @@ def plot_2d(root: str, plot_title: str | None = None):
     tile_all_matplotlib_figures()
 
 
+def plot_face_velocities(filenames: list[str]):
+    fig, axs = plt.subplots(nrows=len(filenames), layout="constrained", sharex=True,sharey=True)
+    for ax, fname in zip(axs, filenames):
+        x = []
+        y = []
+        u = []
+        v = []
+        with open(fname, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                if len(line.strip())==0:
+                    continue
+                i, centroid, vel = line.split("\t")
+                xi, yi = centroid[1:-1].split(",")[:-1]
+                x.append(float(xi.strip()))
+                y.append(float(yi.strip()))
+                ui, vi = vel[1:-1].split(",")[:-1]
+                u.append(float(ui.strip()))
+                v.append(float(vi.strip()))
+        ax.contourf(*interpolate_to_grid(x,y,u))
+        ax.quiver(x, y, u, v)
+        ax.set_title(fname.split('/')[-1].split('\\')[-1])
+        # ax.colorbar()
+    plt.show()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="CfdPlotter", description="Plots solution fields of CFD data")
-    parser.add_argument("data_file_root")
+    parser.add_argument("data_file_base", default=None, nargs="?")
     parser.add_argument("-t", "--title", default=None)
+    parser.add_argument("--face-velocity-files", "-f", default=None, nargs="+")
     args = parser.parse_args()
-    plot_2d(args.data_file_root, args.title)
+    if args.data_file_base is not None:
+        plot_2d(args.data_file_base, args.title)
+    if args.face_velocity_files is not None:
+        plot_face_velocities(args.face_velocity_files)
