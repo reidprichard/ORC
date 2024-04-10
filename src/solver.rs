@@ -1,6 +1,5 @@
 #![allow(unreachable_patterns)]
 
-use crate::discretization::*;
 use crate::io::{
     linear_system_to_string, matrix_to_string, print_linear_system, print_matrix,
     print_vec_scientific,
@@ -10,6 +9,7 @@ use crate::mesh::*;
 use crate::nalgebra::{dvector_zeros, GetEntry};
 use crate::numerical_types::*;
 use crate::settings::*;
+use crate::{discretization::*, vector_angle};
 use log::{debug, log_enabled, trace};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
@@ -389,13 +389,19 @@ pub fn get_momentum_source_term(_location: Vector) -> Vector {
 }
 
 fn check_boundary_conditions(mesh: &Mesh) {
+    const PI: Float = 3.141592;
+    // 5 degrees
+    const TOL: Float = 5. * 180. / PI;
     // TODO: get angle between vectors rather than using tols
     for face_zone in mesh.face_zones.values() {
         match face_zone.zone_type {
             FaceConditionTypes::Wall => {
                 for face_index in 0..mesh.faces.len() {
                     let face = &mesh.faces[face_index];
-                    if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
+                    // println!("Angle = {}", vector_angle(&face.normal, &face_zone.vector_value));
+                    if PI / 2. - Float::abs(vector_angle(&face.normal, &face_zone.vector_value))
+                        > TOL
+                    {
                         panic!("Wall velocity must be tangent to faces in zone.");
                     }
                 }
@@ -403,7 +409,7 @@ fn check_boundary_conditions(mesh: &Mesh) {
             FaceConditionTypes::VelocityInlet => {
                 for face_index in 0..mesh.faces.len() {
                     let face = &mesh.faces[face_index];
-                    if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
+                    if Float::abs(vector_angle(&face.normal, &face_zone.vector_value)) > TOL {
                         panic!("VelocityInlet velocity must not be tangent to faces in zone.");
                     }
                 }
