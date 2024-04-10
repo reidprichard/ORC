@@ -165,7 +165,6 @@ pub fn build_momentum_advection_matrices(
                 u,
                 v,
                 w,
-                p,
                 *face_index,
                 cell_index,
             );
@@ -256,7 +255,6 @@ pub fn build_pressure_correction_matrices(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
-    p: &DVector<Float>,
     a_u: &CsrMatrix<Float>,
     a_v: &CsrMatrix<Float>,
     a_w: &CsrMatrix<Float>,
@@ -279,7 +277,6 @@ pub fn build_pressure_correction_matrices(
                 u,
                 v,
                 w,
-                p,
                 *face_index,
                 cell_index,
             );

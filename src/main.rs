@@ -1,31 +1,17 @@
-#![allow(dead_code, unused)]
-
-use log::log_enabled;
 use nalgebra::DVector;
-use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::discretization::{
     build_momentum_advection_matrices, build_momentum_diffusion_matrix, initialize_momentum_matrix,
 };
-use orc::io::{print_vec_scientific, read_data, read_mesh};
+use orc::io::read_data;
 use orc::io::{write_data, write_gradients};
-use orc::linear_algebra::iterative_solve;
 use orc::mesh::*;
-use orc::numerical_types::{Float, Tensor3};
-use orc::numerical_types::{Uint, Vector3};
+use orc::numerical_types::Float;
+use orc::numerical_types::Uint;
 use orc::settings::*;
 use orc::solver::*;
-use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
 use std::fs::File;
 use std::io::Write;
-use std::time::Instant;
-use tracing::{info, Level};
-use tracing_appender::rolling::{self, RollingFileAppender};
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::prelude::*;
-
-// TODO: Set this with command line arg
-const DEBUG: bool = false;
 
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     // ************ Constants ********
@@ -68,7 +54,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************ Solve **************
     let (mut u, mut v, mut w, mut p) = read_data("./examples/channel_flow.csv")
-        .unwrap_or_else(|_| initialize_flow(&mesh, mu, rho, 1000));
+        .unwrap_or_else(|_| initialize_flow(&mesh, mu, rho));
     solve_steady(
         &mut mesh,
         &mut u,
@@ -113,7 +99,6 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     let mut file = File::create(format!("./examples/{filename}.csv")).unwrap();
     for face_index in 0..mesh.faces.len() {
         let face_vel = get_face_velocity(&mesh, &u, &v, &w, face_index);
-        let cell_index = mesh.faces[face_index].cell_indices[0];
         writeln!(
             file,
             "{}\t{}\t{}",
@@ -138,26 +123,6 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
 }
 
 fn main() {
-    if DEBUG {
-        let file_appender = BasicRollingFileAppender::new(
-            "./logs/orc.log",
-            RollingConditionBasic::new().max_size(2_u64.pow(26)),
-            10,
-        )
-        .unwrap();
-        // Start chatgippity
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-        tracing_subscriber::registry()
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .with_writer(non_blocking)
-                    .with_span_events(FmtSpan::CLOSE),
-            )
-            .init();
-        // end chatgippity
-    }
-
-    let start = Instant::now();
     let args: Vec<String> = env::args().collect();
     let iteration_count: Uint = args
         .get(1)
@@ -169,17 +134,5 @@ fn main() {
         .unwrap_or(&"0".to_string())
         .parse()
         .expect("arg 2 should be an integer");
-    // validate_solvers(); // TODO: Get this back up
     channel_flow(iteration_count, reporting_interval);
-    // couette_flow(iteration_count, reporting_interval);
-    // test_3d_1x3(iteration_count);
-    // Interface: allow user to choose from
-    // 1. Read mesh
-    // 2. Read data
-    // 3. Read settings
-    // 4. Write mesh
-    // 5. Write data
-    // 6. Write settings
-    // 7. Run solver
-    println!("Complete in {}s.", start.elapsed().as_secs());
 }

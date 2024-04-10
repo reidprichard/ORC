@@ -1,66 +1,8 @@
 use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
-use ahash::{HashSet, RandomState};
-use log::{info, trace};
 use nalgebra::DVector;
-use nalgebra_sparse::{CooMatrix, CsrMatrix};
-
-const MULTIGRID_SMOOTHER: SolutionMethod = SolutionMethod::BiCGSTAB;
-const MULTIGRID_COARSENING_LEVELS: Uint = 3;
-
-fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) -> CsrMatrix<Float> {
-    let n = a.ncols() / 2 + a.ncols() % 2; // half rounded up
-    let mut restriction_matrix_coo = CooMatrix::<Float>::new(n, a.ncols());
-    match method {
-        RestrictionMethods::Injection => {
-            for row_num in 0..n - 1 {
-                restriction_matrix_coo.push(row_num, 2 * row_num, 1.);
-                restriction_matrix_coo.push(row_num, 2 * row_num + 1, 1.);
-            }
-            // Must treat the last row separately since a.ncols() could be odd
-            restriction_matrix_coo.push(n - 1, 2 * (n - 1), 1.);
-            if 2 * (n - 1) + 1 < a.ncols() {
-                restriction_matrix_coo.push(n - 1, 2 * (n - 1) + 1, 1.);
-            }
-        }
-        // TODO: Rethink this restriction strategy. I suspect it produces very long combined cells
-        // along directions of streamlines, which may not be the best strategy to get error to
-        // propagate.
-        RestrictionMethods::Strongest => {
-            // For each row, find the most negative off-diagonal value
-            // If that cell hasn't already been combined, combine it with diagonal
-            // If it *has* been combined, find the next largest and so on.
-            let mut combined_cells = HashSet::<usize>::with_capacity_and_hasher(n, RandomState::with_seeds(3, 1, 4, 1));
-            a.row_iter().enumerate().for_each(|(i, row)| {
-                let mut strongest_coeff: Float = Float::MAX;
-                let strongest_unmerged_neighbor =
-                    row.col_indices().iter().fold(usize::MAX, |acc, j| {
-                        // not efficient to look this up each time
-                        if combined_cells.contains(j) || i == *j {
-                            acc
-                        } else {
-                            let coeff = a.get(i, *j);
-                            if coeff < strongest_coeff {
-                                strongest_coeff = coeff;
-                                *j
-                            } else {
-                                acc
-                            }
-                        }
-                    });
-                if strongest_unmerged_neighbor != usize::MAX {
-                    // panic!("Multigrid failed. It is likely the solution has diverged.");
-                    combined_cells.insert(strongest_unmerged_neighbor);
-                    restriction_matrix_coo.push(i / 2, i, 1.0);
-                    restriction_matrix_coo.push(i / 2, strongest_unmerged_neighbor, 1.0);
-                }
-            });
-        }
-    }
-    CsrMatrix::from(&restriction_matrix_coo)
-}
-
+use nalgebra_sparse::CsrMatrix;
 
 #[allow(clippy::too_many_arguments, unreachable_patterns)]
 pub fn iterative_solve(
@@ -73,21 +15,14 @@ pub fn iterative_solve(
     match method {
         SolutionMethod::Jacobi => {
             let mut a_prime = a.clone();
-            a_prime.triplet_iter_mut().for_each(|(i, j, v)| {
-                *v = if i == j {
-                    0.
-                } else {
-                    *v / a.get(i, i)
-                }
-            });
+            a_prime
+                .triplet_iter_mut()
+                .for_each(|(i, j, v)| *v = if i == j { 0. } else { *v / a.get(i, i) });
             let b_prime: DVector<Float> = DVector::from_iterator(
                 b.nrows(),
-                b
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| *v / a.get(i, i)),
+                b.iter().enumerate().map(|(i, v)| *v / a.get(i, i)),
             );
-            for iter_num in 0..50 {
+            for _ in 0..50 {
                 // if log_enabled!(log::Level::Trace) {
                 //     trace!("\nJacobi iteration {iter_num} = {solution_vector:?}");
                 // }

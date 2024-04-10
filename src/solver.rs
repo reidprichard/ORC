@@ -79,7 +79,7 @@ pub fn solve_steady(
         iterative_solve(&a_w, &b_w, w);
 
         let pressure_correction_matrices =
-            build_pressure_correction_matrices(mesh, u, v, w, p, &a_u, &a_v, &a_w, rho);
+            build_pressure_correction_matrices(mesh, u, v, w, &a_u, &a_v, &a_w, rho);
         if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
             println!("\nPressure:");
             print_linear_system(
@@ -144,14 +144,12 @@ pub fn initialize_flow(
     mesh: &Mesh,
     mu: Float,
     rho: Float,
-    iteration_count: Uint,
 ) -> (
     DVector<Float>,
     DVector<Float>,
     DVector<Float>,
     DVector<Float>,
 ) {
-    check_boundary_conditions(mesh);
     let n = mesh.cells.len();
     let mut u = dvector_zeros!(n);
     let mut v = dvector_zeros!(n);
@@ -165,7 +163,7 @@ pub fn initialize_flow(
     let mut b_v = dvector_zeros!(n);
     let mut b_w = dvector_zeros!(n);
 
-    initialize_pressure_field(mesh, &mut p, iteration_count);
+    initialize_pressure_field(mesh, &mut p);
     build_momentum_advection_matrices(
         &mut a_u, &mut a_v, &mut a_w, &mut b_u, &mut b_v, &mut b_w, &a_di, mesh, &u, &v, &w, &p,
         rho,
@@ -199,7 +197,7 @@ pub fn initialize_flow(
     (u, v, w, p)
 }
 
-fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
+fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>) {
     println!("Initializing pressure field...");
     // TODO
     // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
@@ -247,37 +245,6 @@ pub fn get_velocity_source_term(_location: Vector3) -> Vector3 {
     Vector3::zero()
 }
 
-fn check_boundary_conditions(mesh: &Mesh) {
-    // TODO: get angle between vectors rather than using tols
-    // for face_zone in mesh.face_zones.values() {
-    //     match face_zone.zone_type {
-    //         FaceConditionTypes::Wall => {
-    //             for face_index in 0..mesh.faces.len() {
-    //                 let face = &mesh.faces[face_index];
-    //                 if Float::abs(face.normal.dot(&face_zone.vector_value)) > 1e-3 {
-    //                     panic!("Wall velocity must be tangent to faces in zone.");
-    //                 }
-    //             }
-    //         }
-    //         FaceConditionTypes::VelocityInlet => {
-    //             for face_index in 0..mesh.faces.len() {
-    //                 let face = &mesh.faces[face_index];
-    //                 if Float::abs(face.normal.dot(&face_zone.vector_value)) < 1e-3 {
-    //                     panic!("VelocityInlet velocity must not be tangent to faces in zone.");
-    //                 }
-    //             }
-    //         }
-    //         _ => {
-    //             // TODO: Handle other zone types. Could check if scalar_value/vector_value are
-    //             // set/not set appropriately, could check if system is overdefined/underdefined,
-    //             // etc.
-    //         }
-    //     }
-    // }
-}
-
-// TODO: Find a clean way to integrate all of the `fn ____velocity____` and `fn ____pressure_____`
-// into general `fn ____scalar____` functions
 pub fn calculate_velocity_gradient(
     mesh: &Mesh,
     u: &DVector<Float>,
@@ -293,13 +260,7 @@ pub fn calculate_velocity_gradient(
                 .iter()
                 .fold(Tensor3::zero(), |acc, face_index| {
                     let face = &mesh.faces[*face_index];
-                    let face_value: Vector3 = get_face_velocity(
-                        mesh,
-                        u,
-                        v,
-                        w,
-                        *face_index,
-                    );
+                    let face_value: Vector3 = get_face_velocity(mesh, u, v, w, *face_index);
                     acc + face_value.outer(
                         &(get_outward_face_normal(face, cell_index) * (face.area / cell.volume)),
                     )
@@ -333,8 +294,7 @@ pub fn calculate_velocity_gradient(
                         )
                     }
                     _ => {
-                        let face_velocity =
-                            get_face_velocity(&mesh, &u, &v, &w, *f);
+                        let face_velocity = get_face_velocity(&mesh, &u, &v, &w, *f);
                         (
                             face.centroid - cell_centroid,
                             (face_velocity.x, face_velocity.y, face_velocity.z),
@@ -487,20 +447,13 @@ pub fn get_face_flux(
     u: &DVector<Float>,
     v: &DVector<Float>,
     w: &DVector<Float>,
-    p: &DVector<Float>,
     face_index: usize,
     cell_index: usize,
 ) -> Float {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[face_index];
     let outward_face_normal = get_outward_face_normal(face, cell_index);
-    outward_face_normal.dot(&get_face_velocity(
-        mesh,
-        u,
-        v,
-        w,
-        face_index,
-    ))
+    outward_face_normal.dot(&get_face_velocity(mesh, u, v, w, face_index))
 }
 
 pub fn get_face_pressure(mesh: &Mesh, p: &DVector<Float>, face_index: usize) -> Float {
