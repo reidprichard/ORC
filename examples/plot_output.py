@@ -206,6 +206,8 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
 
 def plot_face_velocities(filenames: list[str], save:bool=False):
     fig, axs = plt.subplots(nrows=len(filenames), layout="constrained", sharex=True,sharey=True)
+    if len(filenames)==1:
+        axs = [axs]
     x:list[list[float]] = []
     y:list[list[float]] = []
     u:list[list[float]] = []
