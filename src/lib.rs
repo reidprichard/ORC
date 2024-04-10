@@ -103,9 +103,9 @@ pub mod settings {
         TVD(fn(Float) -> Float),
     }
 
-    pub const TVD_UD: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 0.);
+    const _TVD_UD: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 0.);
+    const _TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
     pub const TVD_LUD: MomentumDiscretization = MomentumDiscretization::TVD(|r| r);
-    pub const TVD_CD1: MomentumDiscretization = MomentumDiscretization::TVD(|_r| 1.);
     pub const TVD_QUICK: MomentumDiscretization = MomentumDiscretization::TVD(|r| (3. + r) / 4.);
     pub const TVD_UMIST: MomentumDiscretization = MomentumDiscretization::TVD(|r| {
         Float::max(
