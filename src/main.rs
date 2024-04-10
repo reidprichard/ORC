@@ -122,7 +122,7 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
     let dx = 0.002;
 
     // *********** Read mesh ************
-    let mut mesh = orc::io::read_mesh("./examples/couette_flow.msh");
+    let mut mesh = orc::io::read_mesh("./examples/channel_flow.msh");
 
     // ************ Set boundary conditions **********
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
