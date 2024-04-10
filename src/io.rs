@@ -151,7 +151,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             vertices_hashmap.insert(
                                 node_number - 1,
                                 Vertex {
-                                    position: Vector3 { x, y, z },
+                                    position: Vector { x, y, z },
                                 },
                             );
                             // debug!(
@@ -202,7 +202,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                             .expect("valid BC type"),
                         name: zone_name.clone(),
                         scalar_value: 0.,
-                        vector_value: Vector3 {
+                        vector_value: Vector {
                             x: 0.,
                             y: 0.,
                             z: 0.,
@@ -299,13 +299,13 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
             2 => {
                 let tangent = face_nodes[1].position - face_nodes[0].position;
                 face.normal = if tangent.x == 0. {
-                    Vector3 {
+                    Vector {
                         x: 1.,
                         y: -tangent.x / tangent.y,
                         z: 0.,
                     }
                 } else {
-                    Vector3 {
+                    Vector {
                         x: -tangent.y / tangent.x,
                         y: 1.,
                         z: 0.,
@@ -332,7 +332,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         face.centroid = face
             .node_indices
             .iter()
-            .fold(Vector3::zero(), |acc, n| acc + vertices_hashmap[n].position)
+            .fold(Vector::zero(), |acc, n| acc + vertices_hashmap[n].position)
             / (face.node_indices.len() as Float);
         face.area = match face_nodes.len() {
             0 | 1 => panic!("faces must have 2+ nodes"),
@@ -367,7 +367,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
                 // If polygon is convex (which I think is guaranteed), we can just decompose into
                 // triangles
                 let calculate_triangle_area =
-                    |vertex_1: &Vector3, vertex_2: &Vector3, vertex_3: &Vector3| -> Float {
+                    |vertex_1: &Vector, vertex_2: &Vector, vertex_3: &Vector| -> Float {
                         Float::abs(
                             (*vertex_2 - *vertex_1)
                                 .cross(&(*vertex_3 - *vertex_1))
@@ -440,7 +440,7 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
 
     // TODO: Rewrite more concisely
     // Very ugly way to do this
-    let node_positions: Vec<Vector3> = vertices_hashmap.values().map(|n| n.position).collect();
+    let node_positions: Vec<Vector> = vertices_hashmap.values().map(|n| n.position).collect();
     let x_min = node_positions
         .iter()
         .fold(Float::INFINITY, |acc, &n| acc.min(n.x));
@@ -539,7 +539,7 @@ pub fn read_data(
                     .for_each(|(i, chunk)| match i {
                         0 => (),
                         1 => {
-                            let uvw_i = Vector3::parse(chunk);
+                            let uvw_i = Vector::parse(chunk);
                             u.push(uvw_i.x);
                             v.push(uvw_i.y);
                             w.push(uvw_i.z);

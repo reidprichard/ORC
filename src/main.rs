@@ -10,8 +10,8 @@ use orc::io::{print_vec_scientific, read_data, read_mesh};
 use orc::io::{write_data, write_gradients};
 use orc::linear_algebra::iterative_solve;
 use orc::mesh::*;
-use orc::numerical_types::{Float, Tensor3};
-use orc::numerical_types::{Uint, Vector3};
+use orc::numerical_types::{Float, Tensor};
+use orc::numerical_types::{Uint, Vector};
 use orc::settings::*;
 use orc::solver::*;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
@@ -41,7 +41,7 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
 
     // ************ Set boundary conditions **********
     mesh.get_face_zone("TOP_WALL").zone_type = FaceConditionTypes::Wall;
-    mesh.get_face_zone("TOP_WALL").vector_value = Vector3 {
+    mesh.get_face_zone("TOP_WALL").vector_value = Vector {
         x: top_wall_velocity,
         y: 0.,
         z: 0.,
@@ -417,13 +417,13 @@ fn test_3d_1x3(iteration_count: Uint) {
     );
 
     for cell_index in 0..mesh.cells.len() {
-        let cell_velocity = Vector3 {
+        let cell_velocity = Vector {
             x: u[cell_index],
             y: v[cell_index],
             z: w[cell_index],
         };
         assert!(cell_velocity.approx_equals(
-            &Vector3 {
+            &Vector {
                 x: 0.005,
                 y: 0.,
                 z: 0.
@@ -489,9 +489,9 @@ fn test_3d_3x3(iteration_count: Uint) {
         Uint::max(iteration_count / 1000, 1),
     );
 
-    let mut avg_velocity = Vector3::zero();
+    let mut avg_velocity = Vector::zero();
     for cell_index in 0..mesh.cells.len() {
-        let cell_velocity = Vector3 {
+        let cell_velocity = Vector {
             x: u[cell_index],
             y: v[cell_index],
             z: w[cell_index],

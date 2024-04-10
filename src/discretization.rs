@@ -10,7 +10,7 @@ use nalgebra_sparse::{CooMatrix, CsrMatrix, SparseEntryMut::*};
 
 macro_rules! get_normal_momentum_coefficient {
     ($i: expr, $a_u: expr, $a_v: expr, $a_w: expr, $n: expr) => {
-        Vector3 {
+        Vector {
             x: $a_u.get($i, $i) * $n.x,
             y: $a_v.get($i, $i) * $n.y,
             z: $a_w.get($i, $i) * $n.z,
@@ -21,7 +21,7 @@ macro_rules! get_normal_momentum_coefficient {
 
 macro_rules! get_face_normal_momentum_coefficient {
     ($i: expr, $j: expr, $a_u: expr, $a_v: expr, $a_w: expr, $n: expr) => {
-        Vector3 {
+        Vector {
             x: 0.5 * ($a_u.get($i, $i) + $a_u.get($j, $j)) * $n.x,
             y: 0.5 * ($a_v.get($i, $i) + $a_v.get($j, $j)) * $n.y,
             z: 0.5 * ($a_w.get($i, $i) + $a_w.get($j, $j)) * $n.z,
@@ -86,7 +86,7 @@ pub fn build_momentum_diffusion_matrix(
                     }
 
                     // Cell centroids vector
-                    let e_xi: Vector3 = mesh.cells[neighbor_cell_index].centroid - cell.centroid;
+                    let e_xi: Vector = mesh.cells[neighbor_cell_index].centroid - cell.centroid;
                     // Diffusion coefficient
                     let d_i: Float = mu * face.area / e_xi.norm();
 
@@ -157,12 +157,12 @@ pub fn build_momentum_advection_matrices(
 
         // let this_cell_velocity_gradient = &mesh.calculate_velocity_gradient(*cell_number);
         let mut s_u = get_momentum_source_term(cell.centroid); // general source term
-        let s_u_dc = Vector3::zero(); // deferred correction source term TODO
-        let s_d_cross = Vector3::zero(); // cross diffusion source term TODO
+        let s_u_dc = Vector::zero(); // deferred correction source term TODO
+        let s_d_cross = Vector::zero(); // cross diffusion source term TODO
 
         // The current cell's coefficients (matrix diagonal)
         let a_ii_di = a_di.get(cell_index, cell_index);
-        let mut a_p = Vector3::zero();
+        let mut a_p = Vector::zero();
         // println!("\n{cell_velocity_gradient}");
         // Iterate over this cell's faces
         for face_index in &cell.face_indices {
@@ -207,22 +207,22 @@ pub fn build_momentum_advection_matrices(
                 face.cell_indices[0]
             };
 
-            let a_nb: Vector3 = match momentum_discretization {
+            let a_nb: Vector = match momentum_discretization {
                 MomentumDiscretization::UD => {
                     // Neighbor only affects this cell if flux is into this
                     // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
-                    Float::min(f_i, 0.) * Vector3::ones()
+                    Float::min(f_i, 0.) * Vector::ones()
                 }
                 MomentumDiscretization::CD1 => {
                     // Neighbor only affects this cell if flux is into this
                     // cell => f_i < 0. Therefore, if f_i > 0, we set it to 0.
-                    f_i * Vector3::ones() / 2.
+                    f_i * Vector::ones() / 2.
                 }
                 MomentumDiscretization::TVD(psi) => {
                     if neighbor_cell_index == usize::MAX {
                         // NOTE: On boundary, use UD
                         // TODO: Consider strategy here
-                        Float::min(f_i, 0.) * Vector3::ones()
+                        Float::min(f_i, 0.) * Vector::ones()
                     } else {
                         // TODO: Consider directly representing gradient term in solution matrices
                         // Green-Gauss face values are a function of neighboring cell values, so they can be
@@ -233,12 +233,12 @@ pub fn build_momentum_advection_matrices(
                         } else {
                             cell_index
                         };
-                        let downstream_velocity = Vector3 {
+                        let downstream_velocity = Vector {
                             x: u[downstream_cell],
                             y: v[downstream_cell],
                             z: w[downstream_cell],
                         };
-                        let velocity = Vector3 {
+                        let velocity = Vector {
                             x: u[cell_index],
                             y: v[cell_index],
                             z: w[cell_index],
@@ -246,7 +246,7 @@ pub fn build_momentum_advection_matrices(
                         if (downstream_velocity - velocity).norm() == 0. {
                             // If the velocities are equal, the scheme we use doesn't matter, as
                             // face velocity = cell 1 velocity = cell 2 velocity
-                            f_i * Vector3::ones() / 2.
+                            f_i * Vector::ones() / 2.
                         } else {
                             let cell_velocity_gradient = calculate_velocity_gradient(
                                 mesh,
@@ -261,7 +261,7 @@ pub fn build_momentum_advection_matrices(
                             let r = 2. * cell_velocity_gradient.inner(&r_pa)
                                 / (downstream_velocity - velocity)
                                 - 1.;
-                            f_i * Vector3 {
+                            f_i * Vector {
                                 x: psi(r.x),
                                 y: psi(r.y),
                                 z: psi(r.z),
@@ -281,7 +281,7 @@ pub fn build_momentum_advection_matrices(
                 match face_zone.zone_type {
                     FaceConditionTypes::Wall | FaceConditionTypes::VelocityInlet => {
                         // TODO: Get this working
-                        s_u += Vector3 {
+                        s_u += Vector {
                             x: (a_nb.x + a_ii_di) * face_zone.vector_value.x,
                             y: (a_nb.y + a_ii_di) * face_zone.vector_value.y,
                             z: (a_nb.z + a_ii_di) * face_zone.vector_value.z,

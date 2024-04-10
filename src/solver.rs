@@ -219,8 +219,8 @@ pub fn solve_steady(
         _ => panic!("unsupported pressure-velocity coupling"),
     }
 
-    let mut pressure_grad_mean = Vector3::zero();
-    let mut velocity_grad_mean = Tensor3::zero();
+    let mut pressure_grad_mean = Vector::zero();
+    let mut velocity_grad_mean = Tensor::zero();
     for i in 0..mesh.cells.len() {
         let pressure_gradient =
             calculate_pressure_gradient(mesh, p, i, numerical_settings.gradient_reconstruction);
@@ -383,9 +383,9 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
     println!("Done!");
 }
 
-pub fn get_momentum_source_term(_location: Vector3) -> Vector3 {
+pub fn get_momentum_source_term(_location: Vector) -> Vector {
     // TODO!!!
-    Vector3::zero()
+    Vector::zero()
 }
 
 fn check_boundary_conditions(mesh: &Mesh) {
@@ -426,15 +426,15 @@ pub fn calculate_velocity_gradient(
     w: &DVector<Float>,
     cell_index: usize,
     gradient_scheme: GradientReconstructionMethods,
-) -> Tensor3 {
+) -> Tensor {
     let cell = &mesh.cells[cell_index];
     match gradient_scheme {
         GradientReconstructionMethods::GreenGauss(_) => {
             cell.face_indices
                 .iter()
-                .fold(Tensor3::zero(), |acc, face_index| {
+                .fold(Tensor::zero(), |acc, face_index| {
                     let face = &mesh.faces[*face_index];
-                    let face_value: Vector3 = get_face_velocity(
+                    let face_value: Vector = get_face_velocity(
                         mesh,
                         u,
                         v,
@@ -509,10 +509,10 @@ pub fn calculate_velocity_gradient(
 
             // let grad_u = iterative_solve(&a, b, solution_vector, iteration_count, method, relaxation_factor, convergence_threshold, preconditioner)
 
-            Tensor3 {
-                x: Vector3::from_dvector(&grad_u),
-                y: Vector3::from_dvector(&grad_v),
-                z: Vector3::from_dvector(&grad_w),
+            Tensor {
+                x: Vector::from_dvector(&grad_u),
+                y: Vector::from_dvector(&grad_v),
+                z: Vector::from_dvector(&grad_w),
             }
         }
         _ => panic!("unsupported gradient scheme"),
@@ -524,7 +524,7 @@ pub fn calculate_pressure_gradient(
     p: &DVector<Float>,
     cell_index: usize,
     gradient_scheme: GradientReconstructionMethods,
-) -> Vector3 {
+) -> Vector {
     let cell = &mesh.cells[cell_index];
     match gradient_scheme {
         GradientReconstructionMethods::GreenGauss(variant) => match variant {
@@ -544,7 +544,7 @@ pub fn calculate_pressure_gradient(
                         * (face.area / cell.volume)
                         * get_outward_face_normal(face, cell_index)
                 })
-                .fold(Vector3::zero(), |acc, v| acc + v),
+                .fold(Vector::zero(), |acc, v| acc + v),
             _ => panic!("unsupported Green-Gauss scheme"),
         },
         GradientReconstructionMethods::LeastSquares => {
@@ -590,7 +590,7 @@ pub fn calculate_pressure_gradient(
             a = &a.transpose() * &a;
 
             let a_inv = a.try_inverse().unwrap();
-            Vector3::from_dvector(&(a_inv * b))
+            Vector::from_dvector(&(a_inv * b))
         }
         _ => panic!("unsupported gradient scheme"),
     }
@@ -603,7 +603,7 @@ pub fn get_face_velocity(
     w: &DVector<Float>,
     face_index: usize,
     interpolation_scheme: VelocityInterpolation,
-) -> Vector3 {
+) -> Vector {
     // ****** TODO: Add skewness corrections!!! ********
     let face = &mesh.faces[face_index];
     let face_zone = &mesh.face_zones[&face.zone];
@@ -613,19 +613,19 @@ pub fn get_face_velocity(
         FaceConditionTypes::VelocityInlet => face_zone.vector_value,
         FaceConditionTypes::PressureInlet
         | FaceConditionTypes::PressureOutlet
-        | FaceConditionTypes::Symmetry => Vector3 {
+        | FaceConditionTypes::Symmetry => Vector {
             x: u[cell_index],
             y: v[cell_index],
             z: w[cell_index],
         },
         FaceConditionTypes::Interior => {
             let neighbor_index = face.cell_indices[1];
-            let vel0 = Vector3 {
+            let vel0 = Vector {
                 x: u[cell_index],
                 y: v[cell_index],
                 z: w[cell_index],
             };
-            let vel1 = Vector3 {
+            let vel1 = Vector {
                 x: u[neighbor_index],
                 y: v[neighbor_index],
                 z: w[neighbor_index],
@@ -700,12 +700,12 @@ pub fn get_face_flux(
                 if neighbor_cell_index == cell_index {
                     neighbor_cell_index = face.cell_indices[1];
                 }
-                let vel_i = Vector3 {
+                let vel_i = Vector {
                     x: u[cell_index],
                     y: v[cell_index],
                     z: w[cell_index],
                 };
-                let vel_j = Vector3 {
+                let vel_j = Vector {
                     x: u[neighbor_cell_index],
                     y: v[neighbor_cell_index],
                     z: w[neighbor_cell_index],
@@ -835,7 +835,7 @@ fn apply_pressure_correction(
         let velocity_correction =
             cell.face_indices
                 .iter()
-                .fold(Vector3::zero(), |acc, face_index| {
+                .fold(Vector::zero(), |acc, face_index| {
                     let face = &mesh.faces[*face_index];
                     let face_zone = &mesh.face_zones[&face.zone];
                     let outward_face_normal = get_outward_face_normal(face, cell_index);
@@ -859,7 +859,7 @@ fn apply_pressure_correction(
                             panic!("BC not supported");
                         }
                     };
-                    let scaled_normal = Vector3 {
+                    let scaled_normal = Vector {
                         x: outward_face_normal.x / a_u.get(cell_index, cell_index),
                         y: outward_face_normal.y / a_v.get(cell_index, cell_index),
                         z: outward_face_normal.z / a_w.get(cell_index, cell_index),

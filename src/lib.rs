@@ -211,35 +211,35 @@ pub mod numerical_types {
     pub type Uint = u64;
 
     #[derive(Copy, Clone, Debug)]
-    pub struct Vector3 {
+    pub struct Vector {
         pub x: Float,
         pub y: Float,
         pub z: Float,
     }
 
-    impl Vector3 {
-        pub fn zero() -> Vector3 {
-            Vector3 {
+    impl Vector {
+        pub fn zero() -> Vector {
+            Vector {
                 x: 0.,
                 y: 0.,
                 z: 0.,
             }
         }
 
-        pub fn ones() -> Vector3 {
-            Vector3 {
+        pub fn ones() -> Vector {
+            Vector {
                 x: 1.,
                 y: 1.,
                 z: 1.,
             }
         }
 
-        pub fn dot(&self, other: &Vector3) -> Float {
+        pub fn dot(&self, other: &Vector) -> Float {
             self.x * other.x + self.y * other.y + self.z * other.z
         }
 
-        pub fn cross(&self, other: &Vector3) -> Vector3 {
-            Vector3 {
+        pub fn cross(&self, other: &Vector) -> Vector {
+            Vector {
                 x: self.y * other.z - self.z * other.y,
                 y: self.z * other.x - self.x * other.z,
                 z: self.x * other.y - self.y * other.x,
@@ -250,28 +250,28 @@ pub mod numerical_types {
             (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
         }
 
-        pub fn unit(&self) -> Vector3 {
+        pub fn unit(&self) -> Vector {
             let len: Float = self.norm();
-            Vector3 {
+            Vector {
                 x: self.x / len,
                 y: self.y / len,
                 z: self.z / len,
             }
         }
 
-        pub fn outer(&self, other: &Self) -> Tensor3 {
-            Tensor3 {
-                x: Vector3 {
+        pub fn outer(&self, other: &Self) -> Tensor {
+            Tensor {
+                x: Vector {
                     x: self.x * other.x,
                     y: self.x * other.y,
                     z: self.x * other.z,
                 },
-                y: Vector3 {
+                y: Vector {
                     x: self.y * other.x,
                     y: self.y * other.y,
                     z: self.y * other.z,
                 },
-                z: Vector3 {
+                z: Vector {
                     x: self.z * other.x,
                     y: self.z * other.y,
                     z: self.z * other.z,
@@ -292,7 +292,7 @@ pub mod numerical_types {
         }
 
         pub fn abs(&self) -> Self {
-            Vector3 {
+            Vector {
                 x: Float::abs(self.x),
                 y: Float::abs(self.y),
                 z: Float::abs(self.z),
@@ -308,7 +308,7 @@ pub mod numerical_types {
                 .splitn(3, ", ")
                 .map(|s_i| s_i.parse::<Float>().unwrap())
                 .collect::<Vec<Float>>();
-            Vector3 {
+            Vector {
                 x: xyz[0],
                 y: xyz[1],
                 z: xyz[2],
@@ -316,7 +316,7 @@ pub mod numerical_types {
         }
 
         pub fn from_dvector(v: &DVector<Float>) -> Self {
-            Vector3 {
+            Vector {
                 x: v[0],
                 y: v[1],
                 z: v[2],
@@ -324,7 +324,7 @@ pub mod numerical_types {
         }
 
         pub fn from_vec(v: &Vec<Float>) -> Self {
-            Vector3 {
+            Vector {
                 x: v[0],
                 y: v[1],
                 z: v[2],
@@ -336,7 +336,7 @@ pub mod numerical_types {
         }
     }
 
-    impl Add<Float> for Vector3 {
+    impl Add<Float> for Vector {
         type Output = Self;
 
         fn add(self, other: Float) -> Self {
@@ -348,7 +348,7 @@ pub mod numerical_types {
         }
     }
 
-    impl Add<Self> for Vector3 {
+    impl Add<Self> for Vector {
         type Output = Self;
 
         fn add(self, other: Self) -> Self {
@@ -360,7 +360,7 @@ pub mod numerical_types {
         }
     }
 
-    impl AddAssign for Vector3 {
+    impl AddAssign for Vector {
         fn add_assign(&mut self, other: Self) {
             *self = Self {
                 x: self.x + other.x,
@@ -370,7 +370,7 @@ pub mod numerical_types {
         }
     }
 
-    impl Sub<Float> for Vector3 {
+    impl Sub<Float> for Vector {
         type Output = Self;
 
         fn sub(self, other: Float) -> Self {
@@ -382,7 +382,7 @@ pub mod numerical_types {
         }
     }
 
-    impl Sub<Self> for Vector3 {
+    impl Sub<Self> for Vector {
         type Output = Self;
 
         fn sub(self, other: Self) -> Self {
@@ -402,11 +402,11 @@ pub mod numerical_types {
 
     macro_rules! vector_div {
         ($T: ty) => {
-            impl Div<$T> for Vector3 {
+            impl Div<$T> for Vector {
                 type Output = Self;
 
                 fn div(self, rhs: $T) -> Self {
-                    Vector3 {
+                    Self {
                         x: self.x / (rhs as Float),
                         y: self.y / (rhs as Float),
                         z: self.z / (rhs as Float),
@@ -421,10 +421,10 @@ pub mod numerical_types {
     vector_div!(Float);
 
     // Element-wise division
-    impl Div<Self> for Vector3 {
+    impl Div<Self> for Vector {
         type Output = Self;
-        fn div(self, rhs: Vector3) -> Self {
-            Vector3 {
+        fn div(self, rhs: Vector) -> Self {
+            Vector {
                 x: self.x / rhs.x,
                 y: self.y / rhs.y,
                 z: self.z / rhs.z,
@@ -435,7 +435,7 @@ pub mod numerical_types {
     // Is this really the best way to do this...?
     macro_rules! vector_scalar_div_assign {
         ($T: ty) => {
-            impl DivAssign<$T> for Vector3 {
+            impl DivAssign<$T> for Vector {
                 fn div_assign(&mut self, rhs: $T) {
                     *self = Self {
                         x: self.x / (rhs as Float),
@@ -452,10 +452,10 @@ pub mod numerical_types {
 
     macro_rules! vector_scalar_mul {
         ($T: ty) => {
-            impl Mul<$T> for Vector3 {
+            impl Mul<$T> for Vector {
                 type Output = Self;
                 fn mul(self, rhs: $T) -> Self {
-                    Vector3 {
+                    Self {
                         x: self.x * (rhs as Float),
                         y: self.y * (rhs as Float),
                         z: self.z * (rhs as Float),
@@ -466,10 +466,10 @@ pub mod numerical_types {
     }
 
     // Element-wise multiply
-    impl Mul<Self> for Vector3 {
+    impl Mul<Self> for Vector {
         type Output = Self;
-        fn mul(self, rhs: Vector3) -> Self {
-            Vector3 {
+        fn mul(self, rhs: Vector) -> Self {
+            Vector {
                 x: self.x * rhs.x,
                 y: self.y * rhs.y,
                 z: self.z * rhs.z,
@@ -483,7 +483,7 @@ pub mod numerical_types {
 
     macro_rules! vector_scalar_mul_assign {
         ($T: ty) => {
-            impl MulAssign<$T> for Vector3 {
+            impl MulAssign<$T> for Vector {
                 fn mul_assign(&mut self, rhs: $T) {
                     *self = Self {
                         x: self.x * (rhs as Float),
@@ -500,10 +500,10 @@ pub mod numerical_types {
     vector_scalar_mul_assign!(i64);
     vector_scalar_mul_assign!(Float);
 
-    impl Neg for Vector3 {
+    impl Neg for Vector {
         type Output = Self;
         fn neg(self) -> Self {
-            Vector3 {
+            Vector {
                 x: -self.x,
                 y: -self.y,
                 z: -self.z,
@@ -511,10 +511,10 @@ pub mod numerical_types {
         }
     }
 
-    impl Mul<Vector3> for Float {
-        type Output = Vector3;
-        fn mul(self, rhs: Vector3) -> Vector3 {
-            Vector3 {
+    impl Mul<Vector> for Float {
+        type Output = Vector;
+        fn mul(self, rhs: Vector) -> Vector {
+            Vector {
                 x: rhs.x * self,
                 y: rhs.y * self,
                 z: rhs.y * self,
@@ -522,16 +522,16 @@ pub mod numerical_types {
         }
     }
 
-    impl fmt::Display for Vector3 {
+    impl fmt::Display for Vector {
         // TODO: Switch between regular and scientific fmt based on magnitude
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "({:.2e}, {:.2e}, {:.2e})", self.x, self.y, self.z)
         }
     }
 
-    impl Default for Vector3 {
-        fn default() -> Vector3 {
-            Vector3 {
+    impl Default for Vector {
+        fn default() -> Vector {
+            Vector {
                 x: 0.,
                 y: 0.,
                 z: 0.,
@@ -540,23 +540,23 @@ pub mod numerical_types {
     }
 
     #[derive(Copy, Clone, Debug)]
-    pub struct Tensor3 {
-        pub x: Vector3,
-        pub y: Vector3,
-        pub z: Vector3,
+    pub struct Tensor {
+        pub x: Vector,
+        pub y: Vector,
+        pub z: Vector,
     }
-    impl Tensor3 {
+    impl Tensor {
         pub fn zero() -> Self {
-            Tensor3 {
-                x: Vector3::zero(),
-                y: Vector3::zero(),
-                z: Vector3::zero(),
+            Tensor {
+                x: Vector::zero(),
+                y: Vector::zero(),
+                z: Vector::zero(),
             }
         }
 
         // TODO: pass by value?
-        pub fn inner(&self, v: &Vector3) -> Vector3 {
-            Vector3 {
+        pub fn inner(&self, v: &Vector) -> Vector {
+            Vector {
                 x: self.x.dot(v),
                 y: self.y.dot(v),
                 z: self.z.dot(v),
@@ -579,7 +579,7 @@ pub mod numerical_types {
         }
     }
 
-    impl Add<Self> for Tensor3 {
+    impl Add<Self> for Tensor {
         type Output = Self;
         fn add(self, rhs: Self) -> Self {
             Self {
@@ -592,10 +592,10 @@ pub mod numerical_types {
 
     macro_rules! tensor_div {
         ($T: ty) => {
-            impl Div<$T> for Tensor3 {
+            impl Div<$T> for Tensor {
                 type Output = Self;
                 fn div(self, rhs: $T) -> Self {
-                    Tensor3 {
+                    Self {
                         x: self.x / (rhs as Float),
                         y: self.y / (rhs as Float),
                         z: self.z / (rhs as Float),
@@ -609,7 +609,7 @@ pub mod numerical_types {
     tensor_div!(usize);
     tensor_div!(Float);
 
-    impl fmt::Display for Tensor3 {
+    impl fmt::Display for Tensor {
         // TODO: Switch between regular and scientific fmt based on magnitude
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{}\n{}\n{}", self.x, self.y, self.z,)
