@@ -1,5 +1,6 @@
 #![allow(unreachable_patterns)]
 
+use crate::discretization::*;
 use crate::io::{
     linear_system_to_string, matrix_to_string, print_linear_system, print_matrix,
     print_vec_scientific,
@@ -9,7 +10,6 @@ use crate::mesh::*;
 use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
-use crate::discretization::*;
 use log::{debug, log_enabled, trace};
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
@@ -57,7 +57,7 @@ pub fn solve_steady(
     match numerical_settings.pressure_velocity_coupling {
         PressureVelocityCoupling::SIMPLE => {
             for iter_number in 1..=iteration_count {
-                build_momentum_advection_matrices(
+                let (peclet_avg, peclet_min, peclet_max) = build_momentum_advection_matrices(
                     &mut a_u,
                     &mut a_v,
                     &mut a_w,
@@ -209,10 +209,9 @@ pub fn solve_steady(
                     let elapsed = (Instant::now() - start).as_millis();
                     let millis_per_iter = elapsed / (reporting_interval as u128);
                     start = Instant::now();
-                    println!(
-                        "Iteration {}: avg velocity = ({:.2e}, {:.2e}, {:.2e})\tvelocity correction: {:.2e}\tpressure correction: {:.2e}\tms/iter: {:.1e}",
-                        iter_number, u_avg, v_avg, w_avg, avg_vel_correction, avg_pressure_correction, millis_per_iter
-                    );
+                    print!("Iteration {iter_number}: avg velocity = ({u_avg:.2e}, {v_avg:.2e}, {w_avg:.2e})\t");
+                    print!("avg peclet = {peclet_avg:.1e}\tmin peclet = {peclet_min:.1e}\tmax peclet = {peclet_max:.1e}\t");
+                    print!("velocity correction: {avg_vel_correction:.2e}\tpressure correction: {avg_pressure_correction:.2e}\tms/iter: {millis_per_iter:.1e}\n")
                 }
                 if Float::is_nan(u_avg) || Float::is_nan(v_avg) || Float::is_nan(w_avg) {
                     // TODO: Some undefined behavior seems to be causing this to trigger
@@ -404,12 +403,12 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
 }
 
 pub fn get_momentum_source_term(_location: Vector) -> Vector {
-    // TODO!!!
+    // TODO
     Vector::zero()
 }
 
 fn check_boundary_conditions(mesh: &Mesh) {
-    const PI:Float = std::f32::consts::PI as Float;
+    const PI: Float = std::f32::consts::PI as Float;
     // 5 degrees
     const TOL: Float = 5. * 180. / PI;
     for face_zone in mesh.face_zones.values() {
@@ -898,3 +897,15 @@ fn apply_pressure_correction(
     }
     (p_prime.norm(), velocity_corr_sum.sqrt())
 }
+
+// fn compute_courant_number(mesh: &Mesh, u: &DVector<Float>, v: &DVector<Float>, w: &DVector<Float>) -> (Float, Float, Float) {
+//     let mut min_courant_number: Float = Float::INFINITY;
+//     let mut max_courant_number: Float = Float::NEG_INFINITY;
+//     let mut avg_courant_number: Float = 0.;
+//
+//     for cell_index in 0..mesh.cells.len() {
+//         let velocity = Vector{x: u[cell_index], y: v[cell_index], z: w[cell_index]};
+//     }
+//
+//     (avg_courant_number, min_courant_number, max_courant_number)
+// }

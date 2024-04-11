@@ -149,9 +149,11 @@ pub fn build_momentum_advection_matrices(
     pressure_interpolation: PressureInterpolation,
     gradient_scheme: GradientReconstructionMethods,
     rho: Float,
-) {
+) -> (Float, Float, Float) {
+    let mut min_peclet_number = Float::INFINITY;
+    let mut max_peclet_number = Float::NEG_INFINITY;
+    let mut avg_peclet_number: Float = 0.;
     // Iterate over all cells in the mesh
-    // print_linear_system(&a_u, &b_u);
     for cell_index in 0..mesh.cells.len() {
         let cell = &mesh.cells[cell_index];
         // Diffusion of scalar phi from neighbor into this cell
@@ -323,6 +325,14 @@ pub fn build_momentum_advection_matrices(
         b_v[cell_index] = source_total.y;
         b_w[cell_index] = source_total.z;
 
+        let peclet_x = a_p.x / a_ii_di;
+        let peclet_y = a_p.y / a_ii_di;
+        let peclet_z = a_p.z / a_ii_di;
+
+        max_peclet_number = *[max_peclet_number, peclet_x, peclet_y, peclet_z].iter().max_by(|a,b| a.total_cmp(b)).unwrap();
+        min_peclet_number = *[min_peclet_number, peclet_x, peclet_y, peclet_z].iter().min_by(|a,b| a.total_cmp(b)).unwrap();
+        avg_peclet_number += [peclet_x, peclet_y, peclet_z].iter().fold(0., |acc, p| acc + p) / 3.;
+
         match a_u.get_entry_mut(cell_index, cell_index).unwrap() {
             NonZero(v) => *v = a_p.x + a_ii_di,
             Zero => panic!(),
@@ -338,6 +348,7 @@ pub fn build_momentum_advection_matrices(
     } // end cell loop
       // NOTE: I *think* all diagonal terms in `a` should be positive and all off-diagonal terms
       // negative. It may be worth adding assertions to validate this.
+    (avg_peclet_number / (mesh.cells.len() as Float), min_peclet_number, max_peclet_number)
 }
 
 #[allow(clippy::too_many_arguments)]
