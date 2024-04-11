@@ -78,7 +78,6 @@ fn main() {
         "couette_flow",
     );
     // couette_flow(iteration_count, reporting_interval);
-    // test_3d_1x3(iteration_count);
     // Interface: allow user to choose from
     // 1. Read mesh
     // 2. Read data
