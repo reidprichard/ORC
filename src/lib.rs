@@ -620,7 +620,10 @@ pub mod numerical_types {
     }
 }
 
-pub fn vector_angle(vector_1: &numerical_types::Vector, vector_2: &numerical_types::Vector) -> numerical_types::Float {
+pub fn vector_angle(
+    vector_1: &numerical_types::Vector,
+    vector_2: &numerical_types::Vector,
+) -> numerical_types::Float {
     numerical_types::Float::acos(&vector_1.dot(&vector_2) / (vector_1.norm() * vector_2.norm()))
 }
 
