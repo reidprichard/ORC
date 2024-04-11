@@ -3,6 +3,7 @@ pub mod io;
 pub mod linear_algebra;
 pub mod mesh;
 pub mod solver;
+pub mod tests;
 
 pub mod settings {
     use crate::numerical_types::*;
@@ -172,6 +173,8 @@ pub mod settings {
         GaussSeidel, // TODO: add backward sweep
         Jacobi,
         Multigrid,
+        // Biconjugate gradient stabilized method. WARNING: Too many matrix solver iterations may
+        // cause divergence. TODO: Investigate this behavior.
         BiCGSTAB,
     }
 
