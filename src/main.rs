@@ -1,28 +1,28 @@
 #![allow(dead_code, unused)]
 
-use log::log_enabled;
-use nalgebra::DVector;
-use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use orc::discretization::{
     build_momentum_advection_matrices, build_momentum_diffusion_matrix, initialize_momentum_matrix,
 };
-use orc::io::{print_vec_scientific, read_data, read_mesh};
-use orc::io::{write_data, write_gradients};
-use orc::linear_algebra::iterative_solve;
+use orc::io::{print_vec_scientific, read_data, read_mesh, write_data, write_gradients};
 use orc::mesh::*;
-use orc::numerical_types::{Float, Tensor};
-use orc::numerical_types::{Uint, Vector};
+use orc::numerical_types::{Float, Tensor, Uint, Vector};
 use orc::settings::*;
 use orc::solver::*;
+use orc::tests::*;
+
+use log::log_enabled;
+use nalgebra::DVector;
+use nalgebra_sparse::{coo::CooMatrix, csr::CsrMatrix};
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
-use std::env;
-use std::fs::File;
-use std::io::Write;
-use std::time::Instant;
 use tracing::{info, Level};
 use tracing_appender::rolling::{self, RollingFileAppender};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::prelude::*;
+
+use std::env;
+use std::fs::File;
+use std::io::Write;
+use std::time::Instant;
 
 // TODO: Set this with command line arg
 const DEBUG: bool = false;
@@ -34,15 +34,17 @@ fn write_couette_flow_analytical_profile(
     dp_dx: Float,
     mu: Float,
     rho: Float,
-) {
+) -> Float {
     let mut file = File::create(output_path).unwrap();
     const N: u16 = 128;
     for i in 0..N {
         // 1 / (2 * MU) * DP / DX * (y_linear**2 - a * y_linear)
         let y = (i as Float) / (N as Float) * channel_height;
-        let u = 1. / (2. * mu) * dp_dx * (y.powi(2) - channel_height * y);
+        let u = top_wall_velocity * y / channel_height
+            + 1. / (2. * mu) * dp_dx * (y.powi(2) - channel_height * y);
         writeln!(file, "{y:.3e},{u:.3e}");
     }
+    top_wall_velocity / 2. - channel_height.powi(2) / (12. * mu) * dp_dx
 }
 
 fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
@@ -111,27 +113,26 @@ fn couette_flow(iteration_count: Uint, reporting_interval: Uint) {
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
     );
 
-    let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
-    let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
-    let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
-    let bulk_velocity_correct =
-        Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) < 1.01;
-    let max_velocity_correct = Float::abs(u_max / u_avg - 1.5) < 0.01;
-    // if bulk_velocity_correct && max_velocity_correct {
-    //     print!("couette_flow flow validation passed.");
-    // } else {
-    //     print!("couette_flow flow validation failed.");
-    // }
-    write_couette_flow_analytical_profile(
+    let u_avg_analytical = write_couette_flow_analytical_profile(
         "./examples/couette_flow_analytical.csv",
         channel_height,
         top_wall_velocity,
-        dp/dx,
+        dp / dx,
         mu,
         rho,
     );
+
+    let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
+    let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+    let bulk_velocity_correct =
+        Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) < 1.01;
+    if bulk_velocity_correct {
+        print!("couette_flow flow validation passed.");
+    } else {
+        print!("couette_flow flow validation failed.");
+    }
     println!(" U_mean = {u_avg:.2e}; U_mean_analytical = {u_avg_analytical:.2e}");
-    println!(" U_max = {:.2e} = {:.1e}U_mean", u_max, u_max / u_avg);
+    println!(" U_max = {:.2e}", u_max);
 }
 
 fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
@@ -227,9 +228,17 @@ fn channel_flow(iteration_count: Uint, reporting_interval: Uint) {
         rho,
     );
 
+    let u_avg_analytical = write_couette_flow_analytical_profile(
+        "./examples/channel_flow_analytical.csv",
+        channel_height,
+        0.,
+        dp / dx,
+        mu,
+        rho,
+    );
+
     let u_avg = u.iter().sum::<Float>() / (u.len() as Float);
     let u_max = u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
-    let u_avg_analytical = -(Float::powi(channel_height, 2) / (12. * mu)) * (dp / dx);
     let bulk_velocity_correct =
         Float::max(u_avg, u_avg_analytical) / Float::min(u_avg, u_avg_analytical) < 1.01;
     let max_velocity_correct = Float::abs(u_max / u_avg - 1.5) < 0.01;
@@ -274,9 +283,9 @@ fn main() {
         .unwrap_or(&"0".to_string())
         .parse()
         .expect("arg 2 should be an integer");
-    // validate_solvers(); // TODO: Get this back up
+    validate_solvers();
     // channel_flow(iteration_count, reporting_interval);
-    couette_flow(iteration_count, reporting_interval);
+    // couette_flow(iteration_count, reporting_interval);
     // test_3d_1x3(iteration_count);
     // Interface: allow user to choose from
     // 1. Read mesh
