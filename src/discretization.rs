@@ -1,5 +1,5 @@
 use crate::mesh::*;
-use crate::nalgebra::{dvector_zeros, GetEntry};
+use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
 use crate::solver::{
@@ -52,9 +52,9 @@ pub fn build_momentum_diffusion_matrix(
 
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
-    let mut b_u: DVector<Float> = dvector_zeros!(cell_count);
-    let mut b_v: DVector<Float> = dvector_zeros!(cell_count);
-    let mut b_w: DVector<Float> = dvector_zeros!(cell_count);
+    let mut b_u: DVector<Float> = DVector::zeros(cell_count);
+    let mut b_v: DVector<Float> = DVector::zeros(cell_count);
+    let mut b_w: DVector<Float> = DVector::zeros(cell_count);
 
     // Iterate over all cells in the mesh
     for cell_index in 0..mesh.cells.len() {
@@ -357,7 +357,7 @@ pub fn build_pressure_correction_matrices(
     // The coefficients of the pressure correction matrix
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
     // This is the net mass flow rate into each cell
-    let mut b = dvector_zeros!(cell_count);
+    let mut b = DVector::zeros(cell_count);
 
     for cell_index in 0..mesh.cells.len() {
         let cell = &mesh.cells[cell_index];

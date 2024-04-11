@@ -644,10 +644,4 @@ pub mod nalgebra {
             }
         }
     }
-    macro_rules! dvector_zeros {
-        ($n:expr) => {
-            DVector::from_column_slice(&vec![0.; $n])
-        };
-    }
-    pub(crate) use dvector_zeros;
 }

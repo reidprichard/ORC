@@ -1,4 +1,4 @@
-use crate::nalgebra::{dvector_zeros, GetEntry};
+use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
 use ahash::{HashSet, RandomState};
@@ -83,7 +83,7 @@ fn multigrid_solve(
     // 3. Create a' = R * a * R.⊺
     let a_prime = &restriction_matrix * a * &restriction_matrix.transpose();
     // 4. Solve a' * e' = r'
-    let mut e_prime: DVector<Float> = dvector_zeros!(a_prime.ncols());
+    let mut e_prime: DVector<Float> = DVector::zeros(a_prime.ncols());
     iterative_solve(
         &a_prime,
         &r_prime,

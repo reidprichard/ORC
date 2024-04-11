@@ -6,7 +6,7 @@ use crate::io::{
 };
 use crate::linear_algebra::*;
 use crate::mesh::*;
-use crate::nalgebra::{dvector_zeros, GetEntry};
+use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
 use crate::discretization::*;
@@ -42,10 +42,10 @@ pub fn solve_steady(
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);
-    let mut b_u = dvector_zeros!(cell_count);
-    let mut b_v = dvector_zeros!(cell_count);
-    let mut b_w = dvector_zeros!(cell_count);
-    let mut p_prime = dvector_zeros!(cell_count);
+    let mut b_u = DVector::zeros(cell_count);
+    let mut b_v = DVector::zeros(cell_count);
+    let mut b_w = DVector::zeros(cell_count);
+    let mut p_prime = DVector::zeros(cell_count);
 
     if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
         println!("\nMomentum diffusion:");
@@ -271,18 +271,18 @@ pub fn initialize_flow(
 
     check_boundary_conditions(mesh);
     let n = mesh.cells.len();
-    let mut u = dvector_zeros!(n);
-    let mut v = dvector_zeros!(n);
-    let mut w = dvector_zeros!(n);
-    let mut p = dvector_zeros!(n);
+    let mut u = DVector::zeros(n);
+    let mut v = DVector::zeros(n);
+    let mut w = DVector::zeros(n);
+    let mut p = DVector::zeros(n);
     let (a_di, b_u_di, b_v_di, b_w_di) =
         build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);
-    let mut b_u = dvector_zeros!(n);
-    let mut b_v = dvector_zeros!(n);
-    let mut b_w = dvector_zeros!(n);
+    let mut b_u = DVector::zeros(n);
+    let mut b_v = DVector::zeros(n);
+    let mut b_w = DVector::zeros(n);
 
     initialize_pressure_field(mesh, &mut p, iteration_count);
     build_momentum_advection_matrices(
@@ -360,7 +360,7 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
     // - Outlet: psi = 0
     let n = mesh.cells.len();
     let mut a_coo = CooMatrix::<Float>::new(n, n);
-    let mut b = dvector_zeros!(a_coo.nrows());
+    let mut b = DVector::zeros(a_coo.nrows());
 
     for i in 0..mesh.cells.len() {
         let cell = &mesh.cells[i];
