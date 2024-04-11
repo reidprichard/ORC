@@ -8,7 +8,7 @@ use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
 use std::time::Instant;
 
-pub fn validate_solvers() {
+pub fn validate_iterative_solvers() {
     const TOL: Float = 1e-3;
 
     const N: usize = 100;

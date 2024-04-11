@@ -283,7 +283,7 @@ fn main() {
         .unwrap_or(&"0".to_string())
         .parse()
         .expect("arg 2 should be an integer");
-    validate_solvers();
+    validate_iterative_solvers();
     // channel_flow(iteration_count, reporting_interval);
     // couette_flow(iteration_count, reporting_interval);
     // test_3d_1x3(iteration_count);
