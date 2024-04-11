@@ -65,8 +65,8 @@ fn main() {
         reporting_interval,
         ChannelFlowParameters {
             top_wall_velocity: 5e-4,
-            dp_dx: 100.,
-            mu: 0.01,
+            dp_dx: 5.,
+            mu: 0.001,
             rho: 1000.,
         },
         NumericalSettings {
@@ -76,6 +76,7 @@ fn main() {
             ..NumericalSettings::default()
         },
         "couette_flow",
+        0.1, // NOTE: Generous 10% validation threshold
     );
     // couette_flow(iteration_count, reporting_interval);
     // Interface: allow user to choose from
