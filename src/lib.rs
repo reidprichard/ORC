@@ -204,7 +204,7 @@ pub mod settings {
 pub mod numerical_types {
     use std::{
         fmt,
-        ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub},
+        ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     };
 
     use nalgebra::DVector;
@@ -397,6 +397,15 @@ pub mod numerical_types {
         }
     }
 
+    impl SubAssign<Self> for Vector {
+        fn sub_assign(&mut self, other: Self) {
+            *self = Self {
+                x: self.x - other.x,
+                y: self.y - other.y,
+                z: self.z - other.z,
+            }
+        }
+    }
     // impl Sum<Self> for Vector3 {
     //     fn sum<I>(iter: I) -> Self {
     //         iter.fold(Vector3::zero(), |acc, v| acc + v)
