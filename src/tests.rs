@@ -47,6 +47,7 @@ pub mod channel_flow {
         flow_parameters: ChannelFlowParameters,
         numerics: NumericalSettings,
         name: &str,
+        validation_threshold: Float,
     ) {
         // ************ Constants ********
         const CHANNEL_HEIGHT: Float = 0.001;
@@ -115,30 +116,38 @@ pub mod channel_flow {
         let u_max = *u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
 
         fn compare(value_1: Float, value_2: Float, tolerance: Float) -> bool {
-            Float::max(value_1, value_2) / Float::min(value_1, value_2) < tolerance
+            Float::max(value_1, value_2) / Float::min(value_1, value_2) - 1. < tolerance
         }
 
-        const TOL: Float = 1e-3;
-        let bulk_velocity_correct = compare(u_mean, u_mean_analytical, TOL);
-        let max_velocity_correct = compare(u_max, u_max_analytical, TOL);
-        let min_velocity_correct = compare(u_min, u_min_analytical, TOL);
+        let bulk_velocity_correct = compare(u_mean, u_mean_analytical, validation_threshold);
+        let max_velocity_correct = compare(u_max, u_max_analytical, validation_threshold);
+        let min_velocity_correct = compare(u_min, u_min_analytical, validation_threshold);
         const FIELD_WIDTH: usize = 8;
         println!(
-            " U_mean:\tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}",
-            u_mean, u_mean_analytical
+            " U_mean:\tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}; Error = {:>6.1}%",
+            u_mean, u_mean_analytical, (u_mean/u_mean_analytical - 1.)*100.
         );
+        if !bulk_velocity_correct {
+            println!("**FAIL**");
+        }
         println!(
-            " U_min: \tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}",
-            u_min, u_min_analytical
+            " U_min: \tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}; Error = {:>6.1}%",
+            u_min, u_min_analytical, (u_min/u_min_analytical - 1.)*100.
         );
+        if !min_velocity_correct {
+            println!("**FAIL**");
+        }
         println!(
-            " U_max: \tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}",
-            u_max, u_max_analytical
+            " U_max: \tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}; Error = {:>6.1}%",
+            u_max, u_max_analytical, (u_max/u_max_analytical - 1.)*100.
         );
+        if !max_velocity_correct {
+            println!("**FAIL**");
+        }
         if bulk_velocity_correct && min_velocity_correct && max_velocity_correct {
-            print!("{name} validation passed.");
+            println!("{name} validation passed.");
         } else {
-            print!("{name} validation failed.");
+            println!("{name} validation failed.");
         }
     }
 }
