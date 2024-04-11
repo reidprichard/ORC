@@ -40,7 +40,12 @@ pub fn build_momentum_diffusion_matrix(
     mesh: &Mesh,
     diffusion_scheme: DiffusionScheme,
     mu: Float,
-) -> (CsrMatrix<Float>, DVector<Float>, DVector<Float>, DVector<Float>) {
+) -> (
+    CsrMatrix<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
     if !matches!(diffusion_scheme, DiffusionScheme::CD) {
         panic!("unsupported diffusion scheme");
     }
@@ -224,6 +229,7 @@ pub fn build_momentum_advection_matrices(
                     f_i * Vector::ones() / 2.
                 }
                 MomentumDiscretization::TVD(psi) => {
+                    // TODO: Gradient limiter
                     if neighbor_cell_index == usize::MAX {
                         // NOTE: On boundary faces, use UD
                         // TODO: Consider strategy here
