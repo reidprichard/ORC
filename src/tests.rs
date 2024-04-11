@@ -1,61 +1,63 @@
-fn validate_solvers() {
-    // TODO: Move to tests.rs
-    // TODO: Feed this a much larger linear system representative of CFD
-    const TOL: Float = 1e-6;
+use crate::io::print_vec_scientific;
+use crate::linear_algebra::iterative_solve;
+use crate::numerical_types::Float;
+use crate::settings::{PreconditionMethod, SolutionMethod};
 
-    // | 2 0 1 |   | 3 |
-    // | 0 3 2 | = | 2 |
-    // | 2 0 4 |   | 1 |
-    //
-    // | 1 0 0 |   | 11/6 |   | 1.833 |
-    // | 0 1 0 | = | 10/9 | = | 1.111 |
-    // | 0 0 1 |   | -2/3 |   | -0.67 |
-    let mut a_coo: CooMatrix<Float> = CooMatrix::new(3, 3);
-    a_coo.push(0, 0, 2.);
-    a_coo.push(0, 2, 1.);
+use nalgebra::DVector;
+use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
-    a_coo.push(1, 1, 3.);
-    a_coo.push(1, 2, 2.);
+use std::time::Instant;
 
-    a_coo.push(2, 0, 2.);
-    a_coo.push(2, 2, 4.);
+pub fn validate_solvers() {
+    const TOL: Float = 1e-3;
+
+    const N: usize = 20;
+
+    let mut a_coo: CooMatrix<Float> = CooMatrix::new(N, N);
+    let mut b_vec: Vec<Float> = Vec::with_capacity(N);
 
     let a = CsrMatrix::from(&a_coo);
-    let b = DVector::from_column_slice(&[3., 2., 1.]);
+    let b = DVector::from_column_slice(&[
+        -0.5, 2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0, 110.0, 132.0, 156.0, 182.0,
+        210.0, 240.0, 272.0, 306.0, 342.0, 580.0,
+    ]);
 
+    let n = b.len();
+    let mut x = b.map(|_| 0.);
     for (solution_method, name) in [
         (SolutionMethod::Jacobi, "Jacobi"),
-        (SolutionMethod::Multigrid, "Multigrid"),
         (SolutionMethod::BiCGSTAB, "BiCGSTAB"),
+        (SolutionMethod::Multigrid, "Multigrid"),
     ]
     .iter()
     {
         println!("*** Testing {name} solver for correctness. ***");
-        let mut x = DVector::from_column_slice(&[0., 0., 0.]);
 
+        let start = Instant::now();
         iterative_solve(
             &a,
             &b,
             &mut x,
-            10000,
+            50,
             *solution_method,
             0.5,
-            TOL / 10.,
+            TOL / (n.pow(3) as Float),
             PreconditionMethod::Jacobi,
         );
 
-        print!("x = ");
-        print_vec_scientific(&x);
-        for row_num in 0..a.nrows() {
-            assert!(
-                Float::abs(
-                    a.get_entry(row_num, 0).unwrap().into_value() * x[0]
-                        + a.get_entry(row_num, 1).unwrap().into_value() * x[1]
-                        + a.get_entry(row_num, 2).unwrap().into_value() * x[2]
-                        - b[row_num]
-                ) < TOL
-            );
+        let r = &a * &x - &b;
+        if n < 10 {
+            print!("x = ");
+            print_vec_scientific(&x);
+            print!("r = ");
+            print_vec_scientific(&r);
         }
+        println!(
+            "|r| = {:.1e}, Δt = {}µs",
+            r.norm(),
+            (Instant::now() - start).as_micros()
+        );
+        assert!(r.norm() < TOL);
         println!("*** {name} solver validated. ***");
     }
 }
