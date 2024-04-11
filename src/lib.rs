@@ -645,7 +645,7 @@ pub mod nalgebra {
 
     impl GetEntry<Float> for CsrMatrix<Float> {
         fn get(&self, i: usize, j: usize) -> Float {
-            match self.get_entry(i, j).unwrap() {
+            match self.get_entry(i, j).expect("indices should be within the bounds of the CsrMatrix") {
                 nalgebra_sparse::SparseEntry::NonZero(v) => *v,
                 nalgebra_sparse::SparseEntry::Zero => {
                     panic!("Tried to access CsrMatrix element that hasn't been stored yet.")
