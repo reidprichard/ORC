@@ -37,7 +37,7 @@ pub fn solve_steady(
     println!("Solving...");
     let cell_count: usize = mesh.cells.len();
 
-    let a_di = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
+    let (a_di, b_u_di, b_v_di, b_w_di) = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);
@@ -75,6 +75,9 @@ pub fn solve_steady(
                     numerical_settings.gradient_reconstruction,
                     rho,
                 );
+                b_u += &b_u_di;
+                b_v += &b_v_di;
+                b_w += &b_w_di;
 
                 if log_enabled!(log::Level::Debug) && a_di.nrows() < MAX_PRINT_ROWS {
                     println!("\nMomentum:");
@@ -256,7 +259,7 @@ pub fn initialize_flow(
     let mut v = dvector_zeros!(n);
     let mut w = dvector_zeros!(n);
     let mut p = dvector_zeros!(n);
-    let a_di = build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
+    let (a_di, b_u_di, b_v_di, b_w_di) = build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);
@@ -284,6 +287,9 @@ pub fn initialize_flow(
         GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
         rho,
     );
+    b_u += b_u_di;
+    b_v += b_v_di;
+    b_w += b_w_di;
     // TODO: Consider initializing velocity field by the following:
     // Solve with only diffusive term
     // Slowly ramp up to diffusive + advective

@@ -40,13 +40,16 @@ pub fn build_momentum_diffusion_matrix(
     mesh: &Mesh,
     diffusion_scheme: DiffusionScheme,
     mu: Float,
-) -> CsrMatrix<Float> {
+) -> (CsrMatrix<Float>, DVector<Float>, DVector<Float>, DVector<Float>) {
     if !matches!(diffusion_scheme, DiffusionScheme::CD) {
         panic!("unsupported diffusion scheme");
     }
 
     let cell_count = mesh.cells.len();
     let mut a = CooMatrix::<Float>::new(cell_count, cell_count);
+    let mut b_u: DVector<Float> = dvector_zeros!(cell_count);
+    let mut b_v: DVector<Float> = dvector_zeros!(cell_count);
+    let mut b_w: DVector<Float> = dvector_zeros!(cell_count);
 
     // Iterate over all cells in the mesh
     for cell_index in 0..mesh.cells.len() {
@@ -59,8 +62,14 @@ pub fn build_momentum_diffusion_matrix(
             let face = &mesh.faces[*face_index];
             let face_bc = &mesh.face_zones[&face.zone];
             let (d_i, neighbor_cell_index) = match face_bc.zone_type {
-                FaceConditionTypes::Wall => {
+                FaceConditionTypes::Wall | FaceConditionTypes::VelocityInlet => {
+                    // NOTE: These boundaries need to have a source term contribution since there
+                    // is no cell on the other side.
                     let d_i = mu * face.area / (face.centroid - cell.centroid).norm();
+                    let source_contribution = face_bc.vector_value * d_i;
+                    b_u[cell_index] += source_contribution.x;
+                    b_v[cell_index] += source_contribution.y;
+                    b_w[cell_index] += source_contribution.z;
                     (d_i, usize::MAX)
                 }
                 FaceConditionTypes::PressureInlet
@@ -71,13 +80,6 @@ pub fn build_momentum_diffusion_matrix(
                         0., // no diffusion since face velocity == cell velocity
                         usize::MAX,
                     )
-                }
-                FaceConditionTypes::VelocityInlet => {
-                    // Diffusion coefficient
-                    // TODO: Add source term contribution to diffusion since there's no cell on the other side
-                    let d_i: Float = mu * face.area / (face.centroid - cell.centroid).norm();
-                    println!("WARNING: VelocityInlet not finished.");
-                    (d_i, usize::MAX)
                 }
                 FaceConditionTypes::Interior => {
                     let mut neighbor_cell_index: usize = face.cell_indices[0];
@@ -120,7 +122,7 @@ pub fn build_momentum_diffusion_matrix(
         } // end face loop
         a.push(cell_index, cell_index, a_p);
     } // end cell loop
-    CsrMatrix::from(&a)
+    (CsrMatrix::from(&a), b_u, b_v, b_w)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -285,9 +287,9 @@ pub fn build_momentum_advection_matrices(
                     FaceConditionTypes::Wall | FaceConditionTypes::VelocityInlet => {
                         // TODO: Get this working
                         Vector {
-                            x: (a_nb.x + a_ii_di - f_i) * face_zone.vector_value.x,
-                            y: (a_nb.y + a_ii_di - f_i) * face_zone.vector_value.y,
-                            z: (a_nb.z + a_ii_di - f_i) * face_zone.vector_value.z,
+                            x: (a_nb.x - f_i) * face_zone.vector_value.x,
+                            y: (a_nb.y - f_i) * face_zone.vector_value.y,
+                            z: (a_nb.z - f_i) * face_zone.vector_value.z,
                         }
                     }
                     _ => Vector::zero(), // Do nothing for other BC types
