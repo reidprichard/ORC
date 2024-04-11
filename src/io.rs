@@ -293,7 +293,11 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         let face_nodes: Vec<&Vertex> = face
             .node_indices
             .iter()
-            .map(|n| vertices_hashmap.get(n).expect("nodes should have all been read"))
+            .map(|n| {
+                vertices_hashmap
+                    .get(n)
+                    .expect("nodes should have all been read")
+            })
             .collect();
         match dimensions {
             2 => {
@@ -485,9 +489,9 @@ pub fn read_mesh(mesh_path: &str) -> Mesh {
         );
     }
 
-    let mut vertices:Vec<Vertex> = Vec::with_capacity(vertices_hashmap.len());
-    let mut faces:Vec<Face> = Vec::with_capacity(faces_hashmap.len());
-    let mut cells:Vec<Cell> = Vec::with_capacity(cells_hashmap.len());
+    let mut vertices: Vec<Vertex> = Vec::with_capacity(vertices_hashmap.len());
+    let mut faces: Vec<Face> = Vec::with_capacity(faces_hashmap.len());
+    let mut cells: Vec<Cell> = Vec::with_capacity(cells_hashmap.len());
 
     for vertex_index in 0..vertices_hashmap.len() {
         vertices.push(vertices_hashmap[&vertex_index]);
@@ -552,6 +556,7 @@ pub fn read_data(
                         ),
                     });
             }
+            println!("Done!");
             Ok((
                 DVector::from_column_slice(&u),
                 DVector::from_column_slice(&v),
