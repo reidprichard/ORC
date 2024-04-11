@@ -618,13 +618,13 @@ pub mod numerical_types {
             write!(f, "{}\n{}\n{}", self.x, self.y, self.z,)
         }
     }
-}
 
-pub fn vector_angle(
-    vector_1: &numerical_types::Vector,
-    vector_2: &numerical_types::Vector,
-) -> numerical_types::Float {
-    numerical_types::Float::acos(&vector_1.dot(&vector_2) / (vector_1.norm() * vector_2.norm()))
+    pub fn vector_angle(
+        vector_1: &Vector,
+        vector_2: &Vector,
+    ) -> Float {
+        Float::acos(&vector_1.dot(&vector_2) / (vector_1.norm() * vector_2.norm()))
+    }
 }
 
 pub mod nalgebra {
