@@ -1,79 +1,142 @@
-use crate::io::print_vec_scientific;
-use crate::linear_algebra::iterative_solve;
-use crate::numerical_types::Float;
-use crate::settings::{PreconditionMethod, SolutionMethod};
+pub mod channel_flow {
+    use crate::io::{read_data, read_mesh, write_data, write_gradients};
+    use crate::mesh::FaceConditionTypes;
+    use crate::numerical_types::{Float, Uint, Vector};
+    use crate::settings::*;
+    use crate::solver::{initialize_flow, solve_steady};
 
-use nalgebra::DVector;
-use nalgebra_sparse::{CooMatrix, CsrMatrix};
+    use std::fs::File;
+    use std::io::Write;
 
-use std::time::Instant;
-
-pub fn validate_iterative_solvers() {
-    const TOL: Float = 1e-3;
-
-    const N: usize = 100;
-
-    let mut a_coo: CooMatrix<Float> = CooMatrix::new(N, N);
-    let mut b_vec: Vec<Float> = Vec::with_capacity(N);
-    let solution: Vec<Float> = (0..N).map(|x_i| 2. * (x_i as Float)).collect();
-
-    for i in 0..N {
-        let mut b_value = 0.;
-        for j in 0..N {
-            let mut value = 0.;
-            if i == j {
-                value = 1.;
-            } else if j != 0 && j != N - 1 && i.abs_diff(j) == 1 {
-                value = -1. / 4.;
-            }
-            if value != 0. {
-                a_coo.push(i, j, value);
-                b_value += value * solution[j];
-            }
-        }
-        b_vec.push(b_value);
+    pub struct ChannelFlowParameters {
+        pub top_wall_velocity: Float,
+        pub dp_dx: Float,
+        pub mu: Float,
+        pub rho: Float,
     }
 
-    let a = CsrMatrix::from(&a_coo);
-    let b = DVector::from_vec(b_vec);
-
-    let n = b.len();
-    let mut x = b.map(|_| 0.);
-    for (solution_method, name) in [
-        (SolutionMethod::Jacobi, "Jacobi"),
-        (SolutionMethod::BiCGSTAB, "BiCGSTAB"),
-        // TODO: Figure out why Multigrid won't pass this test
-        // (SolutionMethod::Multigrid, "Multigrid"),
-    ]
-    .iter()
-    {
-        println!("*** Testing {name} solver for correctness. ***");
-
-        let start = Instant::now();
-        iterative_solve(
-            &a,
-            &b,
-            &mut x,
-            50,
-            *solution_method,
-            0.5,
-            TOL / (n.pow(3) as Float),
-            PreconditionMethod::Jacobi,
-        );
-
-        let r = &a * &x - &b;
-        if n < 10 {
-            print!("x = ");
-            print_vec_scientific(&x);
-            print!("r = ");
-            print_vec_scientific(&r);
+    fn write_couette_flow_analytical_profile(
+        output_path: &str,
+        parameters: ChannelFlowParameters,
+        channel_height: Float,
+    ) -> (Float, Float, Float) {
+        let mut file = File::create(output_path).unwrap();
+        const N: u16 = 128;
+        for i in 0..N {
+            // 1 / (2 * MU) * DP / DX * (y_linear**2 - a * y_linear)
+            let y = (i as Float) / (N as Float) * channel_height;
+            let u = parameters.top_wall_velocity * y / channel_height
+                + 1. / (2. * parameters.mu) * parameters.dp_dx * (y.powi(2) - channel_height * y);
+            writeln!(file, "{y:.3e},{u:.3e}").unwrap();
         }
-        println!(
-            "|r| = {:.1e}, Δt = {}µs",
-            r.norm(),
-            (Instant::now() - start).as_micros()
+
+        let u_extremum:Float = -(2. * parameters.mu * parameters.top_wall_velocity
+            - channel_height.powi(2) * parameters.dp_dx)
+            .powi(2) / (8. * channel_height.powi(2) * parameters.dp_dx * parameters.mu);
+        let u_avg = parameters.top_wall_velocity / 2.
+            - channel_height.powi(2) / (12. * parameters.mu) * parameters.dp_dx;
+        let u_max = Float::max(Float::max(parameters.top_wall_velocity, 0.), u_extremum);
+        let u_min = Float::min(Float::min(parameters.top_wall_velocity, 0.), u_extremum);
+        (u_avg, u_min, u_max)
+    }
+
+    pub fn solve_channel_flow(
+        iteration_count: Uint,
+        reporting_interval: Uint,
+        flow_parameters: ChannelFlowParameters,
+        numerics: NumericalSettings,
+        name: &str,
+    ) {
+        // ************ Constants ********
+        const CHANNEL_HEIGHT: Float = 0.001;
+        const DX: Float = 0.002;
+
+        // *********** Read mesh ************
+        let mut mesh = read_mesh("./examples/couette_flow_128x64x1.msh");
+
+        // ************ Set boundary conditions **********
+        mesh.get_face_zone("TOP_WALL").zone_type = FaceConditionTypes::Wall;
+        mesh.get_face_zone("TOP_WALL").vector_value = Vector {
+            x: flow_parameters.top_wall_velocity,
+            y: 0.,
+            z: 0.,
+        };
+
+        mesh.get_face_zone("BOTTOM_WALL").zone_type = FaceConditionTypes::Wall;
+
+        mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+        mesh.get_face_zone("INLET").scalar_value = -flow_parameters.dp_dx * DX;
+
+        mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+        mesh.get_face_zone("OUTLET").scalar_value = 0.;
+
+        mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
+        mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
+
+        // TODO: Clean this up
+        let data_path: &str = &format!("./examples/{name}.csv")[..];
+        let analytical_path: &str = &format!("./examples/{name}_analytical.csv")[..];
+        let gradients_path: &str = &format!("./examples/{name}_gradients.csv")[..];
+
+        // ************ Solve **************
+        let (mut u, mut v, mut w, mut p) = read_data(data_path).unwrap_or_else(|_| {
+            initialize_flow(&mesh, flow_parameters.mu, flow_parameters.rho, 1000)
+        });
+        solve_steady(
+            &mut mesh,
+            &mut u,
+            &mut v,
+            &mut w,
+            &mut p,
+            &numerics,
+            flow_parameters.rho,
+            flow_parameters.mu,
+            iteration_count,
+            Uint::max(reporting_interval, 1),
         );
-        assert!(r.norm() < TOL);
-        println!("*** {name} solver validated. ***");
+        write_data(&mesh, &u, &v, &w, &p, data_path);
+        write_gradients(
+            &mesh,
+            &u,
+            &v,
+            &w,
+            &p,
+            gradients_path,
+            7,
+            GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        );
+
+        let (u_mean_analytical, u_min_analytical, u_max_analytical) =
+            write_couette_flow_analytical_profile(analytical_path, flow_parameters, CHANNEL_HEIGHT);
+
+        let u_mean = u.iter().sum::<Float>() / (u.len() as Float);
+        let u_min = *u.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
+        let u_max = *u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+
+        fn compare(value_1: Float, value_2: Float, tolerance: Float) -> bool {
+            Float::max(value_1, value_2) / Float::min(value_1, value_2) < tolerance
+        }
+
+        const TOL: Float = 1e-3;
+        let bulk_velocity_correct = compare(u_mean, u_mean_analytical, TOL);
+        let max_velocity_correct = compare(u_max, u_max_analytical, TOL);
+        let min_velocity_correct = compare(u_min, u_min_analytical, TOL);
+        println!(
+            " U_mean:\tCFD = {:.2e}; Analytical = {:.2e}",
+            u_mean, u_mean_analytical
+        );
+        println!(
+            " U_min: \tCFD = {:.2e}; Analytical = {:.2e}",
+            u_min, u_min_analytical
+        );
+        println!(
+            " U_max: \tCFD = {:.2e}; Analytical = {:.2e}",
+            u_max, u_max_analytical
+        );
+        if bulk_velocity_correct && min_velocity_correct && max_velocity_correct {
+            print!("{name} validation passed.");
+        } else {
+            print!("{name} validation failed.");
+        }
     }
 }
