@@ -34,6 +34,7 @@ pub fn solve_steady(
     iteration_count: Uint,
     reporting_interval: Uint,
 ) {
+    println!("Solving...");
     let cell_count: usize = mesh.cells.len();
 
     let a_di = build_momentum_diffusion_matrix(mesh, numerical_settings.diffusion, mu);
@@ -235,11 +236,7 @@ pub fn solve_steady(
         pressure_grad_mean += pressure_gradient.abs();
         velocity_grad_mean = velocity_grad_mean + velocity_gradient.abs();
     }
-    // println!(
-    //     "MEAN\n{}\t{}\n",
-    //     velocity_grad_mean / mesh.cells.len(),
-    //     pressure_grad_mean / mesh.cells.len()
-    // );
+    println!("Done solving.");
 }
 
 pub fn initialize_flow(
