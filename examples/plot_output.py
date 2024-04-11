@@ -129,7 +129,7 @@ def interpolate_to_grid(x_list, y_list, z_list, n_x=200, n_y=200):
     return (x_grid, y_grid, z_grid)
 
 
-def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
+def plot_2d(root: str, plot_title: str | None = None, save: bool = False):
     MU = 0.1
     DP = -10
     DX = 0.002
@@ -170,7 +170,11 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
     x_interpolated, y_interpolated, p_interpolated = interpolate_to_grid(x, y, p)
     cm = axs[0].contourf(x_interpolated, y_interpolated, p_interpolated, levels=10)
     fig.colorbar(cm, label="Gage Pressure [Pa]")
-    axs[0].quiver(x, y, u, v)
+    n_x = 8
+    n_y = 16
+    x_interpolated_2, y_interpolated_2, u_interpolated = interpolate_to_grid(x, y, u, n_x=n_x, n_y=n_y)
+    v_interpolated = interpolate_to_grid(x, y, v, n_x=n_x, n_y=n_y)[-1]
+    axs[0].quiver(x_interpolated_2, y_interpolated_2, u_interpolated, v_interpolated)
     axs[0].set_title("Velocity Vectors; Pressure Contours")
     axs[0].set_xlabel("X [m]")
     axs[0].set_ylabel("Y [m]")
@@ -194,13 +198,12 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
     fig, ax = plt.subplots()
     if plot_title is not None:
         fig.suptitle(plot_title)
-    a = CHANNEL_HEIGHT
     ax.scatter(y, u, label="CFD data")
-    y_analytical:list[float] = []
-    u_analytical:list[float] = []
-    with open(f"./examples/{root}_analytical.csv", 'r') as analytical_data:
+    y_analytical: list[float] = []
+    u_analytical: list[float] = []
+    with open(f"./examples/{root}_analytical.csv", "r") as analytical_data:
         for line in analytical_data.readlines():
-            y_str, u_str = line.strip().split(',')
+            y_str, u_str = line.strip().split(",")
             y_analytical.append(float(y_str))
             u_analytical.append(float(u_str))
     ax.plot(y_analytical, u_analytical, label="Analytical solution")
@@ -211,14 +214,14 @@ def plot_2d(root: str, plot_title: str | None = None, save:bool=False):
         fig.savefig("./examples/channel_flow_velocity_profile.png", dpi=300)
 
 
-def plot_face_velocities(filenames: list[str], save:bool=False):
-    fig, axs = plt.subplots(nrows=len(filenames), layout="constrained", sharex=True,sharey=True)
-    if len(filenames)==1:
+def plot_face_velocities(filenames: list[str], save: bool = False):
+    fig, axs = plt.subplots(nrows=len(filenames), layout="constrained", sharex=True, sharey=True)
+    if len(filenames) == 1:
         axs = [axs]
-    x:list[list[float]] = []
-    y:list[list[float]] = []
-    u:list[list[float]] = []
-    v:list[list[float]] = []
+    x: list[list[float]] = []
+    y: list[list[float]] = []
+    u: list[list[float]] = []
+    v: list[list[float]] = []
     for fname in filenames:
         x.append([])
         y.append([])
@@ -227,7 +230,7 @@ def plot_face_velocities(filenames: list[str], save:bool=False):
         with open(fname, "r") as f:
             lines = f.readlines()
             for line in lines:
-                if len(line.strip())==0:
+                if len(line.strip()) == 0:
                     continue
                 _, centroid, vel = line.split("\t")
                 x_str, y_str = centroid[1:-1].split(",")[:-1]
@@ -237,21 +240,22 @@ def plot_face_velocities(filenames: list[str], save:bool=False):
                 u[-1].append(float(u_str.strip()))
                 v[-1].append(float(v_str.strip()))
 
-    nested_max = lambda l : max([max(i) for i in l])
-    nested_min = lambda l : min([min(i) for i in l])
-    
+    nested_max = lambda l: max([max(i) for i in l])
+    nested_min = lambda l: min([min(i) for i in l])
+
     u_min, u_max = nested_min(u), nested_max(u)
     v_min, v_max = nested_min(v), nested_max(v)
 
-    arrow_scale = (u_max**2 + v_max**2)**(1/2) * 30
+    arrow_scale = (u_max**2 + v_max**2) ** (1 / 2) * 30
 
-    for (ax, xi, yi, ui, vi) in zip(axs, x, y, u, v):
-        cm = ax.contourf(*interpolate_to_grid(xi,yi,ui), levels=np.linspace(u_min, u_max, 10))
+    for ax, xi, yi, ui, vi in zip(axs, x, y, u, v):
+        cm = ax.contourf(*interpolate_to_grid(xi, yi, ui), levels=np.linspace(u_min, u_max, 10))
         ax.quiver(xi, yi, ui, vi, scale=arrow_scale, scale_units="width", width=0.002)
-        ax.set_title(fname.split('/')[-1].split('\\')[-1])
+        ax.set_title(fname.split("/")[-1].split("\\")[-1])
     fig.colorbar(cm)
     if save:
         fig.savefig("./examples/face_velocities.png", dpi=300)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="CfdPlotter", description="Plots solution fields of CFD data")
