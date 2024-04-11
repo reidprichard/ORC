@@ -30,9 +30,10 @@ pub mod channel_flow {
             writeln!(file, "{y:.3e},{u:.3e}").unwrap();
         }
 
-        let u_extremum:Float = -(2. * parameters.mu * parameters.top_wall_velocity
+        let u_extremum: Float = -(2. * parameters.mu * parameters.top_wall_velocity
             - channel_height.powi(2) * parameters.dp_dx)
-            .powi(2) / (8. * channel_height.powi(2) * parameters.dp_dx * parameters.mu);
+            .powi(2)
+            / (8. * channel_height.powi(2) * parameters.dp_dx * parameters.mu);
         let u_avg = parameters.top_wall_velocity / 2.
             - channel_height.powi(2) / (12. * parameters.mu) * parameters.dp_dx;
         let u_max = Float::max(Float::max(parameters.top_wall_velocity, 0.), u_extremum);
@@ -121,16 +122,17 @@ pub mod channel_flow {
         let bulk_velocity_correct = compare(u_mean, u_mean_analytical, TOL);
         let max_velocity_correct = compare(u_max, u_max_analytical, TOL);
         let min_velocity_correct = compare(u_min, u_min_analytical, TOL);
+        const FIELD_WIDTH: usize = 8;
         println!(
-            " U_mean:\tCFD = {:.2e}; Analytical = {:.2e}",
+            " U_mean:\tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}",
             u_mean, u_mean_analytical
         );
         println!(
-            " U_min: \tCFD = {:.2e}; Analytical = {:.2e}",
+            " U_min: \tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}",
             u_min, u_min_analytical
         );
         println!(
-            " U_max: \tCFD = {:.2e}; Analytical = {:.2e}",
+            " U_max: \tCFD = {:>FIELD_WIDTH$.2e}; Analytical = {:>FIELD_WIDTH$.2e}",
             u_max, u_max_analytical
         );
         if bulk_velocity_correct && min_velocity_correct && max_velocity_correct {
