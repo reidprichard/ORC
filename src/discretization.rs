@@ -5,8 +5,11 @@ use crate::settings::*;
 use crate::solver::{
     calculate_velocity_gradient, get_face_flux, get_face_pressure, get_momentum_source_term,
 };
+
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix, SparseEntryMut::*};
+
+// TODO: Find, list, and justify areas where user-specified settings are overridden
 
 macro_rules! get_normal_momentum_coefficient {
     ($i: expr, $a_u: expr, $a_v: expr, $a_w: expr, $n: expr) => {
@@ -220,13 +223,13 @@ pub fn build_momentum_advection_matrices(
                 }
                 MomentumDiscretization::TVD(psi) => {
                     if neighbor_cell_index == usize::MAX {
-                        // NOTE: On boundary, use UD
+                        // NOTE: On boundary faces, use UD
                         // TODO: Consider strategy here
                         Float::min(f_i, 0.) * Vector::ones()
                     } else {
                         // TODO: Consider directly representing gradient term in solution matrices
                         // Green-Gauss face values are a function of neighboring cell values, so they can be
-                        // represented in the matrix
+                        // represented in the matrix I think?
 
                         let downstream_cell = if f_i > 0. {
                             neighbor_cell_index
