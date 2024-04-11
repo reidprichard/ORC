@@ -278,16 +278,16 @@ pub fn build_momentum_advection_matrices(
             // If it's MAX, that means it's a boundary face
             if neighbor_cell_index == usize::MAX {
                 let face_zone = &mesh.face_zones[&face.zone];
-                match face_zone.zone_type {
+                s_u += match face_zone.zone_type {
                     FaceConditionTypes::Wall | FaceConditionTypes::VelocityInlet => {
                         // TODO: Get this working
-                        s_u += Vector {
-                            x: (a_nb.x + a_ii_di) * face_zone.vector_value.x,
-                            y: (a_nb.y + a_ii_di) * face_zone.vector_value.y,
-                            z: (a_nb.z + a_ii_di) * face_zone.vector_value.z,
+                        Vector {
+                            x: (a_nb.x + a_ii_di - f_i) * face_zone.vector_value.x,
+                            y: (a_nb.y + a_ii_di - f_i) * face_zone.vector_value.y,
+                            z: (a_nb.z + a_ii_di - f_i) * face_zone.vector_value.z,
                         }
                     }
-                    _ => (),
+                    _ => Vector::zero(), // Do nothing for other BC types
                 }
                 // Add source term contributions for velocity BCs
             } else {
