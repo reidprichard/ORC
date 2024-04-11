@@ -409,7 +409,8 @@ pub fn get_momentum_source_term(_location: Vector) -> Vector {
 }
 
 fn check_boundary_conditions(mesh: &Mesh) {
-    const PI: Float = 3.141592;
+    const PI:Float = std::f32::consts::PI as Float;
+    // const PI: Float = 3.141592;
     // 5 degrees
     const TOL: Float = 5. * 180. / PI;
     // TODO: get angle between vectors rather than using tols
@@ -503,7 +504,7 @@ pub fn calculate_velocity_gradient(
                     }
                     _ => {
                         let face_velocity =
-                            get_face_velocity(&mesh, &u, &v, &w, *f, VelocityInterpolation::None);
+                            get_face_velocity(mesh, u, v, w, *f, VelocityInterpolation::None);
                         (
                             face.centroid - cell_centroid,
                             (face_velocity.x, face_velocity.y, face_velocity.z),
@@ -597,8 +598,8 @@ pub fn calculate_pressure_gradient(
                     _ => (
                         face.centroid - cell_centroid,
                         get_face_pressure(
-                            &mesh,
-                            &p,
+                            mesh,
+                            p,
                             *f,
                             PressureInterpolation::None,
                             GradientReconstructionMethods::None,
@@ -765,8 +766,7 @@ pub fn get_face_flux(
                     / cell_centroid_vector.norm();
                 let term_3 = (cell_vol_i / a_i * p_grad_i + cell_vol_j / a_j * p_grad_j)
                     .dot(&cell_centroid_vector.unit());
-                let face_velocity_magnitude = 0.5 * (term_1 + term_2 - term_3);
-                face_velocity_magnitude
+                0.5 * (term_1 + term_2 - term_3)
             }
             VelocityInterpolation::None => {
                 panic!("`None` VelocityInterpolation cannot be used for interior faces")

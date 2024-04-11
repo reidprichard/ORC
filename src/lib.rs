@@ -326,7 +326,7 @@ pub mod numerical_types {
             }
         }
 
-        pub fn from_vec(v: &Vec<Float>) -> Self {
+        pub fn from_slice(v: &[Float]) -> Self {
             Vector {
                 x: v[0],
                 y: v[1],
@@ -623,7 +623,7 @@ pub mod numerical_types {
         vector_1: &Vector,
         vector_2: &Vector,
     ) -> Float {
-        Float::acos(&vector_1.dot(&vector_2) / (vector_1.norm() * vector_2.norm()))
+        Float::acos(vector_1.dot(vector_2) / (vector_1.norm() * vector_2.norm()))
     }
 }
 
