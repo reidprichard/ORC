@@ -350,43 +350,194 @@ pub fn initialize_flow(
     (u, v, w, p)
 }
 
+pub fn initialize_flow_new(
+    mesh: &Mesh,
+    mu: Float,
+    rho: Float,
+    iteration_count: Uint,
+) -> (
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+    DVector<Float>,
+) {
+    // This needs a few different strategies:
+    // 1. All pressure / stationary wall BCs
+    // 2. All velocity / stationary wall / moving wall BCs
+    // 3. Mixture of 1 and 2
+    //
+    // In case 1, we can solve Laplace's equation for pressure with the conditions that
+    // boundary-normal pressure gradients are zero. This will produce a smooth pressure field that
+    // can be fed into the momentum equation. Here we will want to use a very stable iterative
+    // solver.
+    // * Is the assumption reasonable that wall-normal pressure gradient is zero?
+    //
+    // In case 2, we can solve Laplace's equation for velocity as above.
+    //
+    // Case 3 is more challenging.
+
+    let n = mesh.cells.len();
+    let mut u = DVector::zeros(n);
+    let mut v = DVector::zeros(n);
+    let mut w = DVector::zeros(n);
+    let mut p = DVector::zeros(n);
+    let (a_di, b_u_di, b_v_di, b_w_di) =
+        build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
+    let mut a_u = initialize_momentum_matrix(mesh);
+    let mut a_v = initialize_momentum_matrix(mesh);
+    let mut a_w = initialize_momentum_matrix(mesh);
+    let mut b_u = DVector::zeros(n);
+    let mut b_v = DVector::zeros(n);
+    let mut b_w = DVector::zeros(n);
+
+    let constraint_type = check_boundary_conditions(mesh);
+
+    match constraint_type {
+        SystemConstraintType::PressureOnly => {
+            // Do pressure stuff
+            initialize_pressure_field(mesh, &mut p, iteration_count);
+        }
+        SystemConstraintType::VelocityOnly => {
+            // Do velocity stuff
+        }
+        SystemConstraintType::Hybrid => {
+            // Idk
+        }
+    }
+
+    build_momentum_advection_matrices(
+        &mut a_u,
+        &mut a_v,
+        &mut a_w,
+        &mut b_u,
+        &mut b_v,
+        &mut b_w,
+        &a_di,
+        mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        MomentumDiscretization::UD,
+        VelocityInterpolation::LinearWeighted,
+        PressureInterpolation::LinearWeighted,
+        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+        rho,
+    );
+    b_u += b_u_di;
+    b_v += b_v_di;
+    b_w += b_w_di;
+    // TODO: Consider initializing velocity field by the following:
+    // Solve with only diffusive term
+    // Slowly ramp up to diffusive + advective
+
+    println!("Initializing velocity field...");
+
+    let mut diffusion_fraction = 1.;
+    while diffusion_fraction >= 0. {
+        iterative_solve(
+            &(&a_u * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
+            &b_u,
+            &mut u,
+            iteration_count,
+            SolutionMethod::BiCGSTAB,
+            0.5,
+            1e-6,
+            PreconditionMethod::Jacobi,
+        );
+        iterative_solve(
+            &(&a_v * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
+            &b_v,
+            &mut v,
+            iteration_count,
+            SolutionMethod::BiCGSTAB,
+            0.5,
+            1e-6,
+            PreconditionMethod::Jacobi,
+        );
+        iterative_solve(
+            &(&a_w * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
+            &b_w,
+            &mut w,
+            iteration_count,
+            SolutionMethod::BiCGSTAB,
+            0.5,
+            1e-6,
+            PreconditionMethod::Jacobi,
+        );
+        diffusion_fraction -= 0.2;
+    }
+    println!("Done!");
+    (u, v, w, p)
+}
+
 fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
     println!("Initializing pressure field...");
     // TODO
-    // Solve laplace's equation (nabla^2 psi = 0) based on BCs:
-    // - Wall: d/dn (psi) = 0
-    // - Inlet: d/dn (psi) = V
-    // - Outlet: psi = 0
+    // Solve laplace's equation (nabla^2 P = dP^2/dx^2 + dP^2/dy^2 + dP^2/dz^2 = 0) based on BCs:
+    // - Wall: d/dn (P) = 0
+    // - Pressure BC: P = P_boundary (duh)
+    // - Other BCs: ???
+    // For each cell, compute pressure gradient at face as:
+    // dP/dx = (P_cell - P_neighbor)/(x_cell - x_neighbor)
+    // Use green-gauss to get second derivative at cell center:
+    // (d^2/dx^2)[P] = sum(dP/dx * face_outward_normal_vector) / cell_volume
+    // So, for each face and each axis:
+    // a_nb = face_outward_normal_vector.x * (x_neighbor - x_cell) / cell_volume
+    // And for each cell:
+    // a_p = sum(a_nb)
+    // Since we have separate equations for each axis, this will produce a 3n x n matrix
     let n = mesh.cells.len();
     let mut a_coo = CooMatrix::<Float>::new(n, n);
     let mut b = DVector::zeros(a_coo.nrows());
 
-    for i in 0..mesh.cells.len() {
-        let cell = &mesh.cells[i];
-        let mut a_ii = 0.;
+    for cell_index in 0..mesh.cells.len() {
+        let cell = &mesh.cells[cell_index];
+        let mut a_p: Float = 0.;
         for face in cell
             .face_indices
             .iter()
             .map(|face_index| &mesh.faces[*face_index])
         {
-            match mesh.face_zones[&face.zone].zone_type {
+            let outward_normal_vector = get_outward_face_normal(face, cell_index);
+            let face_zone = &mesh.face_zones[&face.zone];
+            let (a_nb, source, neighbor_cell_index) = match face_zone.zone_type {
                 FaceConditionTypes::Interior => {
-                    let neighbor_cell_index = if face.cell_indices[0] == i {
+                    let neighbor_cell_index = if face.cell_indices[0] == cell_index {
                         face.cell_indices[1]
                     } else {
                         face.cell_indices[0]
                     };
-                    a_coo.push(i, neighbor_cell_index, 1.0);
-                    a_ii -= 1.0;
+                    (
+                        outward_normal_vector
+                            .dot(&(mesh.cells[neighbor_cell_index].centroid - cell.centroid))
+                            / cell.volume,
+                        0.,
+                        neighbor_cell_index,
+                    )
                 }
                 FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-                    a_ii -= 1e2;
-                    b[i] -= mesh.face_zones[&face.zone].scalar_value * 1e2;
+                    let temp =
+                        outward_normal_vector.dot(&(face.centroid - cell.centroid)) / cell.volume;
+                    (temp, temp * face_zone.scalar_value, usize::MAX)
                 }
-                _ => (),
+                FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
+                    // we're saying wall-normal pressure gradient is zero, so all terms here
+                    // are zero
+                    (0., 0., usize::MAX)
+                }
+                _ => {
+                    println!("{:?}", face_zone.zone_type);
+                    panic!("^ unsupported face zone type for pressure initialization");
+                }
+            };
+            if neighbor_cell_index != usize::MAX {
+                a_coo.push(cell_index, neighbor_cell_index, a_nb);
             }
+            b[cell_index] += source;
+            a_p -= a_nb;
         }
-        a_coo.push(i, i, a_ii);
+        a_coo.push(cell_index, cell_index, a_p);
     }
     let a = &CsrMatrix::from(&a_coo);
     iterative_solve(
@@ -407,24 +558,38 @@ pub fn get_momentum_source_term(_location: Vector) -> Vector {
     Vector::zero()
 }
 
-fn check_boundary_conditions(mesh: &Mesh) {
+enum SystemConstraintType {
+    PressureOnly,
+    VelocityOnly,
+    Hybrid,
+}
+
+fn check_boundary_conditions(mesh: &Mesh) -> SystemConstraintType {
     const PI: Float = std::f32::consts::PI as Float;
     // 5 degrees
     const TOL: Float = 5. * 180. / PI;
+
+    let mut pressure_bcs: bool = false;
+    let mut velocity_bcs: bool = false;
+
     for face_zone in mesh.face_zones.values() {
         match face_zone.zone_type {
             FaceConditionTypes::Wall => {
-                for face_index in 0..mesh.faces.len() {
-                    let face = &mesh.faces[face_index];
-                    // println!("Angle = {}", vector_angle(&face.normal, &face_zone.vector_value));
-                    if PI / 2. - Float::abs(vector_angle(&face.normal, &face_zone.vector_value))
-                        > TOL
-                    {
-                        panic!("Wall velocity must be tangent to faces in zone.");
+                if face_zone.vector_value.norm() > 0. {
+                    for face_index in 0..mesh.faces.len() {
+                        velocity_bcs = true;
+                        let face = &mesh.faces[face_index];
+                        // println!("Angle = {}", vector_angle(&face.normal, &face_zone.vector_value));
+                        if PI / 2. - Float::abs(vector_angle(&face.normal, &face_zone.vector_value))
+                            > TOL
+                        {
+                            panic!("Wall velocity must be tangent to faces in zone.");
+                        }
                     }
                 }
             }
             FaceConditionTypes::VelocityInlet => {
+                velocity_bcs = true;
                 for face_index in 0..mesh.faces.len() {
                     let face = &mesh.faces[face_index];
                     if Float::abs(vector_angle(&face.normal, &face_zone.vector_value)) > TOL {
@@ -432,12 +597,30 @@ fn check_boundary_conditions(mesh: &Mesh) {
                     }
                 }
             }
+
+            FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+                pressure_bcs = true;
+            }
             _ => {
                 // TODO: Handle other zone types. Could check if scalar_value/vector_value are
                 // set/not set appropriately, could check if system is overdefined/underdefined,
                 // etc.
             }
         }
+    }
+
+    if pressure_bcs && velocity_bcs {
+        SystemConstraintType::Hybrid
+    } else if velocity_bcs && !pressure_bcs {
+        println!(
+            "Warning - only velocity boundary conditions exist. System may be overconstrained."
+        );
+        SystemConstraintType::VelocityOnly
+    } else if pressure_bcs {
+        SystemConstraintType::PressureOnly
+    } else {
+        // TODO: Eventually allow stagnation? Useful for heat transfer, e.g.?
+        panic!("You must set boundary conditions.");
     }
 }
 
