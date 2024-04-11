@@ -15,12 +15,27 @@ pub fn validate_solvers() {
 
     let mut a_coo: CooMatrix<Float> = CooMatrix::new(N, N);
     let mut b_vec: Vec<Float> = Vec::with_capacity(N);
+    let solution: Vec<Float> = (0..N).map(|x_i| 2. * (x_i as Float)).collect();
+
+    for i in 0..N {
+        let mut b_value = 0.;
+        for j in 0..N {
+            let mut value = 0.;
+            if i == j {
+                value = 1.;
+            } else if j != 0 && j != N - 1 && i.abs_diff(j) == 1 {
+                value = -1. / 4.;
+            }
+            if value != 0. {
+                a_coo.push(i, j, value);
+                b_value += value * solution[j];
+            }
+        }
+        b_vec.push(b_value);
+    }
 
     let a = CsrMatrix::from(&a_coo);
-    let b = DVector::from_column_slice(&[
-        -0.5, 2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0, 110.0, 132.0, 156.0, 182.0,
-        210.0, 240.0, 272.0, 306.0, 342.0, 580.0,
-    ]);
+    let b = DVector::from_vec(b_vec);
 
     let n = b.len();
     let mut x = b.map(|_| 0.);
