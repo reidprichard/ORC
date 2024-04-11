@@ -410,10 +410,8 @@ pub fn get_momentum_source_term(_location: Vector) -> Vector {
 
 fn check_boundary_conditions(mesh: &Mesh) {
     const PI:Float = std::f32::consts::PI as Float;
-    // const PI: Float = 3.141592;
     // 5 degrees
     const TOL: Float = 5. * 180. / PI;
-    // TODO: get angle between vectors rather than using tols
     for face_zone in mesh.face_zones.values() {
         match face_zone.zone_type {
             FaceConditionTypes::Wall => {
