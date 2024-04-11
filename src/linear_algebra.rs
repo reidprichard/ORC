@@ -31,7 +31,8 @@ fn build_restriction_matrix(a: &CsrMatrix<Float>, method: RestrictionMethods) ->
             // For each row, find the most negative off-diagonal value
             // If that cell hasn't already been combined, combine it with diagonal
             // If it *has* been combined, find the next largest and so on.
-            let mut combined_cells = HashSet::<usize>::with_capacity_and_hasher(n, RandomState::with_seeds(3, 1, 4, 1));
+            let mut combined_cells =
+                HashSet::<usize>::with_capacity_and_hasher(n, RandomState::with_seeds(3, 1, 4, 1));
             a.row_iter().enumerate().for_each(|(i, row)| {
                 let mut strongest_coeff: Float = Float::MAX;
                 let strongest_unmerged_neighbor =
@@ -236,6 +237,7 @@ pub fn iterative_solve(
             panic!("Gauss-Seidel out for maintenance :)");
         }
         SolutionMethod::BiCGSTAB => {
+            // TODO: Precondition properly: https://doc.comsol.com/5.5/doc/com.comsol.help.comsol/comsol_ref_solver.27.123.html
             // TODO: Optimize this
             let mut r = b_preconditioned - a_preconditioned * &*solution_vector;
             // TODO: Set search direction more intelligently
