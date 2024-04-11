@@ -587,6 +587,7 @@ pub fn write_data(
         )
         .unwrap();
     }
+    println!("Done!");
 }
 
 pub fn write_data_with_precision(
