@@ -254,6 +254,21 @@ pub fn initialize_flow(
     DVector<Float>,
     DVector<Float>,
 ) {
+    // This needs a few different strategies:
+    // 1. All pressure / stationary wall BCs
+    // 2. All velocity / stationary wall / moving wall BCs
+    // 3. Mixture of 1 and 2
+    //
+    // In case 1, we can solve Laplace's equation for pressure with the conditions that
+    // boundary-normal pressure gradients are zero. This will produce a smooth pressure field that
+    // can be fed into the momentum equation. Here we will want to use a very stable iterative
+    // solver.
+    // * Is the assumption reasonable that wall-normal pressure gradient is zero?
+    //
+    // In case 2, we can solve Laplace's equation for velocity as above.
+    //
+    // Case 3 is more challenging.
+
     check_boundary_conditions(mesh);
     let n = mesh.cells.len();
     let mut u = dvector_zeros!(n);
