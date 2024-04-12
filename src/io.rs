@@ -706,7 +706,7 @@ pub fn print_matrix(a: &CsrMatrix<Float>) {
 }
 
 pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> String {
-    const FIELD_WIDTH: usize = 7;
+    const FIELD_WIDTH: usize = 8;
     // Each row will be the following:
     // [Row index: N1 digits]: {['*' if i==j][Col index: N1 digits]=[' ' if a_ij > 0][a_ij: N2 digits], ...: (N1+2 + N2+2)*N3 digits} | [b_i: N2 digits]
     // N1 = i_digits
@@ -729,9 +729,9 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
     let calculate_disp_decimals = |coeff: Float| {
         // Number of digits in the exponent in scientific notation
         let exponent = Float::abs(coeff).log10().floor() as i16;
-        let exp_len:i16 = (Float::log10(exponent.abs().into()).floor() as i16) + (if exponent <= 0 {1} else {0});
+        let exp_len:i16 = (Float::log10(exponent.abs().into()).floor() as i16) + 1 + (if exponent <= 0 {1} else {0});
         // Subtract initial digit, decimal pt, 'e', and a bonus digit for some reason??
-        let decimals: usize = i8::max((FIELD_WIDTH as i8) - (exp_len as i8) - 4, 0) as usize;
+        let decimals: usize = i8::max((FIELD_WIDTH as i8) - (exp_len as i8) - 3, 0) as usize;
         // println!("{coeff:.1e}, {exponent}, {exp_len}, {decimals}");
         // panic!();
         decimals
@@ -755,20 +755,24 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
                     values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
                 }
             } else if coeff != 0. {
+                let mut formatted_entry: String = "".into();
+                // Fill the space of the negative sign
+                if coeff > 0. {
+                    formatted_entry += " ";
+                }
+                // Subtract one to account for the negative sign / blank space
+                let decimals: usize = calculate_disp_decimals(coeff) - 1;
+                formatted_entry += &format!("{coeff:.decimals$e}");
+                // even though we calculate decimals to get the correct field width,
+                // rounding behavior means it is impossible to represent any number
+                // with any field width, so we still pad the field
+                formatted_entry = format!("{formatted_entry: <FIELD_WIDTH$}");
                 if i == j {
                     values_str_repr += "*";
                 } else {
                     values_str_repr += " ";
                 }
-                values_str_repr += &format!("{: <i_digits$}=", j);
-                if coeff > 0. {
-                    values_str_repr += " ";
-                }
-                let decimals: usize = calculate_disp_decimals(coeff);
-                // even though we calculate decimals to get the correct field width,
-                // rounding behavior means it is impossible to represent any number
-                // with any field width, so we still pad the field
-                values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
+                values_str_repr += &format!("{j: <i_digits$}={formatted_entry}, ");
             }
         }
         let decimals = calculate_disp_decimals(b[i]);
