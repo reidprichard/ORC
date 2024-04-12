@@ -749,7 +749,7 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
             if a.ncols() < 16 {
                 // TODO: Clean this part up
                 if coeff == 0. {
-                    values_str_repr += &format!("{: <FIELD_WIDTH$}", " ");
+                    values_str_repr += &format!("{: <FIELD_WIDTH$}, ", " ");
                 } else {
                     let decimals: usize = calculate_disp_decimals(coeff);
                     values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
@@ -774,7 +774,7 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
         let decimals = calculate_disp_decimals(b[i]);
         system_str_repr += &format!(
             "{i: <i_digits$}: {: <row_len$} | {:.decimals$e}\n",
-            values_str_repr.strip_suffix(", ").unwrap(),
+            values_str_repr.strip_suffix(", ").unwrap_or(&values_str_repr),
             b[i]
         );
     }
