@@ -1,15 +1,18 @@
 #![allow(unused_labels)]
 
 use crate::mesh::*;
+use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::GradientReconstructionMethods;
 use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
+
 use ahash::RandomState;
 use itertools::Itertools;
 use log::info;
 use nalgebra::DVector;
 use nalgebra_sparse::CsrMatrix;
 use regex::Regex;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -703,32 +706,77 @@ pub fn print_matrix(a: &CsrMatrix<Float>) {
 }
 
 pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> String {
-    let mut s: String = String::from("");
+    const FIELD_WIDTH: usize = 7;
+    // Each row will be the following:
+    // [Row index: N1 digits]: {['*' if i==j][Col index: N1 digits]=[' ' if a_ij > 0][a_ij: N2 digits], ...: (N1+2 + N2+2)*N3 digits} | [b_i: N2 digits]
+    // N1 = i_digits
+    // N2 = FIELD_WIDTH
+    // N3 = max_nonzero_cols
+    // We want the system to be <120chars per col, ideally
+    // As written above, each row is a max of N1 + 3 + (N1+2 + N2+2)*N3 + 3 + N2
+    // = N3*(N1+N2+4) + N1 + N2 + 6
+    // N3 = 6 is typical for a hex mesh
+    // Let's say N1 = 6 as well
+    // That allows 7 chars for N2
+
+    let max_nonzero_cols: usize = a
+        .row_iter()
+        .map(|row| row.col_indices().len())
+        .fold(0, |acc, ncols| usize::max(acc, ncols));
+
+    // This is a hard problem - exponent len depends on digits of precision
+    // For example, 9.99e9 becomes 1.0e10 when precision decreases by one.
+    let calculate_disp_decimals = |coeff: Float| {
+        // Number of digits in the exponent in scientific notation
+        let exponent = Float::abs(coeff).log10().floor() as i16;
+        let exp_len:i16 = (Float::log10(exponent.abs().into()).floor() as i16) + (if exponent <= 0 {1} else {0});
+        // Subtract initial digit, decimal pt, 'e', and a bonus digit for some reason??
+        let decimals: usize = i8::max((FIELD_WIDTH as i8) - (exp_len as i8) - 4, 0) as usize;
+        // println!("{coeff:.1e}, {exponent}, {exp_len}, {decimals}");
+        // panic!();
+        decimals
+    };
+
+    let mut system_str_repr: String = "".into();
     let n = a.nrows();
     let i_digits = Float::log10(n as Float).ceil() as usize;
+    // Should be +4 below, but had to make it +5 for some reason
+    let row_len = (i_digits + FIELD_WIDTH + 5) * max_nonzero_cols;
     for i in 0..n {
-        s += &format!("{i: <i_digits$}: ");
+        let mut values_str_repr: String = "".into();
         for j in 0..a.ncols() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
             if a.ncols() < 16 {
-                if coeff == 0. {
-                    s += "          , ";
-                } else {
-                    s += &format!("{: <9}, ", format!("{coeff:.2e}"));
-                }
+                // if coeff == 0. {
+                //     row_str_repr += "          , ";
+                // } else {
+                //     row_str_repr += &format!("{: <9}, ", format!("{coeff:.2e}"));
+                // }
             } else if coeff != 0. {
                 if i == j {
-                    s += "*";
-                    s += &format!("{}={: <8}, ", j, format!("{coeff:.2e}"));
+                    values_str_repr += "*";
                 } else {
-                    s += &format!("{}={: <9}, ", j, format!("{coeff:.2e}"));
+                    values_str_repr += " ";
                 }
+                values_str_repr += &format!("{: <i_digits$}=", j);
+                if coeff > 0. {
+                    values_str_repr += " ";
+                }
+                let decimals: usize = calculate_disp_decimals(coeff);
+                // even though we calculate decimals to get the correct field width,
+                // rounding behavior means it is impossible to represent any number
+                // with any field width, so we still pad the field
+                values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
             }
         }
-        s = s.strip_suffix(", ").unwrap().to_owned();
-        s += &format!(" | {:.2e}\n", b[i]);
+        let decimals = calculate_disp_decimals(b[i]);
+        system_str_repr += &format!(
+            "{i: <i_digits$}: {: <row_len$} | {:.decimals$e}\n",
+            values_str_repr.strip_suffix(", ").unwrap(),
+            b[i]
+        );
     }
-    s
+    system_str_repr
 }
 
 pub fn print_linear_system(a: &CsrMatrix<Float>, b: &DVector<Float>) {
