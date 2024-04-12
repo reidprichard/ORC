@@ -704,8 +704,10 @@ pub fn print_matrix(a: &CsrMatrix<Float>) {
 
 pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> String {
     let mut s: String = String::from("");
-    for i in 0..a.nrows() {
-        s += &format!("{i}: ");
+    let n = a.nrows();
+    let i_digits = Float::log10(n as Float).ceil() as usize;
+    for i in 0..n {
+        s += &format!("{i: <i_digits$}: ");
         for j in 0..a.ncols() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
             if a.ncols() < 16 {
