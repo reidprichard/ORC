@@ -756,7 +756,7 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
             } else if coeff != 0. {
                 let mut formatted_entry: String = "".into();
                 // Fill the space of the negative sign
-                if coeff > 0. {
+                if coeff >= 0. {
                     formatted_entry += " ";
                 }
                 // Subtract one to account for the negative sign / blank space
@@ -774,10 +774,10 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
                 values_str_repr += &format!("{j: <i_digits$}={formatted_entry}, ");
             }
         }
-        let decimals = calculate_disp_decimals(b[i]);
         system_str_repr += &format!(
-            "{i: <i_digits$}: {: <row_len$} | {:.decimals$e}\n",
+            "{i: <i_digits$}: {: <row_len$} | {}{:.2e}\n",
             values_str_repr.strip_suffix(", ").unwrap_or(&values_str_repr),
+            if b[i] >= 0. {" "} else {""},
             b[i]
         );
     }
