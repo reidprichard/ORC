@@ -1,7 +1,6 @@
 #![allow(unused_labels)]
 
 use crate::mesh::*;
-use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::GradientReconstructionMethods;
 use crate::solver::{calculate_pressure_gradient, calculate_velocity_gradient};
