@@ -747,11 +747,13 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
         for j in 0..a.ncols() {
             let coeff = a.get_entry(i, j).unwrap().into_value();
             if a.ncols() < 16 {
-                // if coeff == 0. {
-                //     row_str_repr += "          , ";
-                // } else {
-                //     row_str_repr += &format!("{: <9}, ", format!("{coeff:.2e}"));
-                // }
+                // TODO: Clean this part up
+                if coeff == 0. {
+                    values_str_repr += &format!("{: <FIELD_WIDTH$}", " ");
+                } else {
+                    let decimals: usize = calculate_disp_decimals(coeff);
+                    values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
+                }
             } else if coeff != 0. {
                 if i == j {
                     values_str_repr += "*";
