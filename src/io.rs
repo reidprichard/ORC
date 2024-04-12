@@ -719,10 +719,13 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
             } else if coeff != 0. {
                 if i == j {
                     s += "*";
+                    s += &format!("{}={: <8}, ", j, format!("{coeff:.2e}"));
+                } else {
+                    s += &format!("{}={: <9}, ", j, format!("{coeff:.2e}"));
                 }
-                s += &format!("{}={: <9}, ", j, format!("{coeff:.2e}"));
             }
         }
+        s = s.strip_suffix(", ").unwrap().to_owned();
         s += &format!(" | {:.2e}\n", b[i]);
     }
     s
