@@ -192,7 +192,7 @@ def plot_2d(root: str, plot_title: str | None = None, save: bool = False):
 
     fig.colorbar(cm, label="Velocity gradient [1/s]")
     if save:
-        fig.savefig("./examples/channel_flow_contour_plots.png", dpi=300)
+        fig.savefig(f"./examples/{root}_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
     fig, ax = plt.subplots()
@@ -211,7 +211,7 @@ def plot_2d(root: str, plot_title: str | None = None, save: bool = False):
     ax.set_xlabel("Y [m]")
     ax.set_ylabel("U [m/s]")
     if save:
-        fig.savefig("./examples/channel_flow_velocity_profile.png", dpi=300)
+        fig.savefig(f"./examples/{root}_velocity_profile.png", dpi=300)
 
 
 def plot_face_velocities(filenames: list[str], save: bool = False):
