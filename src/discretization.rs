@@ -259,6 +259,8 @@ pub fn build_momentum_advection_matrices(
                         if (downstream_velocity - velocity).norm() == 0. {
                             // If the velocities are equal, the scheme we use doesn't matter, as
                             // face velocity = cell 1 velocity = cell 2 velocity
+                            // NOTE: Technically this isn't true, but odds of vels being exactly
+                            // equal are nil.
                             f_i * Vector::ones() / 2.
                         } else {
                             let cell_velocity_gradient = calculate_velocity_gradient(
@@ -306,6 +308,7 @@ pub fn build_momentum_advection_matrices(
             } else {
                 let a_ij_di = a_di.get(cell_index, neighbor_cell_index);
                 // negate a_nb to move to LHS of equation
+                // can I clean this up with .get_entry_mut().unwrap().into_value()?
                 match a_u.get_entry_mut(cell_index, neighbor_cell_index).unwrap() {
                     NonZero(a_ij) => *a_ij = a_nb.x + a_ij_di,
                     Zero => panic!(),
