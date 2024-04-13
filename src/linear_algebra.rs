@@ -1,3 +1,4 @@
+use crate::io::print_vec_scientific;
 use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
@@ -200,11 +201,19 @@ pub fn iterative_solve(
                     + &*solution_vector * (1. - relaxation_factor);
 
                 let r = (b_preconditioned - a_preconditioned * &*solution_vector).norm();
+                let max_abs_val = solution_vector
+                    .iter()
+                    .max_by(|&a, &b| a.abs().total_cmp(&b.abs()))
+                    .unwrap()
+                    .abs();
                 if iter_num == 1 {
                     initial_residual = r;
                 } else if r / initial_residual < convergence_threshold {
                     info!("Converged in {} iters", iter_num);
                     break;
+                }
+                if max_abs_val > 1e10 {
+                    panic!("Diverged - max solution value > 10^10");
                 }
             }
         }
