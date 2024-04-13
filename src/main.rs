@@ -59,7 +59,26 @@ fn main() {
         .unwrap_or(&"0".to_string())
         .parse()
         .expect("arg 2 should be an integer");
-    // channel_flow(iteration_count, reporting_interval);
+
+    // solve_channel_flow(
+    //     iteration_count,
+    //     reporting_interval,
+    //     ChannelFlowParameters {
+    //         top_wall_velocity: 0.,
+    //         dp_dx: 5.,
+    //         mu: 0.001,
+    //         rho: 1000.,
+    //     },
+    //     NumericalSettings {
+    //         momentum: TVD_UMIST,
+    //         pressure_interpolation: PressureInterpolation::SecondOrder,
+    //         velocity_interpolation: VelocityInterpolation::RhieChow,
+    //         ..NumericalSettings::default()
+    //     },
+    //     "channel_flow",
+    //     0.1, // NOTE: Generous 10% validation threshold
+    // );
+
     solve_channel_flow(
         iteration_count,
         reporting_interval,
@@ -78,7 +97,7 @@ fn main() {
         "couette_flow",
         0.1, // NOTE: Generous 10% validation threshold
     );
-    // couette_flow(iteration_count, reporting_interval);
+
     // Interface: allow user to choose from
     // 1. Read mesh
     // 2. Read data
@@ -198,25 +217,11 @@ fn test_3d_1x3(iteration_count: Uint) {
         }
     }
 
-    let settings = NumericalSettings {
-        momentum_relaxation: 0.8,
-        // This needs to be EXTREMELY low (~0.01)
-        // What is causing the solution to oscillate?
-        pressure_relaxation: 0.02,
-        matrix_solver: MatrixSolverSettings {
-            solver_type: SolutionMethod::Jacobi,
-            iterations: 100,
-            relaxation: 0.2, // ~0.5 seems like roughly upper limit for Jacobi; does nothing for
-            relative_convergence_threshold: 1e-3,
-            preconditioner: PreconditionMethod::Jacobi,
-        },
-        momentum: MomentumDiscretization::UD,
-        pressure_interpolation: PressureInterpolation::SecondOrder,
-        velocity_interpolation: VelocityInterpolation::LinearWeighted,
-        ..NumericalSettings::default()
-    };
+    let settings = NumericalSettings::default();
 
     let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 200);
+    print_vec_scientific(&p);
+
     solve_steady(
         &mut mesh,
         &mut u,
@@ -302,31 +307,5 @@ fn test_3d_3x3(iteration_count: Uint) {
         iteration_count,
         Uint::max(iteration_count / 1000, 1),
     );
-
-    let mut avg_velocity = Vector::zero();
-    for cell_index in 0..mesh.cells.len() {
-        let cell_velocity = Vector {
-            x: u[cell_index],
-            y: v[cell_index],
-            z: w[cell_index],
-        };
-        // assert!(cell_velocity.approx_equals(
-        //     &Vector {
-        //         x: -7.54e-2,
-        //         y: 0.,
-        //         z: 0.
-        //     },
-        //     1e-2
-        // ));
-        avg_velocity += cell_velocity;
-    }
-    // assert!(avg_velocity.approx_equals(
-    //     &Vector {
-    //         x: -7.54e-2,
-    //         y: 0.,
-    //         z: 0.
-    //     },
-    //     1e-3
-    // ));
-    // write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
+    write_data(&mesh, &u, &v, &w, &p, "./examples/3d_3x3.csv".into());
 }
