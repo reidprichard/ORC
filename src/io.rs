@@ -706,6 +706,21 @@ pub fn print_matrix(a: &CsrMatrix<Float>) {
 
 pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> String {
     const FIELD_WIDTH: usize = 8;
+    // Digits of A.BCD... excluding decimal place
+    const MANTISSA_DIGITS: usize = 3;
+
+    let exponent_magnitude = |n: Float| if n==0. {0.} else {n.abs().log10().abs().floor()} as i32;
+    let max_exponent = a
+        .values()
+        .iter()
+        .map(|n| exponent_magnitude(*n))
+        .max()
+        .unwrap();
+    let max_exponent_digits = if max_exponent <= 0 {
+        0
+    } else {
+        max_exponent.ilog10()
+    } as usize + 1;
     // Each row will be the following:
     // [Row index: N1 digits]: {['*' if i==j][Col index: N1 digits]=[' ' if a_ij > 0][a_ij: N2 digits], ...: (N1+2 + N2+2)*N3 digits} | [b_i: N2 digits]
     // N1 = i_digits
@@ -724,17 +739,29 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
         .fold(0, |acc, ncols| usize::max(acc, ncols));
 
     // This is a hard problem - exponent len depends on digits of precision
-    // For example, 9.99e9 becomes 1.0e10 when precision decreases by one.
-    let calculate_disp_decimals = |coeff: Float| {
-        // Number of digits in the exponent in scientific notation
-        let exponent = Float::abs(coeff).log10().floor() as i16;
-        let exp_len:i16 = (Float::log10(exponent.abs().into()).floor() as i16) + 1 + (if exponent <= 0 {1} else {0});
-        // Subtract initial digit, decimal pt, 'e', and a bonus digit for some reason??
-        let decimals: usize = i8::max((FIELD_WIDTH as i8) - (exp_len as i8) - 3, 0) as usize;
-        // println!("{coeff:.1e}, {exponent}, {exp_len}, {decimals}");
-        // panic!();
-        decimals
-    };
+    // For example, 9.99e9 rounds to 1.0e10, which is the same number of
+    // characters and one digit less precision.
+
+    fn fixed_width_scientific_notation(
+        value: Float,
+        left_width: usize,
+        right_width: usize,
+    ) -> String {
+        // We want the '.' and the 'E' to always appear at the same place
+        // If the number is positive, prefix a ' '
+        // If the exponent is positive, prefix a '+'
+        let exponent: i32 = Float::abs(value).log10().floor() as i32;
+        let mantissa: Float = value / Float::from(10).powi(exponent);
+        let decimals: usize = i8::max(left_width as i8 - 2, 0) as usize;
+
+        format!(
+            "{}{:.decimals$}E{}{:0>right_width$}",
+            if mantissa >= 0. { " " } else { "" },
+            mantissa,
+            if exponent >= 0 { "+" } else { "-" },
+            exponent.abs()
+        )
+    }
 
     let mut system_str_repr: String = "".into();
     let n = a.nrows();
@@ -747,37 +774,31 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
             let coeff = a.get_entry(i, j).unwrap().into_value();
             if a.ncols() < 16 {
                 // TODO: Clean this part up
-                if coeff == 0. {
-                    values_str_repr += &format!("{: <FIELD_WIDTH$}, ", " ");
-                } else {
-                    let decimals: usize = calculate_disp_decimals(coeff);
-                    values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
-                }
+                // if coeff == 0. {
+                //     values_str_repr += &format!("{: <FIELD_WIDTH$}, ", " ");
+                // } else {
+                //     let decimals: usize = calculate_disp_decimals(coeff);
+                //     values_str_repr += &format!("{coeff: <FIELD_WIDTH$.decimals$e}, ");
+                // }
             } else if coeff != 0. {
-                let mut formatted_entry: String = "".into();
-                // Fill the space of the negative sign
-                if coeff >= 0. {
-                    formatted_entry += " ";
-                }
-                // Subtract one to account for the negative sign / blank space
-                let decimals: usize = calculate_disp_decimals(coeff) - 1;
-                formatted_entry += &format!("{coeff:.decimals$e}");
-                // even though we calculate decimals to get the correct field width,
-                // rounding behavior means it is impossible to represent any number
-                // with any field width, so we still pad the field
-                formatted_entry = format!("{formatted_entry: <FIELD_WIDTH$}");
-                if i == j {
-                    values_str_repr += "*";
-                } else {
-                    values_str_repr += " ";
-                }
-                values_str_repr += &format!("{j: <i_digits$}={formatted_entry}, ");
+                values_str_repr += &format!(
+                    "{}{: <i_digits$}={}, ",
+                    if i == j { "*" } else { " " },
+                    j,
+                    fixed_width_scientific_notation(
+                        coeff,
+                        MANTISSA_DIGITS + 1,
+                        max_exponent_digits
+                    )
+                );
             }
         }
         system_str_repr += &format!(
             "{i: <i_digits$}: {: <row_len$} | {}{:.2e}\n",
-            values_str_repr.strip_suffix(", ").unwrap_or(&values_str_repr),
-            if b[i] >= 0. {" "} else {""},
+            values_str_repr
+                .strip_suffix(", ")
+                .unwrap_or(&values_str_repr),
+            if b[i] >= 0. { " " } else { "" },
             b[i]
         );
     }
