@@ -1,6 +1,6 @@
 # <ins>O</ins>pen <ins>R</ins>ust <ins>C</ins>FD: A 3D, unstructured computational fluid dynamics (CFD) solver
 
-![Channel flow contour plots](./examples/channel_flow_contour_plots.png)
+![Couette flow contour plots](./examples/couette_flow_contour_plots.png)
 
 Are you tired of Fluent crashing (I thought so!) and you don't care about
 features or performance (ok, maybe not)? ORC is a simple finite volume CFD
@@ -58,6 +58,6 @@ Roadmap:
 
 Validation:
 Only very preliminary validation has been performed. As seen below, the
-velocity profile for steady, pressure-driven channel flow exactly matches the
+velocity profile for steady, Couette flow exactly matches the
 analytical profile.
-![Channel flow velocity profile](./examples/channel_flow_velocity_profile.png)
+![Couette flow velocity profile](./examples/couette_flow_velocity_profile.png)
