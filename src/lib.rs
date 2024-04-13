@@ -237,12 +237,22 @@ pub mod numerical_types {
             }
         }
 
-        pub fn dot(&self, other: &Vector) -> Float {
+        pub fn dot(&self, other: &Self) -> Float {
             self.x * other.x + self.y * other.y + self.z * other.z
         }
 
-        pub fn cross(&self, other: &Vector) -> Vector {
+        // Creates a vector with the inverse of this vector's components
+        // NOTE: Zero elements will remain zero.
+        pub fn reciprocal(&self) -> Self {
             Vector {
+                x: if self.x != 0. { 1. / self.x } else { 0. },
+                y: if self.y != 0. { 1. / self.y } else { 0. },
+                z: if self.z != 0. { 1. / self.z } else { 0. },
+            }
+        }
+
+        pub fn cross(&self, other: &Self) -> Self {
+            Self {
                 x: self.y * other.z - self.z * other.y,
                 y: self.z * other.x - self.x * other.z,
                 z: self.x * other.y - self.y * other.x,
@@ -253,9 +263,9 @@ pub mod numerical_types {
             (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
         }
 
-        pub fn unit(&self) -> Vector {
+        pub fn unit(&self) -> Self {
             let len: Float = self.norm();
-            Vector {
+            Self {
                 x: self.x / len,
                 y: self.y / len,
                 z: self.z / len,
@@ -300,6 +310,10 @@ pub mod numerical_types {
                 y: Float::abs(self.y),
                 z: Float::abs(self.z),
             }
+        }
+
+        pub fn sum(&self) -> Float {
+            self.x + self.y + self.z
         }
 
         pub fn parse(s: &str) -> Self {
@@ -628,10 +642,7 @@ pub mod numerical_types {
         }
     }
 
-    pub fn vector_angle(
-        vector_1: &Vector,
-        vector_2: &Vector,
-    ) -> Float {
+    pub fn vector_angle(vector_1: &Vector, vector_2: &Vector) -> Float {
         Float::acos(vector_1.dot(vector_2) / (vector_1.norm() * vector_2.norm()))
     }
 }
@@ -645,7 +656,10 @@ pub mod nalgebra {
 
     impl GetEntry<Float> for CsrMatrix<Float> {
         fn get(&self, i: usize, j: usize) -> Float {
-            match self.get_entry(i, j).expect("indices should be within the bounds of the CsrMatrix") {
+            match self
+                .get_entry(i, j)
+                .expect("indices should be within the bounds of the CsrMatrix")
+            {
                 nalgebra_sparse::SparseEntry::NonZero(v) => *v,
                 nalgebra_sparse::SparseEntry::Zero => {
                     panic!("Tried to access CsrMatrix element that hasn't been stored yet.")
