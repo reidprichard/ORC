@@ -105,7 +105,7 @@ pub mod channel_flow {
             &p,
             gradients_path,
             7,
-            GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+            numerics.gradient_reconstruction,
         );
 
         let (u_mean_analytical, u_min_analytical, u_max_analytical) =
@@ -149,5 +149,88 @@ pub mod channel_flow {
         } else {
             println!("{name} validation failed.");
         }
+    }
+
+    pub fn solve_channel_flow_velocity_inlet(
+        iteration_count: Uint,
+        reporting_interval: Uint,
+        numerics: NumericalSettings,
+        name: &str,
+        top_wall_velocity: Float,
+        inlet_velocity: Float,
+        mu: Float,
+        rho: Float,
+    ) {
+        // *********** Read mesh ************
+        let mut mesh = read_mesh("./examples/couette_flow_128x64x1.msh");
+
+        // ************ Set boundary conditions **********
+        mesh.get_face_zone("TOP_WALL").zone_type = FaceConditionTypes::Wall;
+        mesh.get_face_zone("TOP_WALL").vector_value = Vector {
+            x: top_wall_velocity,
+            y: 0.,
+            z: 0.,
+        };
+
+        mesh.get_face_zone("BOTTOM_WALL").zone_type = FaceConditionTypes::Wall;
+
+        mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
+        mesh.get_face_zone("INLET").vector_value = Vector {
+            x: inlet_velocity,
+            y: 0.,
+            z: 0.,
+        };
+
+        mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
+        mesh.get_face_zone("OUTLET").scalar_value = 0.;
+
+        mesh.get_face_zone("PERIODIC_-Z").zone_type = FaceConditionTypes::Symmetry;
+        mesh.get_face_zone("PERIODIC_+Z").zone_type = FaceConditionTypes::Symmetry;
+
+        // TODO: Clean this up
+        let data_path: &str = &format!("./examples/{name}.csv")[..];
+        let gradients_path: &str = &format!("./examples/{name}_gradients.csv")[..];
+
+        // ************ Solve **************
+        let (mut u, mut v, mut w, mut p) = read_data(data_path).unwrap_or_else(|_| {
+            initialize_flow(&mesh, mu, rho, 1000)
+        });
+        solve_steady(
+            &mut mesh,
+            &mut u,
+            &mut v,
+            &mut w,
+            &mut p,
+            &numerics,
+            rho,
+            mu,
+            iteration_count,
+            Uint::max(reporting_interval, 1),
+        );
+        write_data(&mesh, &u, &v, &w, &p, data_path);
+        write_gradients(
+            &mesh,
+            &u,
+            &v,
+            &w,
+            &p,
+            gradients_path,
+            7,
+            numerics.gradient_reconstruction,
+        );
+
+        let u_mean = u.iter().sum::<Float>() / (u.len() as Float);
+        let u_min = *u.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
+        let u_max = *u.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+
+        println!(
+            " U_mean:\tCFD = {u_mean:>5.2e}"
+        );
+        println!(
+            " U_min: \tCFD = {u_min:>5.2e}"
+        );
+        println!(
+            " U_max: \tCFD = {u_max:>5.2e}"
+        );
     }
 }
