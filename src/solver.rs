@@ -279,9 +279,9 @@ pub fn initialize_flow(
     let mut a_u = initialize_momentum_matrix(mesh);
     let mut a_v = initialize_momentum_matrix(mesh);
     let mut a_w = initialize_momentum_matrix(mesh);
-    let mut b_u = DVector::zeros(n);
-    let mut b_v = DVector::zeros(n);
-    let mut b_w = DVector::zeros(n);
+    let mut b_u: DVector<Float> = DVector::zeros(n);
+    let mut b_v: DVector<Float> = DVector::zeros(n);
+    let mut b_w: DVector<Float> = DVector::zeros(n);
 
     initialize_pressure_field(mesh, &mut p, iteration_count);
     build_momentum_advection_matrices(
@@ -471,27 +471,119 @@ pub fn initialize_flow_new(
     (u, v, w, p)
 }
 
+// TODO: Find a way to reduce the pressure/velocity calculation repetition. For example,
+// `initialize_pressure_field()` + `initialize_velocity_field()` -> `initialize_scalar_field()`
 fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
     println!("Initializing pressure field...");
-    // TODO
     // Solve laplace's equation (nabla^2 P = dP^2/dx^2 + dP^2/dy^2 + dP^2/dz^2 = 0) based on BCs:
     // - Wall: d/dn (P) = 0
     // - Pressure BC: P = P_boundary (duh)
     // - Other BCs: ???
     // For each cell, compute pressure gradient at face as:
-    // dP/dx = (P_cell - P_neighbor)/(x_cell - x_neighbor)
-    // Use green-gauss to get second derivative at cell center:
-    // (d^2/dx^2)[P] = sum(dP/dx * face_outward_normal_vector) / cell_volume
+    // dP/dx = (P_cell - P_neighbor)/(x_cell - x_neighbor) (and so on for other axes)
+    // Therefore: grad P    = (P[cell] - P[neighbor]) / (cell_centroid - neighbor_centroid)
+    //                      = (P[neighbor] - P[cell]) / (neighbor_centroid - cell_centroid)
+    //                      (reformulated so that a_nb is obvious)
+    // Knowing grad P at the face, we can use Green-Gauss to get second derivative at cell center:
+    // (d^2/dx^2)[P] = sum(face_outward_normal_vector.x * dP/dx * face_area) / cell_volume
+    // (d^2/dy^2)[P] = sum(face_outward_normal_vector.y * dP/dy * face_area) / cell_volume
+    // (d^2/dz^2)[P] = sum(face_outward_normal_vector.z * dP/dz * face_area) / cell_volume
+    // laplacian P  = (d^2/dx^2 + d^2/dy^2 + d^2/dz^2)[P]
+    //              = sum(face_outward_normal_vector.dot(grad P) * face_area) / cell_volume
     // So, for each face and each axis:
-    // a_nb = face_outward_normal_vector.x * (x_neighbor - x_cell) / cell_volume
+    // a_nb = face_outward_normal_vector.dot(1/(x_neighbor - x_cell)) * (face_area / cell_volume)
     // And for each cell:
-    // a_p = sum(a_nb)
-    // Since we have separate equations for each axis, this will produce a 3n x n matrix
-    let n = mesh.cells.len();
-    let mut a_coo = CooMatrix::<Float>::new(n, n);
+    // a_p = sum(-a_nb)
+    // At boundary cells, we will have to estimate dP/dn
+    let cell_count = mesh.cells.len();
+    let mut a_coo = CooMatrix::<Float>::new(cell_count, cell_count);
     let mut b = DVector::zeros(a_coo.nrows());
 
-    for cell_index in 0..mesh.cells.len() {
+    for cell_index in 0..cell_count {
+        let cell = &mesh.cells[cell_index];
+        let mut a_p: Float = 0.;
+        for face in cell
+            .face_indices
+            .iter()
+            .map(|face_index| &mesh.faces[*face_index])
+        {
+            let outward_normal_vector = get_outward_face_normal(face, cell_index);
+            let face_zone = &mesh.face_zones[&face.zone];
+            let (a_nb, source, neighbor_cell_index) = match face_zone.zone_type {
+                FaceConditionTypes::Interior => {
+                    let neighbor_cell_index = if face.cell_indices[0] == cell_index {
+                        face.cell_indices[1]
+                    } else {
+                        face.cell_indices[0]
+                    };
+                    // TODO: Skewness correction here
+                    (
+                        (cell.centroid - mesh.cells[neighbor_cell_index].centroid)
+                            .reciprocal()
+                            .dot(&outward_normal_vector)
+                            * (face.area / cell.volume),
+                        0.,
+                        neighbor_cell_index,
+                    )
+                }
+                FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
+                    // grad P   = (P[cell] - P_bc) / (cell_centroid - face_centroid)
+                    let a_nb = (cell.centroid - face.centroid)
+                        .reciprocal()
+                        .dot(&outward_normal_vector)
+                        * (face.area / cell.volume);
+                    (a_nb, a_nb * face_zone.scalar_value, usize::MAX)
+                }
+                FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
+                    // we're saying wall-normal pressure gradient is zero, so all terms here
+                    // are zero
+                    (0., 0., usize::MAX)
+                }
+                _ => {
+                    println!("{:?}", face_zone.zone_type);
+                    panic!("^ unsupported face zone type for pressure initialization");
+                }
+            };
+            if neighbor_cell_index != usize::MAX {
+                a_coo.push(cell_index, neighbor_cell_index, -a_nb);
+            }
+            b[cell_index] += source;
+            a_p += a_nb;
+        }
+        a_coo.push(cell_index, cell_index, a_p);
+    }
+    let a = &CsrMatrix::from(&a_coo);
+    // print_linear_system(&a, &b);
+    // let a_dense = DMatrix::from(a);
+    // *p = a_dense.try_inverse().unwrap() * &b;
+
+    iterative_solve(
+        a,
+        &b,
+        p,
+        10,
+        SolutionMethod::Jacobi,
+        0.1,
+        1e-6,
+        PreconditionMethod::Jacobi,
+    );
+    println!("Done!");
+}
+
+fn initialize_velocity_field(
+    mesh: &Mesh,
+    u: &mut DVector<Float>,
+    v: &mut DVector<Float>,
+    w: &mut DVector<Float>,
+    iteration_count: Uint,
+) {
+    println!("Initializing velocity field...");
+    let cell_count = mesh.cells.len();
+    let mut a_coo = CooMatrix::<Float>::new(cell_count, cell_count);
+    let mut b = DVector::zeros(cell_count);
+    let mut psi = DVector::zeros(cell_count);
+
+    for cell_index in 0..cell_count {
         let cell = &mesh.cells[cell_index];
         let mut a_p: Float = 0.;
         for face in cell
@@ -509,21 +601,28 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
                         face.cell_indices[0]
                     };
                     (
-                        outward_normal_vector
-                            .dot(&(mesh.cells[neighbor_cell_index].centroid - cell.centroid))
+                        (outward_normal_vector
+                            / (mesh.cells[neighbor_cell_index].centroid - cell.centroid))
+                            .sum()
                             / cell.volume,
                         0.,
                         neighbor_cell_index,
                     )
                 }
-                FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-                    let temp =
-                        outward_normal_vector.dot(&(face.centroid - cell.centroid)) / cell.volume;
-                    (temp, temp * face_zone.scalar_value, usize::MAX)
+                FaceConditionTypes::VelocityInlet => {
+                    // The gradient of psi on this face equals the BC value
+                    let temp = (outward_normal_vector / (face.centroid - cell.centroid)).sum()
+                        / cell.volume;
+                    (
+                        temp,
+                        // face normal will point inward
+                        temp * face_zone.vector_value.dot(&face.normal),
+                        usize::MAX,
+                    )
                 }
                 FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
-                    // we're saying wall-normal pressure gradient is zero, so all terms here
-                    // are zero
+                    // we're saying boundary-normal psi gradient is zero (i.e., boundary-normal
+                    // velocity is zero), so all terms here are zero
                     (0., 0., usize::MAX)
                 }
                 _ => {
@@ -543,13 +642,21 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
     iterative_solve(
         a,
         &b,
-        p,
+        &mut psi,
         iteration_count,
         SolutionMethod::BiCGSTAB,
         0.5,
         1e-6,
         PreconditionMethod::Jacobi,
     );
+
+    for cell_index in 0..cell_count {
+        let cell_velocity = Vector::zero();
+        u[cell_index] = cell_velocity.x;
+        v[cell_index] = cell_velocity.y;
+        w[cell_index] = cell_velocity.z;
+    }
+
     println!("Done!");
 }
 
