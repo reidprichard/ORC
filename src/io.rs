@@ -774,8 +774,9 @@ pub fn linear_system_to_string(a: &CsrMatrix<Float>, b: &DVector<Float>) -> Stri
             let coeff = a.get_entry(i, j).unwrap().into_value();
             if a.ncols() < 16 {
                 values_str_repr += &format!(
-                    "{}{coeff: <FIELD_WIDTH$.2e},\t",
+                    "{}{: <FIELD_WIDTH$}\t",
                     if coeff >= 0. {" "} else {""},
+                    format!("{coeff:.2e},"),
                 );
                 // TODO: Clean this part up
             } else if coeff != 0. {
