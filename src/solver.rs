@@ -3,7 +3,7 @@
 use crate::discretization::*;
 use crate::io::{
     linear_system_to_string, matrix_to_string, print_linear_system, print_matrix,
-    print_vec_scientific,
+    print_vec_scientific, write_data, write_gradients,
 };
 use crate::linear_algebra::*;
 use crate::mesh::*;
@@ -19,6 +19,7 @@ const MAX_PRINT_ROWS: usize = 64;
 
 // TODO: Normalize mesh lengths to reduce roundoff error
 // TODO: Measure impact of logging on performance
+// TODO: Rename all the `n`s to cell_count (or whatever is appropriate)
 
 // TODO: Make struct to encapsulate all settings so I don't have a million args
 #[allow(clippy::too_many_arguments)]
@@ -361,6 +362,7 @@ pub fn initialize_flow_new(
     DVector<Float>,
     DVector<Float>,
 ) {
+    println!("Initializing flow...");
     // This needs a few different strategies:
     // 1. All pressure / stationary wall BCs
     // 2. All velocity / stationary wall / moving wall BCs
@@ -381,99 +383,35 @@ pub fn initialize_flow_new(
     let mut v = DVector::zeros(n);
     let mut w = DVector::zeros(n);
     let mut p = DVector::zeros(n);
-    let (a_di, b_u_di, b_v_di, b_w_di) =
-        build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
-    let mut a_u = initialize_momentum_matrix(mesh);
-    let mut a_v = initialize_momentum_matrix(mesh);
-    let mut a_w = initialize_momentum_matrix(mesh);
-    let mut b_u = DVector::zeros(n);
-    let mut b_v = DVector::zeros(n);
-    let mut b_w = DVector::zeros(n);
+    // let (a_di, b_u_di, b_v_di, b_w_di) =
+    //     build_momentum_diffusion_matrix(mesh, DiffusionScheme::CD, mu);
+    // let mut a_u = initialize_momentum_matrix(mesh);
+    // let mut a_v = initialize_momentum_matrix(mesh);
+    // let mut a_w = initialize_momentum_matrix(mesh);
+    // let mut b_u = DVector::zeros(n);
+    // let mut b_v = DVector::zeros(n);
+    // let mut b_w = DVector::zeros(n);
 
     let constraint_type = check_boundary_conditions(mesh);
+    println!("{constraint_type:?}");
 
     match constraint_type {
-        SystemConstraintType::PressureOnly => {
+        SystemConstraintType::PressureOnly | SystemConstraintType::Hybrid => {
             // Do pressure stuff
             initialize_pressure_field(mesh, &mut p, iteration_count);
         }
-        SystemConstraintType::VelocityOnly => {
-            // Do velocity stuff
-        }
-        SystemConstraintType::Hybrid => {
-            // Idk
+        SystemConstraintType::VelocityOnly | SystemConstraintType::Hybrid => {
+            initialize_velocity_field(mesh, &mut u, &mut v, &mut w, iteration_count);
         }
     }
 
-    build_momentum_advection_matrices(
-        &mut a_u,
-        &mut a_v,
-        &mut a_w,
-        &mut b_u,
-        &mut b_v,
-        &mut b_w,
-        &a_di,
-        mesh,
-        &u,
-        &v,
-        &w,
-        &p,
-        MomentumDiscretization::UD,
-        VelocityInterpolation::LinearWeighted,
-        PressureInterpolation::LinearWeighted,
-        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
-        rho,
-    );
-    b_u += b_u_di;
-    b_v += b_v_di;
-    b_w += b_w_di;
-    // TODO: Consider initializing velocity field by the following:
-    // Solve with only diffusive term
-    // Slowly ramp up to diffusive + advective
-
-    println!("Initializing velocity field...");
-
-    let mut diffusion_fraction = 1.;
-    while diffusion_fraction >= 0. {
-        iterative_solve(
-            &(&a_u * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
-            &b_u,
-            &mut u,
-            iteration_count,
-            SolutionMethod::BiCGSTAB,
-            0.5,
-            1e-6,
-            PreconditionMethod::Jacobi,
-        );
-        iterative_solve(
-            &(&a_v * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
-            &b_v,
-            &mut v,
-            iteration_count,
-            SolutionMethod::BiCGSTAB,
-            0.5,
-            1e-6,
-            PreconditionMethod::Jacobi,
-        );
-        iterative_solve(
-            &(&a_w * (1. - diffusion_fraction) + &a_di * diffusion_fraction),
-            &b_w,
-            &mut w,
-            iteration_count,
-            SolutionMethod::BiCGSTAB,
-            0.5,
-            1e-6,
-            PreconditionMethod::Jacobi,
-        );
-        diffusion_fraction -= 0.2;
-    }
     println!("Done!");
     (u, v, w, p)
 }
 
 // TODO: Find a way to reduce the pressure/velocity calculation repetition. For example,
 // `initialize_pressure_field()` + `initialize_velocity_field()` -> `initialize_scalar_field()`
-fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_count: Uint) {
+fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, _iteration_count: Uint) {
     println!("Initializing pressure field...");
     // Solve laplace's equation (nabla^2 P = dP^2/dx^2 + dP^2/dy^2 + dP^2/dz^2 = 0) based on BCs:
     // - Wall: d/dn (P) = 0
@@ -540,8 +478,8 @@ fn initialize_pressure_field(mesh: &Mesh, p: &mut DVector<Float>, iteration_coun
                     (0., 0., usize::MAX)
                 }
                 _ => {
-                    println!("{:?}", face_zone.zone_type);
-                    panic!("^ unsupported face zone type for pressure initialization");
+                    // println!("Skipping zone type: {:?}", face_zone.zone_type);
+                    (0., 0., usize::MAX)
                 }
             };
             if neighbor_cell_index != usize::MAX {
@@ -580,8 +518,8 @@ fn initialize_velocity_field(
     println!("Initializing velocity field...");
     let cell_count = mesh.cells.len();
     let mut a_coo = CooMatrix::<Float>::new(cell_count, cell_count);
-    let mut b = DVector::zeros(cell_count);
-    let mut psi = DVector::zeros(cell_count);
+    let mut b = DVector::zeros(a_coo.nrows());
+    let mut psi = DVector::zeros(a_coo.nrows());
 
     for cell_index in 0..cell_count {
         let cell = &mesh.cells[cell_index];
@@ -600,61 +538,158 @@ fn initialize_velocity_field(
                     } else {
                         face.cell_indices[0]
                     };
+                    // TODO: Skewness correction here
                     (
-                        (outward_normal_vector
-                            / (mesh.cells[neighbor_cell_index].centroid - cell.centroid))
-                            .sum()
-                            / cell.volume,
+                        (cell.centroid - mesh.cells[neighbor_cell_index].centroid)
+                            .reciprocal()
+                            .dot(&outward_normal_vector)
+                            * (face.area / cell.volume),
                         0.,
                         neighbor_cell_index,
                     )
                 }
                 FaceConditionTypes::VelocityInlet => {
-                    // The gradient of psi on this face equals the BC value
-                    let temp = (outward_normal_vector / (face.centroid - cell.centroid)).sum()
-                        / cell.volume;
+                    // grad psi = face velocity
                     (
-                        temp,
-                        // face normal will point inward
-                        temp * face_zone.vector_value.dot(&face.normal),
+                        0.,
+                        -face_zone.vector_value.dot(&outward_normal_vector),
                         usize::MAX,
                     )
                 }
                 FaceConditionTypes::Symmetry | FaceConditionTypes::Wall => {
-                    // we're saying boundary-normal psi gradient is zero (i.e., boundary-normal
-                    // velocity is zero), so all terms here are zero
+                    // Velocity normal to these boundaries is zero, therefore d/dn (psi) = 0
                     (0., 0., usize::MAX)
                 }
+                FaceConditionTypes::PressureOutlet => {
+                    // Here we define psi to be 0, so the gradient will be
+                    // (cell_value - 0.)/(x_cell - x_face)
+                    (
+                        (cell.centroid - face.centroid)
+                            .reciprocal()
+                            .dot(&outward_normal_vector),
+                        0.,
+                        usize::MAX,
+                    )
+                }
                 _ => {
-                    println!("{:?}", face_zone.zone_type);
-                    panic!("^ unsupported face zone type for pressure initialization");
+                    // println!("Skipping zone type: {:?}", face_zone.zone_type);
+                    (0., 0., usize::MAX)
                 }
             };
             if neighbor_cell_index != usize::MAX {
-                a_coo.push(cell_index, neighbor_cell_index, a_nb);
+                a_coo.push(cell_index, neighbor_cell_index, -a_nb);
             }
             b[cell_index] += source;
-            a_p -= a_nb;
+            a_p += a_nb;
         }
         a_coo.push(cell_index, cell_index, a_p);
     }
     let a = &CsrMatrix::from(&a_coo);
+    // print_linear_system(&a, &b);
+    // let a_dense = DMatrix::from(a);
+    // psi = a_dense.try_inverse().unwrap() * &b;
+
     iterative_solve(
         a,
         &b,
         &mut psi,
-        iteration_count,
+        10,
         SolutionMethod::BiCGSTAB,
-        0.5,
+        0.1,
         1e-6,
         PreconditionMethod::Jacobi,
     );
+    // print_linear_system(a, &b);
+    // print_vec_scientific(&psi);
 
-    for cell_index in 0..cell_count {
-        let cell_velocity = Vector::zero();
-        u[cell_index] = cell_velocity.x;
-        v[cell_index] = cell_velocity.y;
-        w[cell_index] = cell_velocity.z;
+    write_data(mesh, u, v, w, &psi, "./examples/psi.csv");
+    write_gradients(
+        mesh,
+        u,
+        v,
+        w,
+        &psi,
+        "./examples/psi_gradients.csv",
+        3,
+        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
+    );
+
+    // Take the gradient of psi with least-squares
+    // Using least-squares since we can't get boundary values of psi I think?
+    for (cell_index, cell) in mesh.cells.iter().enumerate() {
+        // This might reserve more mem than we need since boundary faces aren't considered,
+        // but I think it's worth it still.
+        let mut a_data: Vec<Float> = Vec::with_capacity(3 * cell.face_indices.len());
+        let mut b_data: Vec<Float> = Vec::with_capacity(cell.face_indices.len());
+        let mut neighbor_count: usize = 0;
+        // Iterate over neighbor cells - maybe worth abstracting this?
+        cell.face_indices
+            .iter()
+            .map(|&fi| &mesh.faces[fi])
+            .filter(|f| f.cell_indices.len() == 2)
+            .for_each(|f| {
+                let neighbor_index = if f.cell_indices[0] != cell_index {
+                    f.cell_indices[0]
+                } else {
+                    f.cell_indices[1]
+                };
+                let neighbor_cell = &mesh.cells[neighbor_index];
+                let delta_x = neighbor_cell.centroid - cell.centroid;
+                let delta_psi = psi[neighbor_index] - psi[cell_index];
+                a_data.push(delta_x.x);
+                a_data.push(delta_x.y);
+                a_data.push(delta_x.z);
+                b_data.push(delta_psi);
+                neighbor_count += 1;
+            });
+
+        let mut a: DMatrix<Float> = DMatrix::from_row_slice(neighbor_count, 3, &a_data[..]);
+
+        let mut nonzero_columns: Vec<usize> = Vec::new();
+        a.column_iter().enumerate().for_each(|(i, col)| {
+            if col.min() != 0. || col.max() != 0. {
+                nonzero_columns.push(i);
+            }
+        });
+        a = a.select_columns(nonzero_columns.iter());
+
+        let mut b: DVector<Float> = DVector::from_vec(b_data);
+
+        // println!("{a}");
+
+        b = &a.transpose() * &b;
+        a = &a.transpose() * &a;
+
+        // println!("{a}");
+        let a_inv = a.clone().try_inverse();
+        let mut cell_velocity: DVector<Float> = DVector::zeros(3);
+        match a_inv {
+            Some(a_inv) => {
+                cell_velocity = a_inv * b;
+            }
+            None => {
+                println!("Could not invert. Skipping.");
+            }
+        }
+        let u_i: Float = if nonzero_columns.contains(&0) {
+            cell_velocity[0]
+        } else {
+            0.
+        };
+        let v_i: Float = if nonzero_columns.contains(&1) {
+            cell_velocity[nonzero_columns.iter().position(|&i| i == 1).unwrap()]
+        } else {
+            0.
+        };
+        let w_i: Float = if nonzero_columns.contains(&2) {
+            cell_velocity[nonzero_columns.iter().position(|&i| i == 2).unwrap()]
+        } else {
+            0.
+        };
+
+        u[cell_index] = if u_i.is_nan() { 0. } else { u_i };
+        v[cell_index] = if v_i.is_nan() { 0. } else { v_i };
+        w[cell_index] = if w_i.is_nan() { 0. } else { w_i };
     }
 
     println!("Done!");
@@ -665,6 +700,7 @@ pub fn get_momentum_source_term(_location: Vector) -> Vector {
     Vector::zero()
 }
 
+#[derive(Debug)]
 enum SystemConstraintType {
     PressureOnly,
     VelocityOnly,
@@ -676,15 +712,15 @@ fn check_boundary_conditions(mesh: &Mesh) -> SystemConstraintType {
     // 5 degrees
     const TOL: Float = 5. * 180. / PI;
 
-    let mut pressure_bcs: bool = false;
-    let mut velocity_bcs: bool = false;
+    let mut pressure_bc_count: u16 = 0;
+    let mut velocity_bc_count: u16 = 0;
 
     for face_zone in mesh.face_zones.values() {
         match face_zone.zone_type {
             FaceConditionTypes::Wall => {
                 if face_zone.vector_value.norm() > 0. {
                     for face_index in 0..mesh.faces.len() {
-                        velocity_bcs = true;
+                        velocity_bc_count += 1;
                         let face = &mesh.faces[face_index];
                         // println!("Angle = {}", vector_angle(&face.normal, &face_zone.vector_value));
                         if PI / 2. - Float::abs(vector_angle(&face.normal, &face_zone.vector_value))
@@ -696,7 +732,7 @@ fn check_boundary_conditions(mesh: &Mesh) -> SystemConstraintType {
                 }
             }
             FaceConditionTypes::VelocityInlet => {
-                velocity_bcs = true;
+                velocity_bc_count += 1;
                 for face_index in 0..mesh.faces.len() {
                     let face = &mesh.faces[face_index];
                     if Float::abs(vector_angle(&face.normal, &face_zone.vector_value)) > TOL {
@@ -706,7 +742,7 @@ fn check_boundary_conditions(mesh: &Mesh) -> SystemConstraintType {
             }
 
             FaceConditionTypes::PressureInlet | FaceConditionTypes::PressureOutlet => {
-                pressure_bcs = true;
+                pressure_bc_count += 1;
             }
             _ => {
                 // TODO: Handle other zone types. Could check if scalar_value/vector_value are
@@ -716,17 +752,19 @@ fn check_boundary_conditions(mesh: &Mesh) -> SystemConstraintType {
         }
     }
 
-    if pressure_bcs && velocity_bcs {
-        SystemConstraintType::Hybrid
-    } else if velocity_bcs && !pressure_bcs {
-        println!(
-            "Warning - only velocity boundary conditions exist. System may be overconstrained."
-        );
-        SystemConstraintType::VelocityOnly
-    } else if pressure_bcs {
+    if velocity_bc_count > 0 {
+        if pressure_bc_count > 1 {
+            SystemConstraintType::Hybrid
+        } else {
+            if pressure_bc_count == 0 {
+                println!("Warning - only velocity boundary conditions exist. System may be overconstrained.");
+            }
+            SystemConstraintType::VelocityOnly
+        }
+    } else if pressure_bc_count > 0 {
+        // Should I throw an error if there's only a single pressure BC?
         SystemConstraintType::PressureOnly
     } else {
-        // TODO: Eventually allow stagnation? Useful for heat transfer, e.g.?
         panic!("You must set boundary conditions.");
     }
 }
