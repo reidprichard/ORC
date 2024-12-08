@@ -1,4 +1,3 @@
-use crate::io::print_vec_scientific;
 use crate::nalgebra::GetEntry;
 use crate::numerical_types::*;
 use crate::settings::*;
