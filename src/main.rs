@@ -59,7 +59,9 @@ fn main() {
         .unwrap_or(&"0".to_string())
         .parse()
         .expect("arg 2 should be an integer");
+    // test_3d_1x3(0);
 
+    // ********** Couette flow w/ stationary wall and pressure gradient ************
     // solve_channel_flow(
     //     iteration_count,
     //     reporting_interval,
@@ -79,23 +81,35 @@ fn main() {
     //     0.1, // NOTE: Generous 10% validation threshold
     // );
 
-    solve_channel_flow(
+    // ********** Couette flow w/ moving wall and pressure gradient ************
+    // solve_channel_flow(
+    //     iteration_count,
+    //     reporting_interval,
+    //     ChannelFlowParameters {
+    //         top_wall_velocity: 5e-4,
+    //         dp_dx: 10.,
+    //         mu: 0.001,
+    //         rho: 1000.,
+    //     },
+    //     NumericalSettings {
+    //         momentum: TVD_UMIST,
+    //         pressure_interpolation: PressureInterpolation::SecondOrder,
+    //         velocity_interpolation: VelocityInterpolation::RhieChow,
+    //         ..NumericalSettings::default()
+    //     },
+    //     "couette_flow",
+    //     0.1, // NOTE: Generous 10% validation threshold
+    // );
+
+    solve_channel_flow_velocity_inlet(
         iteration_count,
         reporting_interval,
-        ChannelFlowParameters {
-            top_wall_velocity: 5e-4,
-            dp_dx: 5.,
-            mu: 0.001,
-            rho: 1000.,
-        },
-        NumericalSettings {
-            momentum: TVD_UMIST,
-            pressure_interpolation: PressureInterpolation::SecondOrder,
-            velocity_interpolation: VelocityInterpolation::RhieChow,
-            ..NumericalSettings::default()
-        },
-        "couette_flow",
-        0.1, // NOTE: Generous 10% validation threshold
+        NumericalSettings::default(),
+        "channel_flow_velocity_inlet",
+        0.,
+        1e-3,
+        0.001,
+        1000.,
     );
 
     // Interface: allow user to choose from
@@ -182,74 +196,92 @@ fn test_3d_1x3(iteration_count: Uint) {
     let cell_volume = Float::powi(cell_length, 3);
     let mut mesh = orc::io::read_mesh("./examples/3d_1x3.msh");
 
-    // mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
-    // mesh.get_face_zone("INLET").vector_value = Vector {x: 0.1, y: 0., z: 0.};
-    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
-    mesh.get_face_zone("INLET").scalar_value = 3.; // 1 Pa/m = 1 Pa/cell
+    mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::VelocityInlet;
+    mesh.get_face_zone("INLET").vector_value = Vector {
+        x: 1.,
+        y: 0.,
+        z: 0.,
+    };
+    // mesh.get_face_zone("INLET").zone_type = FaceConditionTypes::PressureInlet;
+    // mesh.get_face_zone("INLET").scalar_value = 3.; // 1 Pa/m = 1 Pa/cell
 
     mesh.get_face_zone("OUTLET").zone_type = FaceConditionTypes::PressureOutlet;
     mesh.get_face_zone("OUTLET").scalar_value = 0.;
 
     mesh.get_face_zone("WALL").zone_type = FaceConditionTypes::Wall;
 
-    let (face_min_actual, face_max_actual) = mesh
-        .faces
-        .iter()
-        .enumerate()
-        .fold((face_area, face_area), |acc, (_, f)| {
-            (Float::min(acc.0, f.area), Float::max(acc.1, f.area))
-        });
+    let (u, v, w, p) = initialize_flow_new(&mesh, mu, rho, iteration_count);
 
-    const AREA_TOL: Float = 0.001;
-    if face_min_actual + AREA_TOL < face_area {
-        panic!("face calculated as too small");
-    }
-    if face_max_actual - AREA_TOL > face_area {
-        panic!("face calculated as too large");
-    }
-    const VOLUME_TOL: Float = 0.0001;
-    for cell_index in 0..mesh.cells.len() {
-        let cell = &mesh.cells[cell_index];
-        if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
-            println!("Volume should be: {cell_volume}");
-            println!("Volume is: {}", cell.volume);
-            panic!("cell volume wrong");
-        }
-    }
-
-    let settings = NumericalSettings::default();
-
-    let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 200);
-    print_vec_scientific(&p);
-
-    solve_steady(
-        &mut mesh,
-        &mut u,
-        &mut v,
-        &mut w,
-        &mut p,
-        &settings,
-        rho,
-        mu,
-        iteration_count,
-        Uint::max(iteration_count / 1000, 1),
+    write_data(&mesh, &u, &v, &w, &p, "./examples/3d_1x3.csv");
+    write_gradients(
+        &mesh,
+        &u,
+        &v,
+        &w,
+        &p,
+        "./examples/3d_1x3_gradients.csv",
+        3,
+        GradientReconstructionMethods::GreenGauss(GreenGaussVariants::CellBased),
     );
 
-    for cell_index in 0..mesh.cells.len() {
-        let cell_velocity = Vector {
-            x: u[cell_index],
-            y: v[cell_index],
-            z: w[cell_index],
-        };
-        assert!(cell_velocity.approx_equals(
-            &Vector {
-                x: 0.005,
-                y: 0.,
-                z: 0.
-            },
-            1e-6
-        ));
-    }
+    // let (face_min_actual, face_max_actual) = mesh
+    //     .faces
+    //     .iter()
+    //     .enumerate()
+    //     .fold((face_area, face_area), |acc, (_, f)| {
+    //         (Float::min(acc.0, f.area), Float::max(acc.1, f.area))
+    //     });
+    //
+    // const AREA_TOL: Float = 0.001;
+    // if face_min_actual + AREA_TOL < face_area {
+    //     panic!("face calculated as too small");
+    // }
+    // if face_max_actual - AREA_TOL > face_area {
+    //     panic!("face calculated as too large");
+    // }
+    // const VOLUME_TOL: Float = 0.0001;
+    // for cell_index in 0..mesh.cells.len() {
+    //     let cell = &mesh.cells[cell_index];
+    //     if Float::abs(cell.volume - cell_volume) > VOLUME_TOL {
+    //         println!("Volume should be: {cell_volume}");
+    //         println!("Volume is: {}", cell.volume);
+    //         panic!("cell volume wrong");
+    //     }
+    // }
+    //
+    // let settings = NumericalSettings::default();
+    //
+    // let (mut u, mut v, mut w, mut p) = initialize_flow(&mesh, mu, rho, 200);
+    // print_vec_scientific(&p);
+    //
+    // solve_steady(
+    //     &mut mesh,
+    //     &mut u,
+    //     &mut v,
+    //     &mut w,
+    //     &mut p,
+    //     &settings,
+    //     rho,
+    //     mu,
+    //     iteration_count,
+    //     Uint::max(iteration_count / 1000, 1),
+    // );
+    //
+    // for cell_index in 0..mesh.cells.len() {
+    //     let cell_velocity = Vector {
+    //         x: u[cell_index],
+    //         y: v[cell_index],
+    //         z: w[cell_index],
+    //     };
+    //     assert!(cell_velocity.approx_equals(
+    //         &Vector {
+    //             x: 0.005,
+    //             y: 0.,
+    //             z: 0.
+    //         },
+    //         1e-6
+    //     ));
+    // }
 }
 
 fn test_3d_3x3(iteration_count: Uint) {
