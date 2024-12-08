@@ -3,7 +3,7 @@ pub mod channel_flow {
     use crate::mesh::FaceConditionTypes;
     use crate::numerical_types::{Float, Uint, Vector};
     use crate::settings::*;
-    use crate::solver::{initialize_flow, solve_steady};
+    use crate::solver::{initialize_flow, initialize_flow_new, solve_steady};
 
     use std::fs::File;
     use std::io::Write;
@@ -193,7 +193,7 @@ pub mod channel_flow {
 
         // ************ Solve **************
         let (mut u, mut v, mut w, mut p) = read_data(data_path).unwrap_or_else(|_| {
-            initialize_flow(&mesh, mu, rho, 1000)
+            initialize_flow_new(&mesh, mu, rho, 1000)
         });
         solve_steady(
             &mut mesh,
