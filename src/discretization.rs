@@ -332,6 +332,7 @@ pub fn build_momentum_advection_matrices(
         let peclet_y = a_p.y / a_ii_di;
         let peclet_z = a_p.z / a_ii_di;
 
+        // TODO: Consider these values being based on absolute values
         max_peclet_number = *[max_peclet_number, peclet_x, peclet_y, peclet_z].iter().max_by(|a,b| a.total_cmp(b)).unwrap();
         min_peclet_number = *[min_peclet_number, peclet_x, peclet_y, peclet_z].iter().min_by(|a,b| a.total_cmp(b)).unwrap();
         avg_peclet_number += [peclet_x, peclet_y, peclet_z].iter().fold(0., |acc, p| acc + p) / 3.;
