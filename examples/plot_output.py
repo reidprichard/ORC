@@ -1,4 +1,5 @@
 import argparse
+import os
 import matplotlib.colors
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
@@ -195,23 +196,25 @@ def plot_2d(root: str, plot_title: str | None = None, save: bool = False):
         fig.savefig(f"./examples/{root}_contour_plots.png", dpi=300)
 
     # *** Figure 2 ***
-    fig, ax = plt.subplots()
-    if plot_title is not None:
-        fig.suptitle(plot_title)
-    ax.scatter(y, u, label="CFD data")
-    y_analytical: list[float] = []
-    u_analytical: list[float] = []
-    with open(f"./examples/{root}_analytical.csv", "r") as analytical_data:
-        for line in analytical_data.readlines():
-            y_str, u_str = line.strip().split(",")
-            y_analytical.append(float(y_str))
-            u_analytical.append(float(u_str))
-    ax.plot(y_analytical, u_analytical, label="Analytical solution")
-    ax.legend()
-    ax.set_xlabel("Y [m]")
-    ax.set_ylabel("U [m/s]")
-    if save:
-        fig.savefig(f"./examples/{root}_velocity_profile.png", dpi=300)
+    analytical_data_path = f"./examples/{root}_analytical.csv"
+    if os.path.exists(analytical_data_path):
+        fig, ax = plt.subplots()
+        if plot_title is not None:
+            fig.suptitle(plot_title)
+        ax.scatter(y, u, label="CFD data")
+        y_analytical: list[float] = []
+        u_analytical: list[float] = []
+        with open(analytical_data_path, "r") as analytical_data:
+            for line in analytical_data.readlines():
+                y_str, u_str = line.strip().split(",")
+                y_analytical.append(float(y_str))
+                u_analytical.append(float(u_str))
+        ax.plot(y_analytical, u_analytical, label="Analytical solution")
+        ax.legend()
+        ax.set_xlabel("Y [m]")
+        ax.set_ylabel("U [m/s]")
+        if save:
+            fig.savefig(f"./examples/{root}_velocity_profile.png", dpi=300)
 
 
 def plot_face_velocities(filenames: list[str], save: bool = False):
